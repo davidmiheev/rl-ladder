@@ -13,6 +13,7 @@ Treat every number here as an estimate, not a guarantee.
 | option | free quota | memory | verdict for Part B |
 | --- | --- | --- | --- |
 | **Kaggle Notebooks, 2×T4** | 30 h/wk, 9 h/session | 2 × 16 GB | **best free GPU option** |
+| Kaggle Notebooks, P100 | shares the 30 h/wk GPU quota | 16 GB | niche — faster rollouts, on a deprecation clock |
 | Colab free, T4 | ~15–30 h/wk, dynamically throttled | 16 GB | works; quota roulette |
 | Colab free, TPU v5e-1 | same pool | 16 GB | *worse* than the T4 here — see below |
 | Kaggle TPU v3-8 | 20 h/wk | 128 GB HBM | most free memory anywhere, JAX stack |
@@ -89,6 +90,43 @@ trainer = GRPOTrainer(
 
 Note `dtype=`, not `torch_dtype=` — transformers renamed it, and TRL's
 `ModelConfig` uses `dtype` at our pinned commit.
+
+### Kaggle's P100 option
+
+Kaggle lets you pick a single **P100** instead of the 2×T4, out of the same
+30 h/week pool. It is a genuinely different machine, not a smaller T4:
+
+| | P100 (Pascal, sm_60) | T4 (Turing, sm_75) |
+| --- | --- | --- |
+| memory | 16 GB HBM2 | 16 GB GDDR6 |
+| bandwidth | **732 GB/s** | 320 GB/s |
+| tensor cores | **none** (Volta introduced them) | yes |
+| bnb 4-bit (NF4) | works — CC 6.0+ | works |
+| bnb 8-bit (LLM.int8) | no — needs CC 7.5+ | works |
+
+**The good news:** 4-bit QLoRA works. bitsandbytes supports compute capability
+6.0+, so unlike the TPU path you keep quantization.
+
+**The trap:** PyTorch **dropped Pascal from its cu128 builds starting with torch
+2.8**, and the cu126 line (the last one carrying sm_60 kernels) stops being
+published from torch 2.15. On a too-new wheel a P100 fails with
+`no kernel image is available for execution on the device` — which looks like a
+broken install, not an unsupported GPU. If you use a P100, pin `torch<2.8` and
+resist any dependency that upgrades it. Note this repo's `part-b` extra only
+says `torch>=2.4`; on a P100 you must constrain the upper end yourself.
+
+**When P100 is actually the better pick:** decode is memory-bandwidth-bound, and
+the P100 has 2.3× the bandwidth. So *rollout-dominated* work — B3's GRPO
+generation without vLLM, B5's teacher relabeling — can genuinely run faster on a
+P100 than on one T4. Training steps and prefill are compute-bound, where the
+T4's tensor cores win comfortably.
+
+**Default to the 2×T4 anyway**, for a reason that has nothing to do with speed:
+two devices means 32 GB across them, so B1's PPO and B4's overoptimization runs
+can put the reward model on GPU 1 and the policy on GPU 0. Those phases juggle
+three or four models at once, and that is the constraint that actually bites.
+Reach for the P100 when the T4s are unavailable, or when you are deliberately
+running a long generation-heavy GRPO job and have pinned torch.
 
 ### Where free tiers actually break
 
@@ -175,4 +213,6 @@ Sources: [Colab TPU v2-8 deprecation](https://github.com/googlecolab/colabtools/
 [TPU v5e specs](https://huggingface.co/docs/optimum-tpu/en/conceptual_guides/tpu_hardware_support) ·
 [Tunix](https://developers.googleblog.com/introducing-tunix-a-jax-native-library-for-llm-post-training/) ·
 [TRC FAQ](https://sites.research.google/trc/faq/) ·
-[PyTorch/XLA recompilation](https://docs.pytorch.org/xla/master/learn/eager.html)
+[PyTorch/XLA recompilation](https://docs.pytorch.org/xla/master/learn/eager.html) ·
+[bitsandbytes hardware support](https://huggingface.co/docs/bitsandbytes/main/en/installation) ·
+[PyTorch dropping Maxwell/Pascal](https://dev-discuss.pytorch.org/t/cuda-toolkit-version-and-architecture-support-update-maxwell-and-pascal-architecture-support-removed-in-cuda-12-8-and-12-9-builds/3128)
