@@ -5,7 +5,7 @@ Start here.
 | doc | what it covers |
 | --- | --- |
 | [`ladder.md`](ladder.md) | **The curriculum.** 19 phases, 59 checklist items, reading and labs. Canonical — tick boxes here. |
-| [`writeups/`](writeups/) | Per-phase explainers: what the phase asks, why, and what the runs showed. [A1](writeups/a1-bandits.md). |
+| [`writeups/`](writeups/) | Per-phase explainers: what the phase asks, why, and what the runs showed. [A1](writeups/a1-bandits.md), [A2](writeups/a2-tabular.md). |
 | [`setup.md`](setup.md) | Environments, per-part extras, verifying the install |
 | [`compute.md`](compute.md) | What hardware each part needs; GPU pod sizing for Part B |
 | [`free-compute.md`](free-compute.md) | Free GPU/TPU tiers (Colab, Kaggle, TRC): what fits, T4 config, where they break |

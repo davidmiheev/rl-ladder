@@ -78,10 +78,10 @@ bootstrapping trades bias for variance reduction.
 and [week03_model_free](https://github.com/yandexdataschool/Practical_RL/tree/master/week03_model_free)
 (value/policy iteration, Q-learning, SARSA, TD(λ))
 
-- [ ] Implement value iteration & policy iteration on a small GridWorld; confirm convergence to the known optimum
-- [ ] Implement Q-learning and SARSA from scratch; compare policies near a hazard (cliff-walking style)
-- [ ] Sweep discount factor γ and learning rate α
-- [ ] Add a Dyna-Q planning step and measure the sample-efficiency gain over plain Q-learning
+- [x] Implement value iteration & policy iteration on a small GridWorld; confirm convergence to the known optimum
+- [x] Implement Q-learning and SARSA from scratch; compare policies near a hazard (cliff-walking style)
+- [x] Sweep discount factor γ and learning rate α
+- [x] Add a Dyna-Q planning step and measure the sample-efficiency gain over plain Q-learning
 
 <a id="a3"></a>
 

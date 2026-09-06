@@ -21,7 +21,7 @@ this document is the reasoning behind it.
 ## 2. The goal
 
 A bandit is a Markov decision process with the state stripped out. There is one
-situation, `k` actions, and a reward drawn from a fixed distribution per action.
+situation, $k$ actions, and a reward drawn from a fixed distribution per action.
 No transitions, no credit assignment across time, no discounting.
 
 That emptiness is the point. Every hard thing in RL — bootstrapping, function
@@ -44,10 +44,10 @@ Three ideas installed here reappear for the rest of the ladder:
 
 ## 3. The problem setup
 
-The standard Sutton & Barto ch. 2 testbed, `k = 10`:
+The standard Sutton & Barto ch. 2 testbed, $k = 10$:
 
-- Each arm has a hidden true value `q*(a) ~ N(0, 1)`, drawn once per run.
-- Pulling arm `a` returns `reward ~ N(q*(a), 1)`.
+- Each arm has a hidden true value $q^*(a) \sim \mathcal{N}(0, 1)$, drawn once per run.
+- Pulling arm `a` returns $r \sim \mathcal{N}(q^*(a), 1)$.
 
 The agent sees only realized rewards, never `q*`. It must infer which arm is best
 from noisy samples whose noise (σ=1) is the same order as the spread between arms
@@ -55,11 +55,9 @@ from noisy samples whose noise (σ=1) is the same order as the spread between ar
 
 **Metric.** We score by *expected* cumulative regret:
 
-```
-regret(T) = Σ_{t=1..T}  [ max_a q*(a)  −  q*(a_t) ]
-```
+$$\text{regret}(T) = \sum_{t=1}^{T} \left[\max_a q^*(a) - q^*(a_t)\right]$$
 
-Note it uses `q*`, the hidden truth, not the realized reward. An agent that picks
+Note it uses $q^*$, the hidden truth, not the realized reward. An agent that picks
 the best arm and gets unlucky noise incurs zero regret, correctly — it made the
 right decision. Scoring on realized reward would add σ=1 noise per step to every
 curve and measure luck alongside skill. This is the single most useful
@@ -74,13 +72,14 @@ decide what to try next.
 
 ### ε-greedy — explore by fixed random tax
 
-With probability ε pick a uniformly random arm, otherwise pick `argmax Q(a)`.
+With probability $\varepsilon$ pick a uniformly random arm, otherwise pick $\arg\max_a Q(a)$.
 
-Estimates update incrementally: `Q(a) ← Q(a) + α · (r − Q(a))`, with
-`α = 1/N(a)` giving the exact running mean.
+Estimates update incrementally,
+$Q(a) \leftarrow Q(a) + \alpha\left[r - Q(a)\right]$, with $\alpha = 1/N(a)$
+giving the exact running mean.
 
 Simple and hard to break, but the exploration never adapts. After 10 000 pulls,
-when the best arm is obvious, an ε=0.1 agent still throws away 10% of its pulls —
+when the best arm is obvious, an $\varepsilon = 0.1$ agent still throws away 10% of its pulls —
 and it spreads them uniformly, sampling an arm it has already ruled out just as
 often as a plausible contender.
 
@@ -88,27 +87,25 @@ often as a plausible contender.
 
 Pick the arm maximizing
 
-```
-Q(a)  +  c · sqrt( ln t / N(a) )
-```
+$$Q(a) + c\sqrt{\frac{\ln t}{N(a)}}$$
 
 The bonus is a confidence-interval width: by Hoeffding's inequality the error of
-a mean over `N` samples shrinks like `1/sqrt(N)`, and the `ln t` numerator keeps
-the bound valid as the number of decisions grows. So the rule is **act as if each
+a mean over $N$ samples shrinks like $1/\sqrt{N}$, and the $\ln t$ numerator
+keeps the bound valid as the number of decisions grows. So the rule is **act as if each
 arm is as good as its evidence permits.** An arm is then tried either because it
-looks good (high `Q`) or because it is under-explored (few `N`) — and the bonus
+looks good (high $Q$) or because it is under-explored (few $N$) — and the bonus
 decays automatically as evidence accumulates. No wasted pulls on arms already
 known to be bad.
 
 ### Thompson sampling — explore by posterior sampling
 
 Keep a posterior over each arm's mean, draw one sample per arm, act greedily on
-the draws. With a Gaussian prior `N(0, σ₀²)` and Gaussian noise `N(θ, σ²)` the
-conjugate posterior after `n` pulls summing to `s` is Gaussian with
+the draws. With a Gaussian prior $\mathcal{N}(0, \sigma_0^2)$ and Gaussian noise
+$\mathcal{N}(\theta, \sigma^2)$, the conjugate posterior after $n$ pulls
+summing to $s$ is Gaussian with
 
-```
-precision = 1/σ₀² + n/σ²        mean = (s/σ²) / precision
-```
+$$\tau = \frac{1}{\sigma_0^2} + \frac{n}{\sigma^2},
+\qquad \mu = \frac{s}{\sigma^2 \tau}, \qquad \text{variance} = \frac{1}{\tau}$$
 
 An arm is then chosen exactly as often as it is *probably* optimal — probability
 matching. Exploration falls out of posterior width rather than being bolted on,
@@ -118,13 +115,12 @@ so it shrinks by itself as the posteriors sharpen.
 
 Unrolling the incremental update shows what each choice of `α` remembers:
 
-```
-Q_{n+1} = (1−α)^n · Q_1  +  Σ_{i=1..n}  α(1−α)^{n−i} · R_i
-```
+$$Q_{n+1} = (1-\alpha)^n Q_1 + \sum_{i=1}^{n} \alpha(1-\alpha)^{n-i} R_i$$
 
-With **constant α**, weights decay geometrically with age — an exponential recency
-average that forgets. With **α = 1/N(a)**, every reward gets weight `1/n`: the
-reward from pull 1 counts exactly as much as the reward from pull 9 999.
+With **constant $\alpha$**, weights decay geometrically with age — an exponential
+recency average that forgets. With **$\alpha = 1/N(a)$**, every reward gets
+weight $1/n$: the reward from pull 1 counts exactly as much as the reward from
+pull 9 999.
 
 On a stationary bandit that even weighting is optimal — it is the minimum-variance
 estimator of a fixed mean. On a drifting one it is a liability, because the old
@@ -144,7 +140,7 @@ Design decisions worth stating:
   variance findings below trustworthy.
 - **Every plot is a mean ±1 std band across seeds**, never a single run.
 - **Ties in argmax are broken uniformly at random.** With zero-initialized
-  estimates all `k` arms tie on step 1, so `np.argmax` would deterministically
+  estimates all $k$ arms tie on step 1, so `np.argmax` would deterministically
   open on arm 0 for every agent and every seed — a small bias that would quietly
   contaminate all three items.
 - **The drifting testbed starts all arms equal** (`q* = 0`) and random-walks each
