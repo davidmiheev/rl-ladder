@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.mypy_cache/
+
+# Experiment output (never commit run artifacts; commit the summary instead)
+runs/
+wandb/
+outputs/
+checkpoints/
+*.ckpt
+*.safetensors
+*.pt
+
+# Data (market data, datasets, model caches)
+data/
+!data/README.md
+.cache/
+
+# Companion forks cloned by scripts/clone_companions.sh
+companions/
+
+# OS
+.DS_Store

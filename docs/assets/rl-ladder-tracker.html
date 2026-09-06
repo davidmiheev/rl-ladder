@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RL — Hands-On Ladder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #10131a;
+    --panel: #171b24;
+    --panel-hover: #1c212c;
+    --border: #262c3a;
+    --text: #e7e5df;
+    --text-dim: #8d92a1;
+    --teal: #5fb3a3;
+    --amber: #d68c45;
+    --track: #232838;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans', sans-serif; padding: 40px 20px 80px; }
+  .wrap{ max-width: 780px; margin: 0 auto; }
+
+  header{ margin-bottom: 34px; }
+  .eyebrow{ font-family:'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--teal); margin-bottom: 10px; }
+  h1{ font-family:'Fraunces', serif; font-weight: 600; font-size: clamp(28px, 5vw, 38px); line-height: 1.15; margin: 0 0 12px; }
+  .sub{ color: var(--text-dim); font-size: 14.5px; line-height: 1.55; max-width: 62ch; }
+
+  .progress-row{ display:flex; align-items:center; gap:14px; margin-top: 26px; }
+  .progress-track{ flex:1; height: 6px; border-radius: 4px; background: var(--track); overflow:hidden; }
+  .progress-fill{ height:100%; width:0%; background: linear-gradient(90deg, var(--teal), var(--amber)); transition: width .4s ease; }
+  .progress-label{ font-family:'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+
+  .part-head{
+    display:flex; align-items:baseline; gap:12px;
+    margin: 40px 0 18px;
+  }
+  .part-head:first-of-type{ margin-top: 8px; }
+  .part-eyebrow{ font-family:'IBM Plex Mono', monospace; font-size: 11px; color: var(--amber); letter-spacing:.1em; text-transform:uppercase; }
+  .part-title{ font-family:'Fraunces', serif; font-weight:600; font-size: 22px; }
+  .part-note{ color: var(--text-dim); font-size: 13px; margin: -10px 0 20px; max-width: 62ch; line-height:1.5; }
+
+  .ladder{ position: relative; }
+  .rail{ position:absolute; left: 19px; top: 14px; bottom: 14px; width: 2px; background: var(--border); }
+
+  .phase{ position:relative; display:grid; grid-template-columns: 40px 1fr; gap: 18px; margin-bottom: 8px; }
+  .node-col{ position:relative; display:flex; justify-content:center; }
+  .node{
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--panel); border: 2px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+    color: var(--text-dim); position:relative; z-index: 1;
+    transition: border-color .3s ease, color .3s ease;
+  }
+  .node.done{ border-color: var(--teal); color: var(--teal); }
+  .node.partial{ border-color: var(--amber); color: var(--amber); }
+
+  .card{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px 22px; margin-bottom: 26px; }
+  .phase-title{ font-family:'Fraunces', serif; font-weight: 600; font-size: 18px; margin: 2px 0 4px; }
+  .phase-reading{ font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); margin-bottom: 14px; line-height: 1.5; }
+  .phase-reading .label{ color: var(--amber); }
+  .phase-reading a{ color: var(--teal); text-decoration:none; border-bottom:1px dotted var(--teal); }
+  .phase-reading a:hover{ border-bottom-style:solid; }
+
+  .exp-list{ list-style:none; margin:0; padding:0; }
+  .exp-item{ display:flex; align-items:flex-start; gap: 10px; padding: 8px 6px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1.5; transition: background .15s ease; }
+  .exp-item:hover{ background: var(--panel-hover); }
+  .box{ flex: none; width: 17px; height: 17px; margin-top: 2px; border-radius: 4px; border: 1.5px solid var(--text-dim); display:flex; align-items:center; justify-content:center; transition: border-color .15s ease, background .15s ease; }
+  .box svg{ width:11px; height:11px; opacity:0; transition: opacity .1s ease; }
+  .exp-item.checked .box{ background: var(--teal); border-color: var(--teal); }
+  .exp-item.checked .box svg{ opacity:1; }
+  .exp-item.checked .exp-text{ color: var(--text-dim); text-decoration: line-through; text-decoration-color: var(--border); }
+
+  .note{ font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); background: var(--track); border-left: 2px solid var(--teal); padding: 10px 14px; border-radius: 0 6px 6px 0; margin-top: 14px; line-height: 1.55; }
+
+  .cadence{ font-size: 13.5px; color: var(--text-dim); line-height: 1.6; border-top: 1px solid var(--border); padding-top: 22px; margin-top: 6px; }
+  .cadence strong{ color: var(--text); font-weight: 500; }
+
+  @media (prefers-reduced-motion: reduce){ .progress-fill, .node{ transition:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Post-Training / Companion Ladder</div>
+    <h1>RL — Hands-On Experiments</h1>
+    <p class="sub">Part A builds RL intuition on classical, games, and robotics problems. Part B applies it to LLM post-training. Part C applies the same algorithms to tuning the GLFT market-making parameter set. Check things off as you go — progress is saved.</p>
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">0 / 0 done</div>
+    </div>
+  </header>
+
+  <div id="content"></div>
+
+  <div class="cadence">
+    <strong>Cadence.</strong> Work Part A roughly in order (A7 and A8 are side branches). Part B assumes Part A's policy-gradient (A4) and rollout-averaging (A6) intuition, but only strictly needs familiarity with policy gradients and value functions to start. B1–B4 build on each other directly; B5 can run in parallel with B4; B6 is optional, once B1–B3 feel mechanical. Part C can start any time after A5 (continuous control) — C4 additionally reuses B1/B3's PPO/GRPO implementations directly, so it's the natural place to do Part C after touching Part B. Where a phase lists a "Practical lab," that's a hands-on notebook from Yandex School of Data Analysis's <a href="https://github.com/yandexdataschool/Practical_RL" target="_blank" rel="noopener">Practical_RL</a> or <a href="https://github.com/yandexdataschool/nlp_course" target="_blank" rel="noopener">nlp_course</a> covering that exact topic — worth running alongside your own implementation rather than instead of it.
+  </div>
+
+</div>
+
+<script>
+const PARTS = [
+  {
+    id: "A",
+    title: "Classical, Games & Robotics RL",
+    note: "CPU or one cheap vast.ai instance is enough here — no need to reserve serious GPU compute.",
+    phases: [
+      {
+        id: "a1", num: "A1", title: "Multi-Armed Bandits",
+        reading: '<a href="http://incompleteideas.net/book/the-book.html" target="_blank" rel="noopener">Sutton &amp; Barto ch. 2</a> · <a href="https://link.springer.com/article/10.1023/A:1013689704352" target="_blank" rel="noopener">UCB1 paper</a> · <a href="https://arxiv.org/abs/1707.02038" target="_blank" rel="noopener">Thompson sampling tutorial</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore" target="_blank" rel="noopener">Practical_RL week05_explore</a> (bandits, UCB, Thompson sampling)',
+        items: [
+          "Implement ε-greedy, UCB1, and Thompson sampling on a synthetic k-armed bandit; plot regret curves",
+          "Sweep ε and the UCB exploration constant; observe the exploration/exploitation tradeoff",
+          "Make the bandit non-stationary; show fixed-step-size ε-greedy tracking drift where sample-averaging fails"
+        ],
+        note: "Goal: the exploration/exploitation tradeoff in its purest form, before state or function approximation get added."
+      },
+      {
+        id: "a2", num: "A2", title: "Tabular RL: Q-Learning & SARSA",
+        reading: '<a href="http://incompleteideas.net/book/the-book.html" target="_blank" rel="noopener">Sutton &amp; Barto ch. 4–6</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week02_value_based" target="_blank" rel="noopener">Practical_RL week02_value_based</a> and <a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week03_model_free" target="_blank" rel="noopener">week03_model_free</a> (value/policy iteration, Q-learning, SARSA, TD(λ))',
+        items: [
+          "Implement value iteration & policy iteration on a small GridWorld; confirm convergence to the known optimum",
+          "Implement Q-learning and SARSA from scratch; compare policies near a hazard (cliff-walking style)",
+          "Sweep discount factor γ and learning rate α",
+          "Add a Dyna-Q planning step and measure the sample-efficiency gain over plain Q-learning"
+        ],
+        note: "Goal: the on-policy/off-policy distinction concretely, and why TD bootstrapping trades bias for variance reduction."
+      },
+      {
+        id: "a3", num: "A3", title: "Value-Function Approximation: DQN",
+        reading: '<a href="https://arxiv.org/abs/1312.5602" target="_blank" rel="noopener">DQN (Atari) paper</a> · <a href="https://arxiv.org/abs/1509.06461" target="_blank" rel="noopener">Double DQN</a> · <a href="https://arxiv.org/abs/1511.06581" target="_blank" rel="noopener">Dueling DQN</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week04_approx_rl" target="_blank" rel="noopener">Practical_RL week04_approx_rl</a> (experience replay, target networks, double/dueling/bootstrap DQN)',
+        items: [
+          "Implement DQN on CartPole/LunarLander; disable replay buffer and target network independently, document the instability",
+          "Add Double DQN; measure whether Q-value overestimation drops",
+          "Add a dueling architecture; compare sample efficiency vs. vanilla DQN",
+          "Optional: run DQN on a small Atari environment (e.g. Pong)"
+        ],
+        note: "Goal: the 'deadly triad' (bootstrapping + off-policy + function approximation) and which fix addresses which part of it."
+      },
+      {
+        id: "a4", num: "A4", title: "Policy Gradient & Actor-Critic",
+        reading: '<a href="https://doi.org/10.1007/BF00992696" target="_blank" rel="noopener">REINFORCE (Williams 1992)</a> · <a href="https://arxiv.org/abs/1602.01783" target="_blank" rel="noopener">A3C paper</a> · <a href="https://arxiv.org/abs/1506.02438" target="_blank" rel="noopener">GAE paper</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week06_policy_based" target="_blank" rel="noopener">Practical_RL week06_policy_based</a> (REINFORCE, advantage actor-critic)',
+        items: [
+          "Implement REINFORCE on CartPole; compare variance/efficiency against your A3 DQN run",
+          "Add a learned baseline + GAE; sweep λ and observe the bias/variance tradeoff",
+          "Implement A2C on LunarLander; compare stability against REINFORCE-with-baseline"
+        ],
+        note: "Goal: the policy-gradient theorem — the throughline connecting almost every algorithm in Part B."
+      },
+      {
+        id: "a5", num: "A5", title: "Continuous Control (Robotics)",
+        reading: '<a href="https://arxiv.org/abs/1509.02971" target="_blank" rel="noopener">DDPG paper</a> · <a href="https://arxiv.org/abs/1802.09477" target="_blank" rel="noopener">TD3 paper</a> · <a href="https://arxiv.org/abs/1801.01290" target="_blank" rel="noopener">SAC paper</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week09_policy_II" target="_blank" rel="noopener">Practical_RL week09_policy_II</a> (TRPO, PPO, DDPG for robot control)',
+        items: [
+          "Implement DDPG on Pendulum-v1; note training instability",
+          "Implement TD3 (twin critics, delayed updates, target smoothing); compare stability to DDPG",
+          "Run/implement SAC on a harder continuous task; sweep the entropy-temperature coefficient",
+          "Optional: add action/observation noise at eval time; compare degradation across DDPG/TD3/SAC"
+        ],
+        note: "Goal: what changes with continuous actions, and why SAC's entropy maximization tends to produce more robust policies."
+      },
+      {
+        id: "a6", num: "A6", title: "Planning & Self-Play: MCTS / AlphaZero",
+        reading: '<a href="https://doi.org/10.1109/TCIAIG.2012.2186810" target="_blank" rel="noopener">MCTS survey (Browne et al.)</a> · <a href="https://doi.org/10.1038/nature24270" target="_blank" rel="noopener">AlphaGo Zero</a> / <a href="https://arxiv.org/abs/1712.01815" target="_blank" rel="noopener">AlphaZero</a>',
+        lab: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week10_planning" target="_blank" rel="noopener">Practical_RL week10_planning</a> (MCTS for toy tasks) and <a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore" target="_blank" rel="noopener">week05_explore</a> (UCB for MCTS)',
+        items: [
+          "Implement plain MCTS (UCT) on Tic-Tac-Toe/Connect Four; verify convergence to near-optimal play",
+          "Add a learned policy/value net guiding search, trained via self-play; compare sample efficiency to plain MCTS",
+          "Ablate the value network (random/uniform rollouts) to isolate search vs. learned-prior strength"
+        ],
+        note: "Goal: how planning (search) and model-free learning combine — a useful contrast to GRPO's rollout-averaging in B3."
+      },
+      {
+        id: "a7", num: "A7", title: "Multi-Agent RL (optional)",
+        reading: '<a href="http://web.media.mit.edu/~cynthiab/Readings/tan-MAS-reinfLearn.pdf" target="_blank" rel="noopener">Independent Q-Learning (Tan 1993)</a> · <a href="https://arxiv.org/abs/1706.02275" target="_blank" rel="noopener">MADDPG paper</a> · <a href="https://openai.com/index/competitive-self-play/" target="_blank" rel="noopener">OpenAI self-play blog</a>',
+        lab: '<a href="https://pettingzoo.farama.org/tutorials/" target="_blank" rel="noopener">PettingZoo tutorials</a> (Farama Foundation) — independent-learner and self-play training on standard multi-agent environments; not covered by Practical_RL',
+        items: [
+          "Train two independent Q-learners in a simple competitive game; observe non-stationarity from each agent's view",
+          "Try self-play (one agent playing both sides); compare policy quality/stability to independent learners"
+        ],
+        note: "Goal: why multi-agent RL breaks single-agent convergence guarantees, and why self-play sidesteps rather than solves that."
+      },
+      {
+        id: "a8", num: "A8", title: "Imitation Learning & Inverse RL (optional)",
+        reading: '<a href="https://github.com/yandexdataschool/Practical_RL/tree/master/week10_planning" target="_blank" rel="noopener">Practical_RL week10_planning</a> and <a href="https://github.com/yandexdataschool/Practical_RL/tree/master/yet_another_week" target="_blank" rel="noopener">yet_another_week</a> (imitation learning and inverse RL)',
+        lab: 'same repo, same weeks — this phase is lab-first since the course treats it as bonus material beyond the core syllabus',
+        items: [
+          "Implement behavioral cloning on a small control task (e.g. CartPole) from a handful of expert demonstrations; observe compounding error away from the expert's state distribution",
+          "Implement a simple inverse RL method (e.g. max-entropy IRL) to recover a reward function from the same demonstrations, then run Q-learning/PPO against the recovered reward",
+          "Compare the behavioral-cloning policy against the IRL-then-RL policy on states the expert demonstrations never visited"
+        ],
+        note: "Goal: the difference between copying actions (imitation) and recovering the objective behind them (inverse RL) — relevant background for any reward-model-adjacent work in Part B."
+      }
+    ]
+  },
+  {
+    id: "B",
+    title: "LLM Post-Training RL",
+    note: "This is where you want a vast.ai (or RunPod) GPU pod. Small HF model (0.5–3B) via TRL for fast iteration.",
+    phases: [
+      {
+        id: "b1", num: "B1", title: "Foundations: REINFORCE → PPO",
+        reading: '<a href="https://arxiv.org/abs/2009.01325" target="_blank" rel="noopener">Learning to Summarize w/ Human Feedback</a> · <a href="https://arxiv.org/abs/2203.02155" target="_blank" rel="noopener">InstructGPT</a> · <a href="https://arxiv.org/abs/1707.06347" target="_blank" rel="noopener">PPO paper</a>',
+        lab: '<a href="https://github.com/yandexdataschool/nlp_course/tree/2025/week07_finetuning" target="_blank" rel="noopener">nlp_course week07_finetuning</a> (PEFT & RLHF)',
+        items: [
+          "Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space",
+          "Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference",
+          "Set the KL penalty near zero and document the resulting failure mode"
+        ]
+      },
+      {
+        id: "b2", num: "B2", title: "Direct Alignment: DPO / IPO",
+        reading: '<a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener">DPO paper</a> · <a href="https://arxiv.org/abs/2310.12036" target="_blank" rel="noopener">IPO paper</a>',
+        lab: '<a href="https://huggingface.co/docs/trl/dpo_trainer" target="_blank" rel="noopener">TRL DPOTrainer docs</a> (supports both DPO and IPO loss via one config flag)',
+        items: [
+          "Build/synthesize a preference dataset; train DPO; compare against the best PPO run",
+          "Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup",
+          "Swap in IPO's bounded objective; compare stability"
+        ]
+      },
+      {
+        id: "b3", num: "B3", title: "RLVR & GRPO",
+        reading: '<a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noopener">DeepSeekMath/GRPO</a> · <a href="https://arxiv.org/abs/2501.12948" target="_blank" rel="noopener">DeepSeek-R1</a> · <a href="https://arxiv.org/abs/2509.08827" target="_blank" rel="noopener">RL-for-LLMs survey</a> · <a href="https://arxiv.org/abs/2606.16733" target="_blank" rel="noopener">first-principles GRPO derivation</a>',
+        lab: '<a href="https://github.com/huggingface/open-r1" target="_blank" rel="noopener">HuggingFace Open R1</a> (full open reproduction of DeepSeek-R1\'s GRPO pipeline) and <a href="https://huggingface.co/docs/trl/grpo_trainer" target="_blank" rel="noopener">TRL GRPOTrainer docs</a>',
+        items: [
+          "Implement GRPO from the derivation yourself — group rollouts, group-relative advantages, no value net",
+          "Cross-check against TRL's GRPOTrainer",
+          "Sweep group size; measure advantage-estimate variance",
+          "Run RLVR against a gameable verifier and document reward hacking"
+        ]
+      },
+      {
+        id: "b4", num: "B4", title: "Reward Hacking & Overoptimization",
+        reading: '<a href="https://arxiv.org/abs/1606.06565" target="_blank" rel="noopener">Concrete Problems in AI Safety</a> · <a href="https://arxiv.org/abs/2210.10760" target="_blank" rel="noopener">Scaling Laws for RM Overoptimization</a>',
+        lab: '<a href="https://github.com/allenai/reward-bench" target="_blank" rel="noopener">RewardBench</a> (AI2) — evaluate your own trained reward model against a standard suite before deliberately overoptimizing against it',
+        items: [
+          "Overoptimize PPO against a learned RM; plot proxy reward vs. held-out gold metric",
+          "Repeat with GRPO on a verifiable reward; compare hackability",
+          "Try one mitigation (RM ensembling, tighter KL); quantify the recovered budget"
+        ]
+      },
+      {
+        id: "b5", num: "B5", title: "On-Policy Distillation",
+        reading: '<a href="https://arxiv.org/abs/2306.08543" target="_blank" rel="noopener">MiniLLM</a> · <a href="https://arxiv.org/abs/2306.13649" target="_blank" rel="noopener">GKD</a> · <a href="https://arxiv.org/abs/2604.00626" target="_blank" rel="noopener">2026 OPD survey</a>',
+        lab: '<a href="https://github.com/yandexdataschool/nlp_course/tree/2025/week08_efficiency" target="_blank" rel="noopener">nlp_course week08_efficiency</a> (quantization, distillation, pruning, speculative decoding)',
+        items: [
+          "Offline-KD baseline: distill the best B3 model into a smaller student",
+          "GKD-style on-policy distillation: student rollouts, teacher relabels",
+          "Run both students through your quantized inference path; compare robustness"
+        ]
+      },
+      {
+        id: "b6", num: "B6", title: "Unifying View + Systems Port",
+        reading: '<a href="https://arxiv.org/abs/2604.07941" target="_blank" rel="noopener">2026 unified off-policy/on-policy post-training survey</a> · optional',
+        lab: '<a href="https://github.com/huggingface/trl" target="_blank" rel="noopener">TRL source</a> — one codebase with PPO, DPO, GRPO, and GKD implementations side by side; reading the shared abstractions is a good proxy for the survey\'s unifying framework',
+        items: [
+          "Map B1–B5 onto the survey's unifying framework",
+          "Port GRPO's core update into Rust against your Candle fork — a comprehension check, not a throughput play"
+        ]
+      }
+    ]
+  }
+];
+
+PARTS.push({
+  id: "C",
+  title: "Quant Research: Market-Making Parameter RL",
+  note: "hftbacktest as the environment (Rust-backed, replays real order-book data). CPU is enough for calibration; a small GPU helps once you're running many parallel episodes for PPO/GRPO-style rollouts.",
+  phases: [
+    {
+      id: "c1", num: "C1", title: "Baseline: Calibrated GLFT (no RL)",
+      reading: '<a href="https://arxiv.org/abs/1605.01862" target="_blank" rel="noopener">Guéant–Lehalle–Fernandez-Tapia paper</a> · your GLFT + grid-trading notes',
+      lab: '<a href="https://github.com/nkaz001/hftbacktest/blob/master/examples/GLFT%20Market%20Making%20Model%20and%20Grid%20Trading.ipynb" target="_blank" rel="noopener">hftbacktest\'s official GLFT + grid-trading notebook</a> — likely the direct source of your own notes; run it as-is before modifying anything',
+      items: [
+        "Calibrate A, k (order-arrival intensity) and σ (volatility) from market data; derive c1, c2 and reproduce the GLFT half-spread/skew formulas",
+        "Run the calibrated GLFT grid market maker in hftbacktest on the sample data; reproduce the reported Sharpe/Sortino/MaxPositionValue stats",
+        "Reproduce the simplified non-parametric HF-grid variant (percentile-based intensity, micro-price) and compare against the parametric GLFT baseline"
+      ],
+      note: "This fixed-calibration run is the benchmark every RL variant below has to beat — on the same held-out days, not just the training days."
+    },
+    {
+      id: "c2", num: "C2", title: "Framing Market Making as an RL Problem",
+      reading: "your order-book-imbalance, basis, and APT alpha notes",
+      lab: '<a href="https://gymnasium.farama.org/introduction/create_custom_env/" target="_blank" rel="noopener">Gymnasium custom environment tutorial</a> — the standard pattern for wrapping hftbacktest as a step()/reset() Gym-style env',
+      items: [
+        "Define state: inventory q, short-horizon volatility estimate, order-book imbalance / micro-price features, basis & APT alpha signals",
+        "Define the action space as the GLFT coefficient set itself — γ, c1, and a half-spread/skew scaling term — rather than raw quote prices, so the policy stays interpretable inside the existing formula",
+        "Define reward as mark-to-market PnL minus an inventory-risk penalty (e.g. −η·q²), mirroring the risk term the GLFT model already encodes analytically",
+        "Wrap hftbacktest as a Gym-style environment: one episode per trading session, one step per grid-refresh interval"
+      ],
+      note: "The key design choice: RL adjusts the coefficients of a known-good analytic model rather than replacing the model outright — keeps the policy auditable."
+    },
+    {
+      id: "c3", num: "C3", title: "Continuous Control on the Coefficient Set",
+      reading: "reuse your A5 DDPG/TD3/SAC implementations",
+      lab: '<a href="https://stable-baselines3.readthedocs.io/en/master/modules/td3.html" target="_blank" rel="noopener">Stable-Baselines3 TD3</a> and <a href="https://stable-baselines3.readthedocs.io/en/master/modules/sac.html" target="_blank" rel="noopener">SAC docs</a> — battle-tested reference implementations to validate your own against',
+      items: [
+        "Apply DDPG/TD3/SAC to the C2 environment: policy outputs (γ, c1, half-spread-scale) per step, conditioned on state",
+        "Compare against the C1 fixed-calibration baseline on held-out days: Sharpe, Sortino, MaxPositionValue, ReturnOverMDD",
+        "Ablate: fix γ at its calibrated value and let RL learn only c1/skew, vs. letting RL learn all three jointly — compare sample efficiency and stability"
+      ],
+      note: "Goal: a real answer to whether learned, state-conditioned coefficients beat a well-calibrated fixed formula, and which coefficients are worth learning at all."
+    },
+    {
+      id: "c4", num: "C4", title: "PPO/GRPO for Parameter Search",
+      reading: "reuse your B1 PPO and B3 GRPO implementations",
+      lab: '<a href="https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html" target="_blank" rel="noopener">Stable-Baselines3 PPO docs</a> for the low-dimensional continuous-control side; no off-the-shelf library does GRPO outside LM tooling, so the group-relative-advantage update here is genuinely from-scratch code',
+      items: [
+        "Since the action here is a low-dimensional continuous vector, compare PPO (B1) directly against a GRPO-style approach: sample K coefficient sets per episode, rank by realized PnL, apply a group-relative-advantage update as in B3",
+        "Check whether GRPO's group-baseline idea (no value network) transfers outside language modeling to this much lower-dimensional control problem",
+        "Apply the B4 reward-hacking lens: check whether RL-tuned coefficients overfit to microstructure quirks of the training days (e.g. only widening spread around a few known volatility spikes) rather than learning a generalizable policy — validate strictly out-of-sample"
+      ],
+      note: "This is the direct bridge between your LLM post-training RL work and this quant research — same algorithms, a much smaller and more interpretable action space."
+    },
+    {
+      id: "c5", num: "C5", title: "Multi-Signal Extension",
+      reading: "your basis and APT alpha notes",
+      lab: '<a href="https://github.com/nkaz001/hftbacktest/tree/master/examples" target="_blank" rel="noopener">hftbacktest examples directory</a> — includes the official "Market Making with Alpha" notebooks (imbalance, basis, APT) your notes are based on',
+      items: [
+        "Fold the basis/APT alpha signals into the state (or into a directly-predicted fair-price adjustment) and re-run C3/C4",
+        "Check whether the RL-tuned coefficients learn to widen/narrow skew in response to the alpha signal automatically, versus the manual extension a fixed-form model would need"
+      ],
+      note: "Tests whether RL buys you anything over manually engineering the alpha signal into the analytic formula."
+    }
+  ]
+});
+
+const STORAGE_PREFIX = "rl-ladder-v2:";
+
+async function loadState(key){
+  try{ const res = await window.storage.get(key, false); return res ? res.value === "1" : false; }
+  catch(e){ return false; }
+}
+async function saveState(key, val){
+  try{ await window.storage.set(key, val ? "1" : "0", false); } catch(e){}
+}
+function checkSvg(){
+  return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="#0d1117" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+function updateProgress(){
+  const boxes = document.querySelectorAll(".exp-item");
+  const total = boxes.length;
+  const done = document.querySelectorAll(".exp-item.checked").length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("progressLabel").textContent = done + " / " + total + " done";
+
+  PARTS.forEach(part => part.phases.forEach(p => {
+    const node = document.getElementById("node-" + p.id);
+    const itemEls = document.querySelectorAll('[data-phase="'+p.id+'"]');
+    const doneCount = document.querySelectorAll('[data-phase="'+p.id+'"].checked').length;
+    node.classList.remove("done","partial");
+    if(itemEls.length && doneCount === itemEls.length) node.classList.add("done");
+    else if(doneCount > 0) node.classList.add("partial");
+  }));
+}
+
+async function init(){
+  const content = document.getElementById("content");
+
+  PARTS.forEach(part => {
+    const partHead = document.createElement("div");
+    partHead.className = "part-head";
+    partHead.innerHTML = `<span class="part-eyebrow">Part ${part.id}</span><span class="part-title">${part.title}</span>`;
+    content.appendChild(partHead);
+
+    const partNote = document.createElement("div");
+    partNote.className = "part-note";
+    partNote.textContent = part.note;
+    content.appendChild(partNote);
+
+    const ladder = document.createElement("div");
+    ladder.className = "ladder";
+    ladder.innerHTML = '<div class="rail"></div>';
+
+    part.phases.forEach(p => {
+      const phaseDiv = document.createElement("div");
+      phaseDiv.className = "phase";
+      phaseDiv.innerHTML = `
+        <div class="node-col"><div class="node" id="node-${p.id}">${p.num}</div></div>
+        <div class="card">
+          <div class="phase-title">${p.title}</div>
+          <div class="phase-reading"><span class="label">Reading —</span> ${p.reading}</div>
+          ${p.lab ? `<div class="phase-reading"><span class="label">Practical lab —</span> ${p.lab}</div>` : ""}
+          <ul class="exp-list">
+            ${p.items.map((text, i) => `
+              <li class="exp-item" data-phase="${p.id}" data-idx="${i}">
+                <span class="box">${checkSvg()}</span>
+                <span class="exp-text">${text}</span>
+              </li>`).join("")}
+          </ul>
+          ${p.note ? `<div class="note">${p.note}</div>` : ""}
+        </div>
+      `;
+      ladder.appendChild(phaseDiv);
+    });
+
+    content.appendChild(ladder);
+  });
+
+  const items = document.querySelectorAll(".exp-item");
+  for(const item of items){
+    const key = STORAGE_PREFIX + item.dataset.phase + ":" + item.dataset.idx;
+    if(await loadState(key)) item.classList.add("checked");
+  }
+  updateProgress();
+
+  items.forEach(item => {
+    item.addEventListener("click", async () => {
+      item.classList.toggle("checked");
+      updateProgress();
+      const key = STORAGE_PREFIX + item.dataset.phase + ":" + item.dataset.idx;
+      await saveState(key, item.classList.contains("checked"));
+    });
+  });
+}
+
+init();
+</script>
+</body>
+</html>

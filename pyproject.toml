@@ -1,0 +1,82 @@
+[project]
+name = "rl-ladder"
+version = "0.1.0"
+description = "Hands-on RL ladder: classical/games/robotics RL, LLM post-training RL, and market-making parameter RL."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "tqdm>=4.66",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Part A: classical, games and robotics RL. CPU is enough.
+part-a = [
+    "torch>=2.4",
+    "gymnasium[classic-control,box2d,other]>=1.0",
+    "stable-baselines3>=2.4",
+    "tensorboard>=2.17",
+    "pandas>=2.2",
+]
+# Part A optional extras that are heavier or platform-sensitive.
+part-a-extra = [
+    "gymnasium[atari]>=1.0",
+    "ale-py>=0.10",
+    "mujoco>=3.2",
+    "pettingzoo>=1.24",
+]
+# Part B: LLM post-training. Needs a GPU pod.
+part-b = [
+    "torch>=2.4",
+    "transformers>=4.46",
+    "trl>=0.13",
+    "peft>=0.13",
+    "datasets>=3.0",
+    "accelerate>=1.0",
+    "bitsandbytes>=0.44; platform_system == 'Linux'",
+]
+# Part B serving/throughput path (optional, Linux + CUDA only).
+part-b-extra = [
+    "vllm>=0.6; platform_system == 'Linux'",
+    "flash-attn>=2.6; platform_system == 'Linux'",
+]
+# Part C: market-making parameter RL on replayed order-book data.
+part-c = [
+    "torch>=2.4",
+    "gymnasium>=1.0",
+    "stable-baselines3>=2.4",
+    "hftbacktest>=2.0",
+    "numba>=0.60",
+    "pandas>=2.2",
+    "polars>=1.0",
+    "pyarrow>=17.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "jupyterlab>=4.2",
+    "ipykernel>=6.29",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rl_ladder"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "experiments", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
