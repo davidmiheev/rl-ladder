@@ -61,9 +61,9 @@ or function approximation get added.
 
 **Practical lab.** [Practical_RL week05_explore](https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore) (bandits, UCB, Thompson sampling)
 
-- [ ] Implement ε-greedy, UCB1, and Thompson sampling on a synthetic k-armed bandit; plot regret curves
-- [ ] Sweep ε and the UCB exploration constant; observe the exploration/exploitation tradeoff
-- [ ] Make the bandit non-stationary; show fixed-step-size ε-greedy tracking drift where sample-averaging fails
+- [x] Implement ε-greedy, UCB1, and Thompson sampling on a synthetic k-armed bandit; plot regret curves
+- [x] Sweep ε and the UCB exploration constant; observe the exploration/exploitation tradeoff
+- [x] Make the bandit non-stationary; show fixed-step-size ε-greedy tracking drift where sample-averaging fails
 
 <a id="a2"></a>
 
