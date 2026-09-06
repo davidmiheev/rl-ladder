@@ -8,7 +8,10 @@ or function approximation get added.
 **Compute.** CPU, seconds per run
 
 Checklist items, reading and lab links live in
-[`docs/ladder.md`](../../docs/ladder.md#a1). This README is the lab notebook.
+[`docs/ladder.md`](../../docs/ladder.md#a1). This README is the lab notebook; the
+reasoning — what the task is, why it is the first rung, how the three algorithms
+differ, and what the results mean — is in
+[`docs/writeups/a1-bandits.md`](../../docs/writeups/a1-bandits.md).
 
 ## Code
 

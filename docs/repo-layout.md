@@ -11,6 +11,7 @@ rl-ladder/
 │   ├── experiment-protocol.md   seeds, runs, plots, what "done" means
 │   ├── companion-repos.md       the 7 lab/reference repos and their pins
 │   ├── data.md                  market data for Part C
+│   ├── writeups/                per-phase explainers (task, goal, reasoning)
 │   └── assets/                  plots worth committing, plus the original
 │                                 HTML tracker (rl-ladder-tracker.html)
 ├── src/rl_ladder/               shared plumbing only (~200 lines)
