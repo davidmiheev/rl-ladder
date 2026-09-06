@@ -18,6 +18,12 @@ The honest summary: **only Part B actually needs a rented GPU.** Everything else
 runs on whatever you already have, and renting for Part A mostly buys you the
 overhead of syncing code to a pod.
 
+And Part B does not need one from day one: a free tier is enough to get the
+trainers running and to do single-config runs. It is the *sweeps* that need
+rented hardware. See [`free-compute.md`](free-compute.md) for what fits on a free
+T4, the fp16/sdpa config a Turing GPU requires, why Colab's free TPU is a
+downgrade for this workload, and when a TRC grant is worth the application.
+
 ## Sizing Part B
 
 Rough VRAM for full-parameter training with a reference model in memory
@@ -39,7 +45,8 @@ prefer shorter completions over a bigger model when you run out of room.
 
 ## Pods
 
-The ladder assumes vast.ai or RunPod:
+Once you are past the free tiers (see [`free-compute.md`](free-compute.md)), the
+ladder assumes vast.ai or RunPod:
 
 - Pick a **persistent volume** and put `HF_HOME` on it. Re-downloading a 3B model
   and a dataset on every pod start wastes more money than the volume costs.

@@ -38,7 +38,10 @@ Or with uv directly: `uv pip install -e ".[part-a,dev]"`.
 
 ### Part B notes
 
-Part B needs a GPU. See [`compute.md`](compute.md) for pod sizing. On a fresh pod:
+Part B needs a GPU. See [`compute.md`](compute.md) for pod sizing, and
+[`free-compute.md`](free-compute.md) if you want to start on a free Colab/Kaggle
+tier — a Turing (T4) GPU needs `fp16` and `sdpa` rather than the `bf16` +
+FlashAttention-2 that most TRL recipes assume. On a fresh pod:
 
 ```bash
 uv pip install -e ".[part-b,dev]"

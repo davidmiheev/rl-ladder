@@ -7,6 +7,7 @@ rl-ladder/
 │   ├── ladder.md                the curriculum — 19 phases, 59 items, canonical
 │   ├── setup.md                 environments and per-part extras
 │   ├── compute.md               what hardware each part needs, pod sizing
+│   ├── free-compute.md          free GPU/TPU tiers and their limits
 │   ├── experiment-protocol.md   seeds, runs, plots, what "done" means
 │   ├── companion-repos.md       the 7 lab/reference repos and their pins
 │   ├── data.md                  market data for Part C

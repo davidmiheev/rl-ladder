@@ -7,6 +7,7 @@ Start here.
 | [`ladder.md`](ladder.md) | **The curriculum.** 19 phases, 59 checklist items, reading and labs. Canonical — tick boxes here. |
 | [`setup.md`](setup.md) | Environments, per-part extras, verifying the install |
 | [`compute.md`](compute.md) | What hardware each part needs; GPU pod sizing for Part B |
+| [`free-compute.md`](free-compute.md) | Free GPU/TPU tiers (Colab, Kaggle, TRC): what fits, T4 config, where they break |
 | [`experiment-protocol.md`](experiment-protocol.md) | Seeds, run logging, plots, what counts as "done" |
 | [`repo-layout.md`](repo-layout.md) | Where code goes and why the shared library stays tiny |
 | [`companion-repos.md`](companion-repos.md) | The 7 lab/reference repos, their pins, and which phase uses which |
