@@ -145,7 +145,29 @@ Decisions worth recording:
 
 ## 7. Results
 
-Filled in from the runs; see the phase README for the tables.
+Tables in the [phase README](../../experiments/a3_dqn/README.md); the parts that
+change how the phase should be read:
+
+**Item 1 confirms the mapping in section 3, and asymmetrically.** Removing the
+target network collapses the agent to 9.2 — the exact score of a constant "push
+right" policy, against 22.7 for a random one. It does not learn badly; its
+$Q$-function degenerates until the greedy action is the same everywhere, which
+is divergence rather than slow learning, and leaves it *worse than random*.
+Removing replay instead costs a lot without being fatal (80.0 against 250.1).
+
+So the two stabilisers are not interchangeable, and the asymmetry has a reason.
+Replay attacks the *data* — correlation and distribution shift — and a learner
+with correlated data is inefficient. The target network attacks the
+*bootstrap*, and a learner whose target moves with its own parameters has no
+fixed point to converge to. Inefficiency degrades; a missing fixed point
+diverges.
+
+**Full DQN is itself unstable**, peaking at 469 and ending at 250 — 56% of its
+own best, with a seed standard deviation (151) larger than that gap. The
+stabilisers make CartPole learnable, not stable. This is worth carrying into
+A4: the policy-gradient methods there are often described as high-variance
+relative to value methods, and the honest baseline for that comparison is this
+number, not the peak.
 
 ## 8. Where these items come from
 

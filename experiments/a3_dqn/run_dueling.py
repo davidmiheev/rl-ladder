@@ -44,20 +44,35 @@ def main() -> None:
         final = np.array([m.eval_returns[-1] for m in runs])
         area = np.array([np.mean(m.eval_returns) for m in runs])
 
+        # Steps to first reach THRESHOLD, per seed. A seed that never reaches it
+        # is censored, not missing: dropping it from the median would flatter the
+        # arm that failed more often, which is the opposite of the truth.
         reached = []
         for m in runs:
             hits = [s for s, r in zip(m.eval_steps, m.eval_returns, strict=True) if r >= THRESHOLD]
             reached.append(hits[0] if hits else np.nan)
+        reached = np.asarray(reached, dtype=float)
+        censored = np.isnan(reached)
+        # Censored seeds are scored at the run length, a lower bound on the truth.
+        conservative = np.where(censored, args.steps, reached)
         summary[label] = {
             "final_eval_return": float(final.mean()),
             "mean_eval_return": float(area.mean()),
-            "steps_to_threshold_median": float(np.nanmedian(reached)),
-            "seeds_reaching_threshold": int(np.sum(~np.isnan(reached))),
+            "steps_to_threshold_per_seed": [
+                None if c else float(v) for v, c in zip(reached, censored, strict=True)
+            ],
+            "steps_to_threshold_median_reached_only": (
+                float(np.nanmedian(reached)) if (~censored).any() else None
+            ),
+            "steps_to_threshold_median_censored_at_run_end": float(np.median(conservative)),
+            "seeds_reaching_threshold": int((~censored).sum()),
         }
         run.log(step=len(summary), arm=label, **summary[label])
-        print(f"{label:14s} final {final.mean():6.1f}   area-under-curve {area.mean():6.1f}"
-              f"   median steps to {THRESHOLD:.0f}: {np.nanmedian(reached):.0f}"
-              f"   ({summary[label]['seeds_reaching_threshold']}/{args.seeds} seeds)")
+        print(f"{label:14s} final {final.mean():6.1f}   AUC {area.mean():6.1f}"
+              f"   steps to {THRESHOLD:.0f}: median(reached) {np.nanmedian(reached):.0f}"
+              f" | median(censored) {np.median(conservative):.0f}"
+              f"   ({summary[label]['seeds_reaching_threshold']}/{args.seeds} seeds)"
+              f"   per-seed {[None if c else int(v) for v, c in zip(reached, censored, strict=True)]}")
 
     plot_curves(curves, title=f"CartPole-v1: dueling vs vanilla ({args.seeds} seeds)",
                 xlabel="evaluation", ylabel="greedy eval return", out_path=run.path("dueling.png"))
