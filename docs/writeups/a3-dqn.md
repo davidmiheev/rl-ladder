@@ -16,8 +16,11 @@ lab notebook with the numbers is
 3. Add a dueling architecture; compare sample efficiency vs. vanilla DQN.
 4. Optional: DQN on a small Atari environment.
 
-Item 4 is skipped for now — it is the only piece that genuinely wants a GPU, and
-it adds no concept the other three do not already cover.
+Item 4 is not run here — it is the only piece that genuinely wants a GPU. The
+initial reasoning was that it adds no concept the other three cover; **items 2
+and 3 then showed that reasoning was wrong**, for a reason recorded in section 7.
+It is the environment where the other two items' effects would actually be
+measurable.
 
 ## 2. The goal
 
@@ -176,7 +179,7 @@ number, not the peak.
 | 1 — DQN, ablating replay and the target network | [Mnih et al. 2013](https://arxiv.org/abs/1312.5602) (the NIPS workshop paper: replay, **no** target network) and [Mnih et al. 2015](https://www.nature.com/articles/nature14236) (Nature: adds the target network). The triad itself is S&B §11.3 "The Deadly Triad" | The two papers *are* the ablation. The "no target net" arm is not a strawman someone invented — it is literally the 2013 configuration, and the gap between the arms is the gap between the two publications. |
 | 2 — Double DQN | [van Hasselt, Guez & Silver 2016](https://arxiv.org/abs/1509.06461); the tabular original is van Hasselt 2010, and S&B §6.7 "Maximization Bias and Double Learning" gives the bandit-sized version of the same bias | It isolates one specific defect — the max operator's upward bias — with a fix small enough that nothing else changes. The measurement, predicted value against realised return, is the paper's own diagnostic. |
 | 3 — Dueling architecture | [Wang et al. 2016](https://arxiv.org/abs/1511.06581) | It is the one improvement in this group that changes the *network*, not the update rule, so it tests whether architecture can buy sample efficiency at a fixed algorithm. |
-| 4 — Atari (optional, skipped) | [Mnih et al. 2015](https://www.nature.com/articles/nature14236) | Skipped deliberately: it is a scale demonstration, not a new concept, and the only item here that needs a GPU. |
+| 4 — Atari (optional, not run) | [Mnih et al. 2015](https://www.nature.com/articles/nature14236) | Initially judged a scale demonstration with no new concept. Items 2 and 3 disproved that: it supplies the value noise Double DQN needs and the large action space dueling needs, so it is where both become measurable. Still needs a GPU. |
 
 The **lab** pairing (`Practical_RL`
 [week04_approx_rl](https://github.com/yandexdataschool/Practical_RL/tree/master/week04_approx_rl))

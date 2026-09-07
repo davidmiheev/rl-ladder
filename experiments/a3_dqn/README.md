@@ -69,12 +69,26 @@ _Running (90k steps); results to follow._
 
 ### Item 3 — dueling architecture
 
-_Running; results to follow._
+`dueling__20260907-211350`, 5 seeds, 30k steps. Sample efficiency is steps to
+first reach a greedy eval return of 400. A seed that never reaches it is
+*censored*, not missing — dropping it would flatter the arm that failed more
+often, so both medians are reported.
+
+| arm | final | AUC | steps to 400, median (reached only) | median (censored at run end) | seeds reaching |
+| --- | --- | --- | --- | --- | --- |
+| DQN | 250.1 | **223.6** | 17000 | 20000 | 4/5 |
+| Dueling DQN | **355.3** | 221.3 | 28000 | 28000 | **5/5** |
+
+Per-seed steps to threshold — DQN `[28000, 12000, 14000, 20000, never]`,
+dueling `[28000, 28000, 28000, 12000, 20000]`.
+
+![dueling](../../docs/assets/a3/dueling.png)
 
 ### Item 4 — Atari
 
-Deliberately skipped: a scale demonstration rather than a new concept, and the
-only item here that wants a GPU. See the writeup's provenance table.
+Not run (it wants a GPU), but items 2 and 3 have changed why it matters — see
+the last finding below. It is no longer "a scale demonstration with no new
+concept"; it is the environment where items 2 and 3 would actually resolve.
 
 ## Findings
 
@@ -103,3 +117,28 @@ true, and the retention column exists so the summary cannot hide it.
 is the configuration of the 2013 NIPS workshop DQN, which had experience replay
 but no target network. The gap between the two arms is the gap between that
 paper and the 2015 Nature one.
+
+**Dueling bought no sample efficiency here — and the reason is structural.** It
+was *slower* to first reach 400 (median 28000 against DQN's 20000 with the
+failing seed censored), while ending higher (355 vs 250) and reaching the
+threshold on 5 seeds out of 5 rather than 4. Area under the learning curve is
+identical to within noise (221.3 vs 223.6), which says the two learned the same
+total amount over the run.
+
+The explanation is in the architecture's own argument. A shared value stream pays
+off when many actions have similar value, so that estimating "how good is this
+state" once beats estimating it separately per action. **CartPole has two
+actions.** There is almost nothing for the advantage stream to disentangle, and
+the benefit should scale with the size of the action space — Wang et al.
+demonstrated it on Atari, where there are up to 18. This is the worst case for
+the method, and the result is what the theory predicts, not a contradiction of
+it.
+
+**Both item 2 and item 3 failed to show their effect for the same reason, and
+that revises the plan.** The overestimation Double DQN targets needs value
+noise and a long horizon; the efficiency dueling targets needs a large action
+space. CartPole supplies neither. Item 4 — Atari — is exactly where both
+conditions hold, which is why both original papers used it. It was written off
+above as a scale demonstration; it is better described as **the testbed that
+would make items 2 and 3 conclusive**, and it should be revisited if a GPU
+becomes available rather than dropped.
