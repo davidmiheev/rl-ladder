@@ -2,7 +2,7 @@
 
 The stationary testbed follows Sutton & Barto ch. 2: q*(a) ~ N(0, 1) and
 reward ~ N(q*(a), 1). The non-stationary variant starts every arm equal and
-lets each q*(a) take an independent random walk (S&B exercise 2.5).
+lets each q*(a) take an independent random walk (S&B exercise 2.5, 2nd ed.).
 """
 
 from __future__ import annotations

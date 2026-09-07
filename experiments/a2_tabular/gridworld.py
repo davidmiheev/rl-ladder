@@ -28,7 +28,7 @@ SIMPLE_GRID = [
     "....G",
 ]
 
-# Sutton & Barto example 6.6.
+# Sutton & Barto example 6.6, Cliff Walking.
 CLIFF = [
     "............",
     "............",
@@ -36,7 +36,7 @@ CLIFF = [
     "SCCCCCCCCCCG",
 ]
 
-# Sutton & Barto figure 8.2, the Dyna maze. Optimal path is 14 steps.
+# The Dyna maze, Sutton & Barto figure 8.3. Optimal path is 14 steps.
 DYNA_MAZE = [
     ".......#G",
     "..#....#.",

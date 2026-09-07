@@ -260,3 +260,27 @@ generating the staleness itself.
 - **B1** meets the off-policy/on-policy split again: PPO's ratio and KL terms
   exist to let it reuse data collected under a slightly different policy, which
   is Q-learning's question asked at scale.
+
+## 8. Where these items come from
+
+Section numbers follow the published 2nd edition of
+[Sutton & Barto](http://incompleteideas.net/book/the-book.html); figure numbers
+are as verified in the 2017 draft and may shift by one in print, so each is
+described by its caption as well.
+
+| item | primary source | why it was picked |
+| --- | --- | --- |
+| 1 — VI and PI on a GridWorld | S&B §4.3 "Policy Iteration" and §4.4 "Value Iteration"; Example 4.1 is the 4×4 gridworld this phase's grid is modelled on. Originals: Bellman's *Dynamic Programming* (1957) for value iteration, Howard's *Dynamic Programming and Markov Processes* (1960) for policy iteration | DP is the only point on the ladder where the exact answer is computable. Doing it first means every later approximation has a reference to be measured against. |
+| 2 — Q-learning and SARSA at a hazard | S&B §6.5 "Q-learning: Off-Policy TD Control" and §6.4 "Sarsa: On-Policy TD Control"; Example 6.6 "Cliff Walking" is exactly this experiment. Originals: [Watkins & Dayan 1992](https://link.springer.com/article/10.1007/BF00992698) for Q-learning, [Rummery & Niranjan 1994](http://mi.eng.cam.ac.uk/reports/svr-ftp/auto-pdf/rummery_tr166.pdf) for SARSA | The cliff is the minimal environment where on-policy and off-policy control visibly disagree. A hazard is required: without one, both converge to the same policy and the distinction stays theoretical. |
+| 3 — sweep γ and α | γ: S&B §3.3–3.4, where the discounted return is *defined* — γ is part of the objective, not a hyperparameter. α: S&B §2.5 (constant step size) and the cliff-walking figure plotting interim and asymptotic performance of TD control against α (draft Fig. 6.7) | The two parameters are swept with different tools here (DP for γ, TD for α) precisely because the sources treat them as different kinds of object. |
+| 4 — Dyna-Q | S&B §8.2 "Dyna: Integrating Planning, Acting, and Learning"; the maze and its learning curves for varying planning steps are draft Fig. 8.3 (Fig. 8.2 is the Dyna *architecture* diagram, not the maze). Original: [Sutton 1990](http://incompleteideas.net/papers/sutton-90.pdf) | It is the cheapest possible demonstration that reusing experience is worth more than collecting more of it — the argument every replay buffer from A3 onward rests on. |
+
+The **lab** pairing (`Practical_RL`
+[week02_value_based](https://github.com/yandexdataschool/Practical_RL/tree/master/week02_value_based)
+and [week03_model_free](https://github.com/yandexdataschool/Practical_RL/tree/master/week03_model_free))
+is the ladder's own, and covers value/policy iteration, Q-learning, SARSA and
+TD(λ) — matching items 1–3.
+
+The **goal statement** in section 2 is quoted from
+[`ladder.md`](../ladder.md#a2). Section 7's forward links are this repo's
+reading of how the phases connect, not claims from any source.

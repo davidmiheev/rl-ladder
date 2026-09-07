@@ -1,6 +1,6 @@
 """A2 item 4: Dyna-Q's planning steps against plain Q-learning.
 
-Sutton & Barto figure 8.2. `planning_steps=0` is exactly Q-learning, so the
+Sutton & Barto figure 8.3. `planning_steps=0` is exactly Q-learning, so the
 comparison isolates the value of replaying a learned model — every arm sees the
 same number of *real* environment steps per episode.
 """

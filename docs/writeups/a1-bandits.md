@@ -197,3 +197,27 @@ Averaging over seeds hides it; the band is what exposes it.
 - **B3**'s GRPO replaces a learned value baseline with the mean over a group of
   rollouts, which is a bandit-style estimate of an action's relative worth; the
   group-size sweep there is the direct descendant of item 2's sweeps.
+
+## 8. Where these items come from
+
+Every item traces to a specific piece of source material, so the curriculum is
+auditable rather than a list someone felt like writing. Section numbers follow
+the published 2nd edition of [Sutton & Barto](http://incompleteideas.net/book/the-book.html);
+the free 2017 draft shifts chapter 2 by one section (its §2.4 is the published
+§2.5) and numbers the non-stationary exercise 2.3 rather than 2.5.
+
+| item | primary source | why it was picked |
+| --- | --- | --- |
+| 1 — implement the three agents, plot regret | S&B §2.2–2.4 (action-value methods, the 10-armed testbed, incremental implementation); §2.7 for UCB; [Auer, Cesa-Bianchi & Fischer 2002](https://link.springer.com/article/10.1023/A:1013689704352) for the UCB1 bound; [Russo et al. 2018 tutorial](https://arxiv.org/abs/1707.02038) for Thompson sampling | The three algorithms are the three *distinct answers* to exploration — fixed randomization, optimism, posterior sampling. Any two of them would leave a strategy unrepresented. |
+| 2 — sweep ε and c | S&B's parameter study, the summary figure of ch. 2 (draft Fig. 2.6), which plots every bandit algorithm's reward against its parameter on a log axis | The inverted-U is the tradeoff made visible. It is also the figure this repo's `parameter_study.png` deliberately reproduces. |
+| 3 — non-stationary tracking | S&B §2.5 "Tracking a Nonstationary Problem" and its programming exercise (Exercise 2.5 in print, 2.3 in the draft), which specifies the random-walk testbed used here | It is the one bandit result that generalizes directly to deep RL, where the target is always moving. |
+
+The **lab** pairing (`Practical_RL` [week05_explore](https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore))
+is the ladder's own choice, and it covers exactly these three algorithms — which
+is why A1 is the phase it is attached to.
+
+The **goal statement** in section 2 is the ladder's, quoted from
+[`ladder.md`](../ladder.md#a1): *"the exploration/exploitation tradeoff in its
+purest form, before state or function approximation get added."* The forward
+links in section 7 are this repo's reading of how the phases connect, not
+claims from any source.

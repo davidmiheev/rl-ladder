@@ -86,6 +86,29 @@ training**. Decide the train/held-out split once, in C1, write it into the C1
 README, and reuse it unchanged for C3–C5. Re-picking the split after seeing
 results is how a backtest lies to you.
 
+## Writeups cite their sources
+
+Each phase gets `docs/writeups/<phase>.md` explaining what the phase asks, why,
+and what the results mean. It ends with a **"Where these items come from"**
+table mapping every checklist item to the source it was drawn from — book
+section, original paper, or lab notebook — with links, plus a sentence on why
+that item earned a place. The point is that the curriculum should be auditable:
+a reader can check whether an item is a faithful reproduction of a known
+experiment or someone's invention.
+
+Two rules learned the hard way:
+
+- **Verify numbering before citing it.** Section, example and figure numbers
+  differ between the free draft of Sutton & Barto and the published 2nd edition,
+  and a citation that sends a reader to the wrong figure is worse than none. The
+  Dyna maze is figure 8.3; figure 8.2 is the architecture diagram — this repo
+  cited 8.2 in two places before anyone checked.
+- **Separate sources from inferences.** Where a writeup draws its own connection
+  between phases, it says so rather than implying the source made the claim.
+
+Formulae in writeups are LaTeX (`$...$` inline, `$$...$$` display), which GitHub
+renders natively.
+
 ## Directory conventions
 
 ```
