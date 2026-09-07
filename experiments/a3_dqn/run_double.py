@@ -76,14 +76,22 @@ def main() -> None:
         bias_curves[tag] = bias
         final_bias = np.array([b[-1] for b in bias])
         final_return = np.array([m.eval_returns[-1] for m in runs])
+        # Value divergence is heavy-tailed: one seed can carry the mean. Keep
+        # every seed so the median and the spread can both be read.
         summary[tag] = {
-            "final_overestimation": float(final_bias.mean()),
+            "final_overestimation_mean": float(final_bias.mean()),
+            "final_overestimation_median": float(np.median(final_bias)),
             "final_overestimation_std": float(final_bias.std()),
-            "final_eval_return": float(final_return.mean()),
+            "final_overestimation_per_seed": [round(float(b), 2) for b in final_bias],
+            "final_eval_return_mean": float(final_return.mean()),
+            "final_eval_return_median": float(np.median(final_return)),
+            "final_eval_return_per_seed": [round(float(r), 1) for r in final_return],
         }
         run.log(step=len(summary), arm=tag, **summary[tag])
-        print(f"{tag:26s} overestimation {final_bias.mean():+7.2f} +/- {final_bias.std():5.2f}"
-              f"   eval return {final_return.mean():6.1f}")
+        print(f"{tag:26s} overestimation median {np.median(final_bias):+8.2f}"
+              f" mean {final_bias.mean():+8.2f}   return median {np.median(final_return):6.1f}"
+              f"\n{'':26s} bias/seed {[round(float(b)) for b in final_bias]}"
+              f"  return/seed {[round(float(r)) for r in final_return]}")
 
     plot_curves(bias_curves, title="Q-value overestimation: predicted V(s0) - actual return",
                 xlabel="evaluation", ylabel="overestimation", out_path=run.path("overestimation.png"))

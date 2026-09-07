@@ -65,7 +65,23 @@ followed by collapse.
 
 ### Item 2 — Double DQN
 
-_Running (90k steps); results to follow._
+Run twice. At **30k steps** (`double__20260907-210628`) every arm sat near zero
+bias and nothing was distinguishable — see the findings for why that was the
+wrong measurement window. At **90k steps** (`double__20260907-213008`, 5 seeds)
+the bias is large and the arms separate.
+
+Value divergence is heavy-tailed, so the median is the headline and every seed
+is listed. With gamma=0.99 the largest achievable discounted return is ~99, so a
+bias above that means the estimates exceed anything the environment can pay.
+
+| arm | median bias | mean bias | bias per seed | median return |
+| --- | --- | --- | --- | --- |
+| DQN | +96.7 | +233.1 | 151, 97, 46, **841**, 30 | 90.2 |
+| Double DQN | **+44.6** | +62.3 | 129, 45, 22, 40, 76 | **166.2** |
+| DQN (reward noise 1) | +42.0 | +56.2 | 42, 147, 24, 45, 23 | 491.3 |
+| Double DQN (reward noise 1) | +43.0 | +189.2 | 28, 34, 43, **779**, 62 | 147.0 |
+
+![overestimation](../../docs/assets/a3/overestimation.png)
 
 ### Item 3 — dueling architecture
 
@@ -134,8 +150,41 @@ demonstrated it on Atari, where there are up to 18. This is the worst case for
 the method, and the result is what the theory predicts, not a contradiction of
 it.
 
-**Both item 2 and item 3 failed to show their effect for the same reason, and
-that revises the plan.** The overestimation Double DQN targets needs value
+**Item 2's first run measured in the wrong window.** At 30k steps every arm sat
+within noise of zero bias, and the natural conclusion would have been "no
+effect". The curve shows why that was wrong: all four arms *start* around -80,
+badly **under**estimating because the network has not finished learning, and only
+cross zero at roughly 16-20k steps. The 30k run stopped almost exactly at the
+crossing point. Overestimation is not a property of the algorithm that is present
+from the start — it is what the max operator does once the estimates are good
+enough for its bias to dominate, and measuring before that shows nothing.
+
+**At 90k steps, Double DQN halves the typical overestimation** on stock CartPole
+(median +96.7 to +44.6) and nearly doubles the median return (90 to 166). That is
+the predicted direction. On the reward-noised variant the medians are
+indistinguishable (+42.0 vs +43.0), so the effect did not reproduce there.
+
+**But the dominant phenomenon is not the algorithm — it is per-seed divergence,
+and it hits both.** One DQN seed ends at +841 and one Double DQN (noise) seed at
++779, against medians in the 20-150 range and a theoretical maximum of ~99. Both
+blow-ups are seed index 3. Double DQN reduces the *typical* bias; it does not
+prevent catastrophic value divergence.
+
+This also matters for how the run was nearly reported. The means alone say
+"Double DQN is three times worse on noisy CartPole" (189 vs 56) — an artifact of
+one seed out of five. That is the second time in this phase that an
+outlier-blind summary statistic pointed the wrong way; the first was the
+censored median in item 3. Both are now fixed at the source, with per-seed values
+recorded.
+
+**And DQN got worse with more training.** Its eval return was 250 at 30k steps
+and 90 at 90k, while its value estimates climbed past what the environment can
+pay. Longer training did not converge it — it diverged it. That is the deadly
+triad doing exactly what section 3 of the writeup predicts, and it is worth
+remembering next time a training curve is extrapolated forward.
+
+**Both item 2 and item 3 failed to show their effect cleanly for the same
+underlying reason, and that revises the plan.** The overestimation Double DQN targets needs value
 noise and a long horizon; the efficiency dueling targets needs a large action
 space. CartPole supplies neither. Item 4 — Atari — is exactly where both
 conditions hold, which is why both original papers used it. It was written off

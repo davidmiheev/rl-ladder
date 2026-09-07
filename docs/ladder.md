@@ -97,9 +97,9 @@ approximation) and which fix addresses which part of it.
 **Practical lab.** [Practical_RL week04_approx_rl](https://github.com/yandexdataschool/Practical_RL/tree/master/week04_approx_rl)
 (experience replay, target networks, double/dueling/bootstrap DQN)
 
-- [ ] Implement DQN on CartPole/LunarLander; disable replay buffer and target network independently, document the instability
-- [ ] Add Double DQN; measure whether Q-value overestimation drops
-- [ ] Add a dueling architecture; compare sample efficiency vs. vanilla DQN
+- [x] Implement DQN on CartPole/LunarLander; disable replay buffer and target network independently, document the instability
+- [x] Add Double DQN; measure whether Q-value overestimation drops
+- [x] Add a dueling architecture; compare sample efficiency vs. vanilla DQN
 - [ ] Optional: run DQN on a small Atari environment (e.g. Pong)
 
 <a id="a4"></a>

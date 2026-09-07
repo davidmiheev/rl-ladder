@@ -172,6 +172,38 @@ A4: the policy-gradient methods there are often described as high-variance
 relative to value methods, and the honest baseline for that comparison is this
 number, not the peak.
 
+**Item 2 required measuring in the right window.** At 30k steps every arm was
+within noise of zero bias, which reads as "no effect" and is not what is
+happening. The bias trajectory starts near $-80$ — the network *under*estimates
+while it is still learning — and crosses zero only at 16–20k steps. Overestimation
+is not present from initialisation; it is what $\max$ does once the estimates are
+accurate enough for its bias to be the dominant error. Measuring before the
+crossing measures the wrong thing.
+
+At 90k steps Double DQN halves the typical overestimation on stock CartPole
+(median $+96.7 \to +44.6$) and nearly doubles median return ($90 \to 166$), the
+predicted direction; on the reward-noised variant the medians are
+indistinguishable ($+42.0$ vs $+43.0$).
+
+**The larger effect, though, is per-seed divergence, and it afflicts both.** One
+DQN seed ends at $+841$ and one Double DQN seed at $+779$, against medians in the
+20–150 range — and against a ceiling of $\approx 99$, the largest discounted
+return the environment can pay at $\gamma = 0.99$. Estimates that exceed the
+maximum possible return are not mis-calibration, they are divergence. Double DQN
+reduces the typical bias; it does not prevent that.
+
+Two methodological notes, both learned by getting them wrong first:
+
+- **Means hid the truth twice in this phase.** Reported as means, item 2 says
+  "Double DQN is three times worse under noise" — an artifact of one seed in
+  five. Item 3's median silently excluded seeds that never reached the
+  threshold, flattering the arm that failed more often. Heavy-tailed outcomes
+  need per-seed values and a median, and both scripts now record them.
+- **More training is not more convergence.** DQN's return fell from 250 at 30k
+  steps to 90 at 90k while its value estimates climbed past the achievable
+  maximum. Extrapolating a learning curve forward assumes a stability this
+  algorithm does not have.
+
 ## 8. Where these items come from
 
 | item | primary source | why it was picked |
