@@ -31,10 +31,35 @@ learn $\theta$ by regression on TD targets:
 
 $$\mathcal{L}(\theta) = \mathbb{E}\left[\left(r + \gamma \max_{a'} Q_{\theta^-}(s',a') - Q_\theta(s,a)\right)^2\right]$$
 
-That single change breaks every guarantee A2 relied on. Value iteration
-converged because the Bellman operator is a contraction *in the space of exact
-value functions*; compose it with a function approximator's projection and the
-composition need not contract at all. The result is the **deadly triad**:
+That single change breaks every guarantee A2 relied on, and it is worth being
+precise about how.
+
+**The precise failure.** Let $\mathcal{F} = \{Q_\theta\}$ be the representable
+set and $\Pi_\mu$ the projection onto it in the norm weighted by the state
+distribution $\mu$ the data was drawn from. Fitted value iteration is not
+$Q \leftarrow TQ$ but
+
+$$Q_{k+1} = \Pi_\mu\, T\, Q_k$$
+
+Both pieces are well behaved *separately*: $T$ is a $\gamma$-contraction in
+$\|\cdot\|_\infty$ (proved in A2), and $\Pi_\mu$ is a non-expansion in
+$\|\cdot\|_{2,\mu}$. But **they contract in different norms**, and a composition
+of a contraction in one norm with a non-expansion in another is not a
+contraction in either. Banach's theorem no longer applies; there need not even
+be a fixed point.
+
+The classical positive result says exactly where the danger lies. For *on-policy*
+evaluation with linear function approximation — that is, when $\mu = d_\pi$, the
+stationary distribution of the policy being evaluated — Tsitsiklis and Van Roy
+(1997) showed $\Pi_{d_\pi} T^\pi$ *is* a contraction in $\|\cdot\|_{2,d_\pi}$ and
+TD converges. The proof turns on $P_\pi$ being a non-expansion in precisely that
+weighted norm, which holds because $d_\pi$ is $P_\pi$-invariant.
+
+That is the crux: the guarantee is tied to sampling from the policy's own
+stationary distribution. Go off-policy and $\mu \neq d_\pi$, the invariance
+fails, and the composition can expand. Baird's counterexample (1995) makes it
+concrete — a seven-state MDP where linear TD with off-policy sampling diverges,
+with weights growing without bound. The result is the **deadly triad**:
 
 | ingredient | where it appears here |
 | --- | --- |
@@ -48,9 +73,11 @@ item 1 removes them one at a time rather than reporting that DQN works.
 
 ## 3. Why the two stabilisers exist
 
-**Replay** attacks correlation and distribution shift. Consecutive transitions
-from one episode are heavily dependent, and gradient descent on a stream of
-correlated samples is not the i.i.d. setting SGD assumes. Worse, without a
+**Replay** attacks correlation and distribution shift. SGD's convergence
+argument assumes each minibatch gradient is an unbiased, finite-variance
+estimate of the full-data gradient drawn independently; consecutive transitions
+from one episode violate independence badly, and the effective sample size of a
+correlated batch of $n$ is far below $n$. Worse, without a
 buffer the training distribution moves with the policy, so the network
 continually overwrites what it learned on states it no longer visits. Sampling
 uniformly from a buffer of the last $N$ transitions restores something closer to
@@ -75,6 +102,37 @@ $$\mathbb{E}\left[\max_a \hat{Q}(s,a)\right] \ge \max_a \mathbb{E}\left[\hat{Q}(
 by Jensen's inequality, since $\max$ is convex. Selecting *and* evaluating with
 the same noisy estimates means any action whose value is overestimated by noise
 is the one the max picks — the error is selected for, not averaged out.
+
+**How large is the bias?** Suppose the $|\mathcal{A}|$ estimates are unbiased,
+independent and Gaussian with standard deviation $\sigma$. Then the expected
+maximum is the expected maximum of $|\mathcal{A}|$ standard normals, scaled:
+
+$$\mathbb{E}\left[\max_a \hat{Q}(s,a)\right] - \max_a q(s,a) \;\approx\; \sigma\sqrt{2\ln|\mathcal{A}|}$$
+
+Two predictions fall out of that expression, and both matter for reading the
+experiment. The bias grows with the **noise** $\sigma$ — so it is small early
+when the network is merely wrong in a systematic way, and grows once errors
+become noise-like — and with the **number of actions**, only as
+$\sqrt{\ln|\mathcal{A}|}$ but still monotonically. CartPole has
+$|\mathcal{A}| = 2$, giving $\sqrt{2\ln 2} \approx 1.18\,\sigma$; Atari's 18
+actions give $\approx 2.4\,\sigma$, twice as much. This is the quantitative
+version of why the original paper used Atari.
+
+**Why splitting the estimators helps.** Let $\hat{Q}^A, \hat{Q}^B$ be two
+independent unbiased estimates. The double estimator uses $A$ to select and $B$
+to evaluate:
+
+$$a^\dagger = \arg\max_a \hat{Q}^A(s,a), \qquad \text{estimate} = \hat{Q}^B(s, a^\dagger)$$
+
+Conditioned on $a^\dagger$, the estimate $\hat{Q}^B(s,a^\dagger)$ is unbiased for
+$q(s, a^\dagger)$ because $B$'s noise played no part in choosing it. Hence
+
+$$\mathbb{E}\left[\hat{Q}^B(s,a^\dagger)\right] = \mathbb{E}\left[q(s,a^\dagger)\right] \le \max_a q(s,a)$$
+
+The selection bias is gone; van Hasselt (2010) shows the estimator now *under*
+estimates instead, which is generally the safer direction. DQN's two networks
+are not independent — the target is a delayed copy of the online net — so the
+practical effect is a reduction in the bias, not its elimination.
 
 Double DQN splits the two roles:
 
@@ -108,9 +166,24 @@ The dueling head splits $Q$ into a state value and an advantage:
 
 $$Q(s,a) = V(s) + \left(A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')\right)$$
 
-Subtracting the mean advantage is not cosmetic — without it the decomposition is
-unidentifiable, since any constant can move between $V$ and $A$ leaving $Q$
-unchanged, and the two streams drift.
+Subtracting the mean advantage is not cosmetic, and the reason is an
+identifiability argument. The map $(V, A) \mapsto Q = V + A$ has a
+one-dimensional gauge freedom at every state: for any $c(s)$,
+
+$$\big(V(s) + c(s),\; A(s,a) - c(s)\big) \;\longmapsto\; \text{the same } Q(s,a)$$
+
+so $V$ and $A$ are not determined by $Q$, and nothing in the TD loss — which
+only ever sees $Q$ — constrains them. The two streams can drift arbitrarily far
+in opposite directions while fitting the data equally well.
+
+Imposing $\sum_a A(s,a) = 0$ fixes the gauge and makes the decomposition unique.
+With the mean subtracted, averaging the recombination over actions gives
+
+$$\frac{1}{|\mathcal{A}|}\sum_a Q(s,a) = V(s) + \frac{1}{|\mathcal{A}|}\sum_a\left(A(s,a) - \overline{A}(s)\right) = V(s)$$
+
+so $V$ is pinned to the mean action-value and $A$ to the deviations from it —
+which is what makes the "value stream" interpretation true rather than
+aspirational.
 
 The argument for it: in most states the choice of action barely matters, and the
 useful signal is "is this state good at all". A shared $V(s)$ stream is updated

@@ -13,6 +13,47 @@ reasoning — why the table has to go, what each stabiliser attacks, and the
 Jensen argument behind the max operator's bias — is in
 [`docs/writeups/a3-dqn.md`](../../docs/writeups/a3-dqn.md).
 
+## Algorithms as implemented
+
+**Objective.** Regression of $Q_\theta$ onto a bootstrapped target, with the
+Huber (smooth $L_1$) loss:
+
+$$\mathcal{L}(\theta) = \mathbb{E}_{(s,a,r,s') \sim \mathcal{D}}\left[
+\ell_\delta\!\left( y - Q_\theta(s,a) \right)\right]$$
+
+**Targets**, differing only in how the next-state value is formed:
+
+$$y_{\text{DQN}} = r + \gamma (1 - d) \max_{a'} Q_{\theta^-}(s', a')$$
+
+$$y_{\text{Double}} = r + \gamma (1 - d)\, Q_{\theta^-}\!\left(s', \arg\max_{a'} Q_\theta(s', a')\right)$$
+
+$d$ is **termination only** — a time-limit truncation is bootstrapped through,
+since the episode did not really end.
+
+**The two switches.** `replay=False` replaces the sampled minibatch with the
+single most recent transition; `target_network=False` sets $\theta^- = \theta$,
+so the target moves with every gradient step.
+
+**Dueling head.**
+
+$$Q(s,a) = V(s) + \left(A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')\right)$$
+
+The mean subtraction fixes the gauge freedom in $Q = V + A$; without it the
+decomposition is not identifiable.
+
+**Exploration.** $\varepsilon$ decays linearly from $1.0$ to $0.05$ over the
+first 20% of steps. **Target sync** every 200 steps. **Optimiser** Adam, $10^{-3}$.
+
+**Overestimation probe.** At each evaluation, the bias is
+
+$$\text{bias} = \max_a Q_\theta(s_0, a) \;-\; \mathbb{E}\left[\sum_t \gamma^t r_t\right]$$
+
+the predicted value at an episode's start state minus what the greedy policy
+actually collects from it. With $\gamma = 0.99$ and CartPole's unit rewards
+capped at 500 steps, the largest attainable value is
+$\sum_{t<500} 0.99^t \approx 99.3$ — any estimate above that is diverging, not
+merely miscalibrated.
+
 ## Code
 
 | file | what it holds |

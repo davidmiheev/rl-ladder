@@ -41,21 +41,65 @@ operator:
 
 $$V^*(s) = \max_a \sum_{s'} p(s' \mid s,a)\left[r(s,a,s') + \gamma V^*(s')\right]$$
 
-**Value iteration** turns that equality into an assignment and iterates it. The
-operator is a $\gamma$-contraction in the max norm,
+**Value iteration** turns that equality into an assignment and iterates it.
+Define the Bellman optimality operator $T$ on $\mathbb{R}^{|\mathcal{S}|}$ by
 
-$$\|TV - TV'\|_\infty \le \gamma \|V - V'\|_\infty,$$
+$$(TV)(s) = \max_a \sum_{s'} p(s' \mid s,a)\left[r(s,a,s') + \gamma V(s')\right]$$
 
-so iterates converge geometrically to $V^*$ from any start.
+*Claim: $T$ is a $\gamma$-contraction in the max norm.* For any $V, V'$ and any
+$s$,
+
+$$|(TV)(s) - (TV')(s)| \le \max_a \left|\gamma \sum_{s'} p(s'\mid s,a)\left[V(s') - V'(s')\right]\right| \le \gamma \|V - V'\|_\infty$$
+
+The first step uses $|\max_a f(a) - \max_a g(a)| \le \max_a |f(a) - g(a)|$ — the
+maxima may be attained at different actions, but the difference is still bounded
+by the largest pointwise gap. The second uses that $p(\cdot \mid s,a)$ is a
+probability distribution, so the weighted average cannot exceed the maximum.
+Taking the max over $s$ gives $\|TV - TV'\|_\infty \le \gamma\|V - V'\|_\infty$.
+
+Banach's fixed-point theorem then gives everything at once: $T$ has a **unique**
+fixed point $V^*$, and iterates converge to it geometrically from any start,
+
+$$\|V_k - V^*\|_\infty \le \gamma^k \|V_0 - V^*\|_\infty$$
+
+Note what the argument needs: exact backups over the whole state space. Both
+assumptions fail in A3, which is the entire content of the deadly triad.
 
 **Policy iteration** alternates two exact steps: evaluate the current policy by
 solving the linear system
 
 $$(I - \gamma P_\pi) V_\pi = R_\pi,$$
 
-then set $\pi$ greedy with respect to $V_\pi$. Each improvement step is
-monotone, and since there are finitely many deterministic policies it must
-terminate.
+then set $\pi$ greedy with respect to $V_\pi$.
+
+*Why the solve is well posed.* $P_\pi$ is row-stochastic, so
+$\|P_\pi\|_\infty = 1$ and $\|\gamma P_\pi\|_\infty = \gamma < 1$. The Neumann
+series $\sum_{k \ge 0} (\gamma P_\pi)^k$ therefore converges and equals
+$(I - \gamma P_\pi)^{-1}$ — which is just the statement that the value of a
+policy is its discounted sum of future rewards. At $\gamma = 1$ the argument
+collapses, and so does the code: see the trap below.
+
+*Why improvement is monotone (the policy improvement theorem).* If $\pi'$
+satisfies $Q^\pi(s, \pi'(s)) \ge V^\pi(s)$ for all $s$, then
+$V^{\pi'} \ge V^\pi$ pointwise. Substituting the inequality into itself:
+
+$$V^\pi(s) \le Q^\pi(s, \pi'(s)) = \mathbb{E}_{\pi'}\!\left[r_t + \gamma V^\pi(s_{t+1})\right]
+\le \mathbb{E}_{\pi'}\!\left[r_t + \gamma Q^\pi(s_{t+1}, \pi'(s_{t+1}))\right]$$
+
+$$\le \mathbb{E}_{\pi'}\!\left[r_t + \gamma r_{t+1} + \gamma^2 V^\pi(s_{t+2})\right] \le \cdots \le V^{\pi'}(s)$$
+
+Each step replaces a $V^\pi$ by the $Q^\pi$ that dominates it and unrolls one
+more real reward under $\pi'$; the remainder $\gamma^n V^\pi(s_{t+n}) \to 0$
+since $\gamma < 1$ and values are bounded. The greedy policy satisfies the
+premise by construction, so every improvement step is monotone.
+
+*Why it terminates, and quickly.* There are at most $|\mathcal{A}|^{|\mathcal{S}|}$
+deterministic policies, and each iteration either strictly improves the value at
+some state or leaves the policy unchanged — in which case the Bellman optimality
+equation holds and the policy is optimal. Since values never decrease, no policy
+can repeat, so termination is finite. In practice it is far faster than that
+bound: each PI step is at least as good as a value-iteration sweep, which is
+why the run below converges in 6 improvement steps against VI's 45.
 
 ### Confirming the optimum, twice
 
@@ -86,9 +130,12 @@ $O(|S|^3)$ linear solve against a sweep's $O(|S|^2|A|)$, which is the classic
 tradeoff, not a free win.
 
 **One trap worth recording:** the exact solve requires $\gamma < 1$, or a policy
-under which every state reaches a terminal. At $\gamma = 1$ a policy that walks
-into a wall forever makes $I - P_\pi$ singular, and `np.linalg.solve` raises. VI
-has no such problem, which is why check 1 uses VI and check 2 uses a discount.
+under which every state reaches a terminal. At $\gamma = 1$, $I - P_\pi$ is
+singular whenever $P_\pi$ has a recurrent class with no terminal state — the
+constant vector on that class is in the kernel, since a policy that walks into a
+wall forever satisfies $P_\pi \mathbf{1} = \mathbf{1}$ there. `np.linalg.solve`
+raises. Value iteration has no such problem because it never inverts anything,
+which is why check 1 uses VI at $\gamma = 1$ and check 2 uses a discount.
 
 ## 4. Q-learning vs SARSA (item 2)
 
@@ -108,6 +155,40 @@ Q-learning's $\max$ evaluates the *greedy* policy regardless of what was
 actually done — **off-policy**. SARSA bootstraps from the action its
 $\varepsilon$-greedy policy really took — **on-policy**, so its values include
 the cost of the exploration it is going to keep doing.
+
+**What each converges to, and under what conditions.** Both are stochastic
+approximation applied to a Bellman operator. Writing the update as
+
+$$Q_{n+1}(s,a) = (1-\alpha_n) Q_n(s,a) + \alpha_n \left[(T Q_n)(s,a) + \eta_n\right]$$
+
+where $\eta_n$ is zero-mean sampling noise, the classical result (Watkins &
+Dayan 1992; Jaakkola, Jordan & Singh 1994) is that $Q_n \to Q^*$ with
+probability 1 provided
+
+1. every state-action pair is visited infinitely often,
+2. the step sizes satisfy Robbins–Monro, $\sum_n \alpha_n = \infty$ and
+   $\sum_n \alpha_n^2 < \infty$, per state-action pair,
+3. rewards are bounded.
+
+*Proof sketch.* $T$ is a $\gamma$-contraction (section 3), so the error
+$\Delta_n = Q_n - Q^*$ obeys $\|\mathbb{E}[\Delta_{n+1}]\| \le \gamma\|\Delta_n\|$
+in expectation; the two step-size conditions make the noise term vanish in the
+limit while still allowing the iterate to travel any finite distance. It is the
+A1 argument again, now with a contraction supplying the drift.
+
+Two consequences worth holding onto. **Q-learning converges to $Q^*$ regardless
+of the behaviour policy**, as long as it explores — that is what "off-policy"
+buys, and it is why the cliff experiment's Q-learning finds the optimal path
+while behaving badly. **SARSA converges to the optimal policy only if the
+behaviour becomes greedy in the limit** (GLIE: infinite exploration, greedy in
+the limit); with $\varepsilon$ fixed at $0.1$ forever, as in the experiment, it
+converges to the best $\varepsilon$-greedy policy instead — which is exactly the
+safe path it learns, and not a failure.
+
+Note also that condition 2 is violated by the constant $\alpha$ every practical
+implementation uses, including this one. That is the same deliberate trade as
+A1 item 3: constant $\alpha$ gives up convergence-to-a-point in exchange for
+tracking a target that is still moving.
 
 ### The cliff
 
@@ -166,9 +247,15 @@ takes 5 steps. The two are worth
 
 $$Q(s_0, \text{near}) = 1, \qquad Q(s_0, \text{far}) = \gamma^{4} \cdot 10$$
 
-so the optimal action flips exactly at
+Setting them equal, $\gamma^4 \cdot 10 = 1$, so the optimal action flips exactly
+at
 
 $$\gamma^\star = \left(\tfrac{1}{10}\right)^{1/4} \approx 0.5623$$
+
+More generally, with a near reward $r_n$ available immediately and a far reward
+$r_f$ that takes $d$ steps, the threshold is
+$\gamma^\star = (r_n/r_f)^{1/(d-1)}$ — the discount is exactly the exchange rate
+between reward now and reward later, and choosing it *is* choosing the problem.
 
 This is swept with **DP, not TD**, because the claim is about the optimum itself,
 not about anyone's ability to learn it.
@@ -240,6 +327,16 @@ alone. The mechanism is credit propagation: one-step Q-learning moves value
 backward one state per real transition, so information about the goal crawls
 along the path at one cell per episode. Planning sweeps do that crawling in
 memory, between steps, at no environmental cost.
+
+*Why the speedup is so large.* One-step Q-learning applies the sampled Bellman
+backup once per real transition, so information about the goal propagates
+backwards at most one state per transition; along a path of length $L$ it takes
+$\Omega(L)$ episodes for the goal's value to reach the start. Dyna applies $n$
+additional backups per real step, drawn from previously visited pairs, so the
+same propagation happens in memory at $n{+}1$ times the rate for the same
+environmental cost. Nothing about the fixed point changes — every planning
+update is still an application of the same contraction — only the number of
+applications per unit of experience.
 
 The catch, stated because it matters in A3: the model is assumed deterministic
 and is trusted completely. In a stochastic or changing environment those replays

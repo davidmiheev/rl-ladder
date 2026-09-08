@@ -53,6 +53,13 @@ The agent sees only realized rewards, never `q*`. It must infer which arm is bes
 from noisy samples whose noise (σ=1) is the same order as the spread between arms
 (σ=1) — so a single pull tells you almost nothing, and the difficulty is real.
 
+**Formally.** A $k$-armed bandit is the tuple $(\mathcal{A}, \{P_a\}_{a \in \mathcal{A}})$
+with $|\mathcal{A}| = k$ and $q^*(a) = \mathbb{E}_{r \sim P_a}[r]$. Write
+$a^* \in \arg\max_a q^*(a)$ and the *gap* of an arm as
+$\Delta_a = q^*(a^*) - q^*(a) \ge 0$. A policy is a rule mapping the history
+$h_{t-1} = (a_1, r_1, \dots, a_{t-1}, r_{t-1})$ to a distribution over
+$\mathcal{A}$.
+
 **Metric.** We score by *expected* cumulative regret:
 
 $$\text{regret}(T) = \sum_{t=1}^{T} \left[\max_a q^*(a) - q^*(a_t)\right]$$
@@ -111,6 +118,69 @@ An arm is then chosen exactly as often as it is *probably* optimal — probabili
 matching. Exploration falls out of posterior width rather than being bolted on,
 so it shrinks by itself as the posteriors sharpen.
 
+### What is actually guaranteed
+
+Writing $N_T(a)$ for the number of pulls of arm $a$ in $T$ steps, regret
+decomposes exactly as
+
+$$R(T) = \sum_{a} \Delta_a\, \mathbb{E}[N_T(a)]$$
+
+so every bound below is really a statement about how often a suboptimal arm is
+pulled. Three results frame what the experiments should show.
+
+**1. Fixed $\varepsilon$ gives linear regret.** An $\varepsilon$-greedy policy
+explores uniformly with probability $\varepsilon$ at every step, so for any
+suboptimal $a$, $\mathbb{E}[N_T(a)] \ge \varepsilon T / k$ regardless of how
+much it has already learned. Hence
+
+$$R(T) \ge \frac{\varepsilon}{k}\sum_{a \neq a^*} \Delta_a \cdot T = \Omega(T)$$
+
+The constant is small, but the *growth rate* is linear — the exploration tax is
+paid at a fixed rate forever. Any algorithm with sublinear regret must let its
+exploration decay.
+
+**2. UCB1 achieves logarithmic regret.** For rewards bounded in $[0,1]$, Auer et
+al. (2002) prove
+
+$$R(T) \le \sum_{a: \Delta_a > 0} \frac{8 \ln T}{\Delta_a} + \left(1 + \frac{\pi^2}{3}\right)\sum_a \Delta_a$$
+
+*Proof sketch.* A suboptimal $a$ is pulled at step $t$ only if its index exceeds
+the optimal arm's, which requires at least one of three events: the optimal
+arm's mean is badly underestimated, $a$'s mean is badly overestimated, or $a$
+has been pulled few enough times that its confidence term alone covers the gap,
+i.e. $N_t(a) < 8\ln T / \Delta_a^2$. Hoeffding's inequality bounds the first two
+events by $t^{-4}$ each, and summing over $t$ gives the $\pi^2/3$ constant; the
+third contributes the $8\ln T/\Delta_a$ term directly. The $\ln t$ inside the
+bonus is exactly what makes the Hoeffding union bound hold uniformly over time.
+
+Two honest caveats for this repo's setup: the testbed uses Gaussian rewards
+rather than $[0,1]$-bounded ones, so the constant does not transfer directly;
+and the implementation uses a tunable $c$ where standard UCB1 fixes
+$c = \sqrt{2}$. The measured optimum of $c = 1$ is therefore *below* the
+theoretical setting — consistent with the bound being worst-case over gap
+configurations while the sweep optimises for one particular horizon.
+
+**3. Nobody can do better than logarithmic.** The Lai–Robbins lower bound says
+that for any policy that is consistent (sub-polynomial regret on every instance),
+
+$$\liminf_{T \to \infty} \frac{R(T)}{\ln T} \ge \sum_{a: \Delta_a>0} \frac{\Delta_a}{\mathrm{KL}(P_a \,\|\, P_{a^*})}$$
+
+So UCB1 is order-optimal, and the gap between it and Thompson sampling in the
+experiment is a matter of constants, not rates. Thompson sampling attains the
+same $O(\ln T)$ rate and, for several standard families, matches the Lai–Robbins
+constant asymptotically; its Bayesian regret is $O(\sqrt{kT \ln T})$.
+
+**Why Thompson sampling explores correctly.** By construction it draws
+$\theta_a$ from the posterior and acts greedily, so
+
+$$\Pr(\text{select } a \mid h_t) = \Pr\left(a \in \arg\max_{a'} \theta_{a'} \;\middle|\; h_t\right)
+= \Pr(a = a^* \mid h_t)$$
+
+an arm is played exactly as often as the posterior believes it is optimal. That
+is *probability matching*, and it is why exploration decays automatically:
+posterior mass concentrates, so the probability of drawing a suboptimal arm
+falls without any schedule being specified.
+
 ### Why item 3 works: the update rule *is* the memory
 
 Unrolling the incremental update shows what each choice of `α` remembers:
@@ -126,6 +196,26 @@ On a stationary bandit that even weighting is optimal — it is the minimum-vari
 estimator of a fixed mean. On a drifting one it is a liability, because the old
 rewards describe a world that no longer exists. Item 3 makes an agent pay for
 that.
+
+**The rigorous statement is a stochastic-approximation one.** Robbins–Monro
+convergence of $Q_n \to q^*$ requires
+
+$$\sum_{n=1}^{\infty} \alpha_n = \infty \qquad\text{and}\qquad \sum_{n=1}^{\infty} \alpha_n^2 < \infty$$
+
+The first condition says the steps are large enough in aggregate to reach any
+starting point; the second says they shrink fast enough for the noise to average
+out. Sample averaging, $\alpha_n = 1/n$, satisfies both — $\sum 1/n$ diverges
+and $\sum 1/n^2 = \pi^2/6$ — so it converges almost surely to a fixed $q^*$.
+
+A constant $\alpha$ satisfies the first and **fails the second**: $\sum \alpha^2 = \infty$.
+So it provably does *not* converge to a point. The estimate instead keeps
+fluctuating, with asymptotic variance $\tfrac{\alpha}{2-\alpha}\sigma^2$ for
+observation noise $\sigma^2$.
+
+That failure is the feature. Convergence to a point is precisely what you do not
+want when the point is moving: the same property that disqualifies constant
+$\alpha$ under the Robbins–Monro theorem is what lets it track. The two agents in
+item 3 are a demonstration that "converges" and "is useful" can be opposites.
 
 ## 5. What was done
 

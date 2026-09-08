@@ -13,6 +13,47 @@ reasoning — the Bellman operator, why PI needs a discount, and why SARSA needs
 smaller learning rate than Q-learning even without stochasticity — is in
 [`docs/writeups/a2-tabular.md`](../../docs/writeups/a2-tabular.md).
 
+## Algorithms as implemented
+
+**Bellman optimality operator**, the object both DP solvers iterate:
+
+$$(TV)(s) = \max_a \sum_{s'} p(s' \mid s,a)\left[r(s,a,s') + \gamma V(s')\right]$$
+
+**Value iteration.** $V \leftarrow TV$ until $\|V_{k+1} - V_k\|_\infty < 10^{-12}$,
+then $\pi(s) = \arg\max_a Q(s,a)$. Converges geometrically because $T$ is a
+$\gamma$-contraction in $\|\cdot\|_\infty$.
+
+**Policy iteration.** Alternate exact evaluation and greedy improvement:
+
+$$V_\pi = (I - \gamma P_\pi)^{-1} R_\pi, \qquad
+\pi'(s) = \arg\max_a \sum_{s'} p(s'\mid s,a)\left[r + \gamma V_\pi(s')\right]$$
+
+until $\pi' = \pi$. The inverse exists for $\gamma < 1$ by the Neumann series.
+
+**Correctness checks.** Bellman residual
+$\max_s \left|V(s) - \max_a Q(s,a)\right|$, and on the deterministic grid with
+$r = -1$, $\gamma = 1$: $V^*(s) = -d(s, \text{goal})$ from BFS.
+
+**TD control.** Both agents update
+
+$$Q(s,a) \leftarrow Q(s,a) + \alpha\left[y - Q(s,a)\right]$$
+
+differing only in the target $y$:
+
+$$y_{\text{Q-learning}} = r + \gamma \max_{a'} Q(s',a'), \qquad
+y_{\text{SARSA}} = r + \gamma\, Q(s',a')$$
+
+with $a' \sim \varepsilon\text{-greedy}(Q, s')$ the action actually taken next,
+and $y = r$ on termination.
+
+**Dyna-Q.** Q-learning, plus a model $M(s,a) \mapsto (r, s')$ updated on every
+real transition, plus $n$ replayed updates per real step from uniformly sampled
+visited pairs $(s,a)$:
+
+$$Q(s,a) \leftarrow Q(s,a) + \alpha\left[r + \gamma \max_{a'} Q(s',a') - Q(s,a)\right], \quad (r,s') = M(s,a)$$
+
+$n = 0$ is exactly Q-learning, which is what makes the comparison clean.
+
 ## Code
 
 | file | what it holds |

@@ -13,6 +13,41 @@ reasoning — what the task is, why it is the first rung, how the three algorith
 differ, and what the results mean — is in
 [`docs/writeups/a1-bandits.md`](../../docs/writeups/a1-bandits.md).
 
+## Algorithms as implemented
+
+Estimates are $Q_n(a)$ after $n$ pulls of arm $a$; $N(a)$ counts them.
+
+**Incremental update** (all agents share it):
+
+$$Q_{n+1}(a) = Q_n(a) + \alpha_n\left[r_n - Q_n(a)\right], \qquad
+\alpha_n = \begin{cases} 1/N(a) & \text{sample average} \\ \alpha & \text{constant step} \end{cases}$$
+
+**$\varepsilon$-greedy.** With probability $\varepsilon$ draw $a$ uniformly, else
+$a \in \arg\max_a Q(a)$ with ties broken uniformly at random.
+
+**UCB1.** Play each arm once, then
+
+$$a_t = \arg\max_a \left[ Q(a) + c\sqrt{\frac{\ln t}{N(a)}} \right]$$
+
+Standard UCB1 fixes $c = \sqrt{2}$; here $c$ is swept.
+
+**Thompson sampling** (Gaussian prior $\mathcal{N}(0,\sigma_0^2)$, known noise
+$\sigma^2$). After $n$ pulls summing to $s$, the posterior is Gaussian with
+
+$$\tau = \frac{1}{\sigma_0^2} + \frac{n}{\sigma^2}, \qquad
+\mu = \frac{s}{\sigma^2 \tau}, \qquad \mathrm{Var} = \frac{1}{\tau}$$
+
+Draw $\theta_a \sim \mathcal{N}(\mu_a, 1/\tau_a)$ for every arm and play
+$\arg\max_a \theta_a$.
+
+**Environments.** Stationary: $q^*(a) \sim \mathcal{N}(0,1)$ fixed per run,
+$r \sim \mathcal{N}(q^*(a), 1)$. Non-stationary: $q^*(a) = 0$ initially, then
+$q^*(a) \leftarrow q^*(a) + \mathcal{N}(0, 0.01^2)$ after every pull.
+
+**Scored by** expected regret $R(T) = \sum_{t\le T}\left[\max_a q^*(a) - q^*(a_t)\right]$,
+computed from the hidden means so the curve measures decisions rather than
+reward noise.
+
 ## Code
 
 | file | what it holds |

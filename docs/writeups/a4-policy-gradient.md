@@ -31,6 +31,38 @@ Read it as an instruction: push up the log-probability of an action in
 proportion to the return that followed it. Nothing about the environment's
 dynamics appears, which is why it works on a black box.
 
+**Where that comes from.** A trajectory $\tau = (s_0, a_0, s_1, \dots)$ has
+probability
+
+$$p_\theta(\tau) = \rho(s_0) \prod_{t} \pi_\theta(a_t \mid s_t)\, P(s_{t+1} \mid s_t, a_t)$$
+
+Differentiating $J(\theta) = \mathbb{E}_{\tau \sim p_\theta}[R(\tau)]$ directly is
+awkward because the *distribution* depends on $\theta$. The log-derivative
+identity $\nabla p = p \nabla \log p$ converts it into an expectation that can
+be sampled:
+
+$$\nabla_\theta J = \int \nabla_\theta p_\theta(\tau) R(\tau)\, d\tau
+= \int p_\theta(\tau)\, \nabla_\theta \log p_\theta(\tau)\, R(\tau)\, d\tau
+= \mathbb{E}\left[\nabla_\theta \log p_\theta(\tau)\, R(\tau)\right]$$
+
+Now take the log of the trajectory probability:
+
+$$\log p_\theta(\tau) = \log \rho(s_0) + \sum_t \log \pi_\theta(a_t \mid s_t) + \sum_t \log P(s_{t+1} \mid s_t, a_t)$$
+
+**The initial-state distribution and the transition kernel do not depend on
+$\theta$, so they differentiate to zero.** This is the whole trick — the
+environment drops out exactly, no model required:
+
+$$\nabla_\theta \log p_\theta(\tau) = \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t)$$
+
+One more refinement gives the form actually implemented. An action cannot affect
+rewards that arrived before it, and for $t' < t$,
+$\mathbb{E}[\nabla_\theta \log \pi_\theta(a_t \mid s_t)\, r_{t'}] = 0$ by the same
+argument that kills the baseline in section 3. Dropping those terms replaces the
+full-trajectory return $R(\tau)$ with the reward-to-go $G_t$ — still unbiased,
+strictly lower variance. That is the estimator in the box above, and the first
+variance reduction of the phase, applied before the experiment even begins.
+
 Three things change relative to A3, and it is worth being precise about which
 are gains:
 
@@ -64,6 +96,19 @@ natural choice is $b(s) = V(s)$, which turns the return into an advantage
 $A(s,a) = Q(s,a) - V(s)$: how much better this action was than the state's
 average, rather than how good the state happened to be.
 
+**Is $V$ the best choice?** Not quite. Minimising the variance of the scalar
+estimator $g = \nabla_\theta \log \pi_\theta \cdot (G - b)$ over $b$ is a
+one-dimensional least-squares problem, and setting $\partial \mathrm{Var}(g)/\partial b = 0$
+gives
+
+$$b^\star = \frac{\mathbb{E}\left[\left(\nabla_\theta \log \pi_\theta\right)^2 G\right]}{\mathbb{E}\left[\left(\nabla_\theta \log \pi_\theta\right)^2\right]}$$
+
+a gradient-magnitude-weighted average of the return rather than a plain one. In
+practice $V(s)$ is used anyway: it is close to optimal, it is a quantity worth
+having for its own sake, and $b^\star$ is per-parameter, so using it exactly
+would mean a different baseline for every component of $\theta$. Worth knowing
+that the standard choice is a convenient approximation, not the optimum.
+
 **GAE** then interpolates between two ways of estimating that advantage. With
 $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$,
 
@@ -74,6 +119,28 @@ biased by whatever error $V$ carries. At $\lambda = 1$ the sum telescopes into
 $G_t - V(s_t)$: the Monte Carlo advantage, unbiased but carrying the full
 variance of the sampled return. The claim to test is that neither endpoint is
 best.
+
+*The telescoping, since it is the reason $\lambda = 1$ is unbiased.* Substituting
+$\delta_{t+l} = r_{t+l} + \gamma V(s_{t+l+1}) - V(s_{t+l})$ at $\lambda = 1$:
+
+$$\sum_{l \ge 0} \gamma^l \delta_{t+l}
+= \sum_{l \ge 0} \gamma^l r_{t+l} + \sum_{l \ge 0}\left(\gamma^{l+1} V(s_{t+l+1}) - \gamma^l V(s_{t+l})\right)
+= G_t - V(s_t)$$
+
+The second sum collapses because consecutive terms cancel, leaving only
+$-V(s_t)$. Every appearance of $V$ except the baseline term vanishes, which is
+why no amount of critic error can bias it. At $\lambda < 1$ the cancellation is
+incomplete and the surviving $V$ terms are exactly the bias — so $\lambda$
+interpolates between "trust the critic" and "trust the samples", and its optimum
+sits wherever the critic's error and the return's variance balance.
+
+An equivalent reading: GAE is an exponentially-weighted average of the $k$-step
+advantage estimators $\hat{A}^{(k)}_t = \sum_{l<k}\gamma^l r_{t+l} + \gamma^k V(s_{t+k}) - V(s_t)$,
+
+$$\hat{A}^{\text{GAE}(\lambda)}_t = (1-\lambda)\sum_{k \ge 1} \lambda^{k-1} \hat{A}^{(k)}_t$$
+
+which is the same weighting TD($\lambda$) applies to $n$-step returns — the
+bias/variance knob is the same object in both.
 
 ## 4. Why A2C needs parallel environments (item 3)
 
