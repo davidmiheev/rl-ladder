@@ -185,7 +185,46 @@ Decisions worth recording:
 
 ## 6. Results
 
-Filled in from the runs; see the phase README.
+Tables in the [phase README](../../experiments/a4_policy_gradient/README.md).
+The parts that change how the phase should be read:
+
+**Policy gradients beat DQN here, including on variance** — REINFORCE 333.4,
+with a baseline 450.9, against A3's DQN at 250.1, and with smaller seed spread
+(±119, ±98 against ±151). That inverts the usual framing, so it needs care.
+"High variance" describes the *gradient estimator*, and that variance is real
+and visible: the advantage spread falls from 22.6 to 15.9 when the baseline is
+added. DQN's spread is a different phenomenon — divergence, which A3 measured
+directly. Both systems are lightly tuned at an equal budget, so this compares
+these implementations at 30k steps, not the algorithm families.
+
+**The baseline is free in theory and substantial in practice.** Section 3 proves
+it cannot change the gradient in expectation; the run shows it cutting advantage
+spread 30% while raising return from 333 to 451 and retention from 0.68 to 0.90.
+
+**The $\lambda$ sweep exhibits both sides of the tradeoff.** Advantage spread is
+monotone in $\lambda$ — $2.20, 2.95, 5.53, 7.76, 12.54, 15.86$ — exactly as the
+estimator predicts, since larger $\lambda$ admits more of the sampled return.
+The bias side appears at the bottom: **$\lambda = 0$ scores $20.8$**, near
+random, *despite having the lowest variance of any arm*. The one-step residual
+is only a good advantage estimate when $V$ is accurate, and the critic's
+explained variance there is $0.05$ — so the cleanest signal in the sweep is
+almost entirely an estimate of the critic's own error. Minimum variance is
+worthless when the estimand is wrong. The optimum is interior, at
+$\lambda = 0.99$ ($478.8 \pm 26.0$, also the tightest across seeds).
+
+**Item 3's headline was mostly a confound, and a control caught it.** A2C
+appeared to beat episodic REINFORCE by a thousand points on LunarLander; but
+shrinking REINFORCE's batch from 4000 to 1000 — same algorithm, same environment
+steps, 4× the updates — recovers about 900 of them. A2C still wins on what
+remains (27.6 against −75.6, with a quarter of the thrash), and it is the only
+arm reaching positive return, but the effect is an order of magnitude smaller
+than the raw table implied.
+
+The general lesson is about the axis, not the algorithms. Holding *environment
+steps* fixed is the right comparison when environment interaction is the scarce
+resource, and it is the standard axis in RL — but it silently lets methods
+differ by 100× in gradient steps taken from that data. A comparison that does
+not report both is measuring something other than what it claims.
 
 ## 7. What this sets up
 

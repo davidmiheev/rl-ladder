@@ -285,7 +285,7 @@ algorithm in Part B.
 **Practical lab.** [Practical_RL week06_policy_based](https://github.com/yandexdataschool/Practical_RL/tree/master/week06_policy_based)
 (REINFORCE, advantage actor-critic)
 
-- [ ] Implement REINFORCE on CartPole; compare variance/efficiency against your A3 DQN run
+- [x] Implement REINFORCE on CartPole; compare variance/efficiency against your A3 DQN run
 
   A different strategy entirely: instead of learning values and acting
   greedily, parameterise the policy `π_θ(a|s)` and adjust it directly. The
@@ -297,7 +297,7 @@ algorithm in Part B.
   on sample efficiency, spread across seeds, and stability, and use A3's honest
   final number rather than its peak.
 
-- [ ] Add a learned baseline + GAE; sweep λ and observe the bias/variance tradeoff
+- [x] Add a learned baseline + GAE; sweep λ and observe the bias/variance tradeoff
 
   Subtracting any state-dependent baseline `b(s)` from the return leaves the
   gradient unbiased — it has zero expectation against `∇ log π` — while
@@ -309,7 +309,7 @@ algorithm in Part B.
   and you should see both failure modes at the two ends rather than a monotone
   curve.
 
-- [ ] Implement A2C on LunarLander; compare stability against REINFORCE-with-baseline
+- [x] Implement A2C on LunarLander; compare stability against REINFORCE-with-baseline
 
   Actor and critic trained together, with several environments stepped in
   parallel so that a batch is decorrelated without needing a replay buffer —

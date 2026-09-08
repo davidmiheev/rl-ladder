@@ -94,7 +94,27 @@ normalisation; explained variance is the critic's fit, $1 - \mathrm{Var}(G - V)/
 
 ### Item 3 — A2C vs REINFORCE on LunarLander
 
-_Re-running with an update-count control arm; results to follow._
+`a2c__20260908-180047`, 5 seeds, 300k environment steps. *Swing* is the mean
+absolute change in eval return between consecutive evaluations — a measure of
+how much the policy thrashes, independent of its level.
+
+The third arm is a control. At equal environment steps the two algorithms do not
+take equal numbers of gradient steps: A2C updates every $N \times n = 40$ steps,
+while episodic REINFORCE updates once per 4000-step batch. That is a 100×
+difference, and without holding it down the comparison measures batch size as
+much as algorithm.
+
+| arm | final | peak | swing | gradient updates |
+| --- | --- | --- | --- | --- |
+| A2C (8 envs) | **27.6 ± 65.4** | **165.7** | **115.3** | 7500 |
+| REINFORCE + baseline + GAE | −972.2 ± 359.5 | −236.4 | 571.1 | 75 |
+| REINFORCE, small batch (1000) | −75.6 ± 41.0 | −21.2 | 428.2 | 300 |
+
+![a2c](../../docs/assets/a4/a2c-lunarlander.png)
+
+Per-seed finals — A2C `[111.5, 46.0, 60.8, -83.4, 3.0]`, REINFORCE
+`[-809.5, -1568.6, -475.8, -914.9, -1091.9]`, small-batch REINFORCE
+`[-106.1, -41.9, -35.5, -53.8, -140.7]`.
 
 ## Findings
 
@@ -130,6 +150,32 @@ error. Minimum variance is worthless when the thing being estimated is wrong.
 Performance peaks at **λ=0.99** (478.8), with the *lowest* seed spread (±26.0)
 of the entire sweep, and λ=1 is slightly worse (450.9 ± 98.2). So the optimum is
 interior on both axes, which is the claim the item is there to test.
+
+**Item 3's headline gap was mostly an artifact, and the control caught it.**
+Taken at face value the first two rows say A2C beats REINFORCE by a thousand
+points on LunarLander. But simply shrinking REINFORCE's batch from 4000 to 1000
+— same algorithm, same environment steps, four times as many updates — recovers
+about 900 of those points (−972 → −76). So the overwhelming majority of the
+"algorithmic" gap was the update count.
+
+What survives the control is real but much smaller: A2C still finishes ahead
+(27.6 against −75.6) with a quarter of the thrash (swing 115 against 428), and
+it is the only arm whose policies ever reach positive return. Some of that
+remaining margin is still update count — A2C takes 25× more updates than even
+the small-batch arm — and separating the last of it would need an arm matched on
+updates rather than on environment steps.
+
+The honest summary: **A2C's advantage at a fixed environment-step budget comes
+substantially from extracting far more gradient steps from the same data**, which
+is a consequence of bootstrapping after $n$ steps rather than waiting for
+episodes to end. That is the mechanism, not a confound to be embarrassed about —
+but it is a different claim from "actor-critic is a better estimator", and the
+raw comparison would have supported the wrong one.
+
+**Nothing here solves LunarLander.** The task is considered solved at 200 and
+A2C's mean is 27.6 with a peak of 165.7, so this is a comparison between arms
+partway up the curve, not between converged agents. At 300k steps that is
+expected; A2C typically needs closer to a million.
 
 **A consistency check worth noting:** GAE λ=1 and "REINFORCE + baseline" from
 item 1 are the same estimator — the sum telescopes to $G_t - V(s_t)$ — and they
