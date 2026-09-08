@@ -265,6 +265,36 @@ return the environment can pay at $\gamma = 0.99$. Estimates that exceed the
 maximum possible return are not mis-calibration, they are divergence. Double DQN
 reduces the typical bias; it does not prevent that.
 
+**Item 4 (Atari) settled item 2's question and could not settle item 3's.** Run
+on a Colab T4, Pong, 1M steps per arm, one seed each. The bias probe separates
+by *sign* across the whole late phase: DQN's estimates exceed its realised
+returns at 10 of 10 checkpoints past 550k (mean $+0.69$), Double DQN's fall
+below at 8 of 10 (mean $-0.23$). This is the prediction from section 4 —
+the bias needs estimate noise and a horizon before it dominates, and Pong
+supplies both where CartPole did not. It also matches van Hasselt's result
+precisely: the double estimator does not eliminate the bias, it **converts
+overestimation into underestimation**.
+
+The performance comparison, though, is unusable, and that is the more
+instructive half. Double DQN never learned in this run — 550k consecutive steps
+at $-21$ — while an earlier run of the *same code at the same default seed*,
+lost to a runtime reclaim at 80%, had Double at $-14.0$ against DQN's $-16.0$,
+i.e. ahead. Two nominally identical configurations, opposite orderings, from
+GPU nondeterminism compounding through a chaotic optimisation. One seed per arm
+cannot separate a real failure mode from an unlucky trajectory, and this repo's
+own protocol sets the floor at three; compute (90 GPU-minutes per arm on a
+runtime reclaimed at ~85) forced the violation, so the result is reported as an
+illustration rather than a measurement.
+
+**And the probe has a flaw that only a large performance gap reveals.** It
+measures $\max_a Q(s_0,a) - \mathbb{E}[\sum_t \gamma^t r_t]$, which is a joint
+function of value calibration *and* policy quality. With the two arms ending at
+$-6.6$ and $-20.8$, the sign separation cannot be fully disentangled from the
+fact that one agent learned and the other did not. The correct design compares
+arms at *matched return* rather than matched step — impossible here, since
+Double never reached DQN's level. On CartPole the arms tracked closely enough
+that this never mattered, which is why it went unnoticed through two phases.
+
 Two methodological notes, both learned by getting them wrong first:
 
 - **Means hid the truth twice in this phase.** Reported as means, item 2 says

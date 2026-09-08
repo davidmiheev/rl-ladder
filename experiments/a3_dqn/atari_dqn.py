@@ -40,7 +40,7 @@ class Config:
     eps_end: float = 0.01
     eps_decay_steps: int = 250_000
     eval_every: int = 50_000
-    eval_episodes: int = 3
+    eval_episodes: int = 5
     double: bool = False
     dueling: bool = False
     seed: int = 0
@@ -174,14 +174,29 @@ def main() -> None:
     optimizer = torch.optim.Adam(online.parameters(), lr=config.lr)
     buffer = ReplayBuffer(config.buffer_size)
 
+    # Resume support. The free Colab runtime this is built for gets reclaimed
+    # without warning; the first attempt lost 800k steps that way. The replay
+    # buffer is deliberately NOT checkpointed (2.8 GB), so a resume refills it
+    # over `learning_starts` steps — cheap next to re-running from zero.
+    checkpoint_path = out / "ckpt.pt"
+    start_step = 0
+    if checkpoint_path.exists():
+        ckpt = torch.load(checkpoint_path, map_location=device)
+        online.load_state_dict(ckpt["online"])
+        target.load_state_dict(ckpt["target"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        start_step = ckpt["step"]
+        print(f"resumed from {checkpoint_path} at step {start_step}", flush=True)
+
     obs, _ = env.reset(seed=config.seed)
     episode_return, episode_returns, gradient_steps = 0.0, [], 0
     start = time.time()
+    resume_floor = start_step + config.learning_starts
 
-    for step in range(1, config.total_steps + 1):
+    for step in range(start_step + 1, config.total_steps + 1):
         eps = max(config.eps_end, config.eps_start +
                   (config.eps_end - config.eps_start) * step / config.eps_decay_steps)
-        if step < config.learning_starts or rng.random() < eps:
+        if step < max(config.learning_starts, resume_floor) or rng.random() < eps:
             action = int(rng.integers(n_actions))
         else:
             with torch.no_grad():
@@ -201,7 +216,7 @@ def main() -> None:
             episode_return = 0.0
             obs, _ = env.reset()
 
-        if step >= config.learning_starts and step % config.train_freq == 0:
+        if step >= max(config.learning_starts, resume_floor) and step % config.train_freq == 0:
             b_obs, b_act, b_rew, b_next, b_term = buffer.sample(config.batch_size, rng)
             b_obs = torch.as_tensor(b_obs, device=device)
             b_next = torch.as_tensor(b_next, device=device)
@@ -244,6 +259,8 @@ def main() -> None:
             with metrics_file.open("a") as handle:
                 handle.write(json.dumps(record) + "\n")
             print(json.dumps(record), flush=True)
+            torch.save({"online": online.state_dict(), "target": target.state_dict(),
+                        "optimizer": optimizer.state_dict(), "step": step}, checkpoint_path)
 
     torch.save(online.state_dict(), out / "final.pt")
     print("DONE", flush=True)

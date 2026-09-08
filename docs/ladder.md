@@ -254,7 +254,7 @@ approximation) and which fix addresses which part of it.
   the number of actions, so a two-action task is close to the weakest possible
   test of it.
 
-- [ ] Optional: run DQN on a small Atari environment (e.g. Pong)
+- [x] Optional: run DQN on a small Atari environment (e.g. Pong)
 
   The scale test: pixel observations, a convolutional trunk, frame stacking,
   and millions of steps rather than tens of thousands. It is also the

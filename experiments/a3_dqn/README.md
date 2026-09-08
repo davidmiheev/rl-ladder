@@ -143,9 +143,21 @@ dueling `[28000, 28000, 28000, 12000, 20000]`.
 
 ### Item 4 — Atari
 
-Not run (it wants a GPU), but items 2 and 3 have changed why it matters — see
-the last finding below. It is no longer "a scale demonstration with no new
-concept"; it is the environment where items 2 and 3 would actually resolve.
+Run on a Colab T4 (`atari_dqn.py`), Pong, 1M environment steps per arm, **one
+seed each** — below this repo's own three-seed floor, because each arm is ~90
+GPU-minutes on a runtime that gets reclaimed at around 85. Read accordingly.
+Raw series in [`atari_pong/metrics.jsonl`](atari_pong/metrics.jsonl).
+
+| arm | final | best | mean bias (>=550k) | checkpoints with positive bias |
+| --- | --- | --- | --- | --- |
+| DQN | **-6.6** | **-4.4** | **+0.694** | **10 / 10** |
+| Double DQN | -20.8 | -20.6 | **-0.226** | 2 / 10 |
+
+![atari pong](../../docs/assets/a3/atari-pong.png)
+
+A partial series from an earlier run that Colab reclaimed at ~80% is kept in
+[`atari_partial/metrics.jsonl`](atari_partial/metrics.jsonl) — it matters
+because it disagrees with this one, see the findings.
 
 ## Findings
 
@@ -223,6 +235,39 @@ and 90 at 90k, while its value estimates climbed past what the environment can
 pay. Longer training did not converge it — it diverged it. That is the deadly
 triad doing exactly what section 3 of the writeup predicts, and it is worth
 remembering next time a training curve is extrapolated forward.
+
+**Atari answered item 2's question and refused to answer item 3's.** The bias
+probe separates cleanly and in the direction theory predicts: DQN's value
+estimates sit above the returns it actually collects at **every one of the ten
+checkpoints** past 550k (mean +0.69), while Double DQN's sit below at eight of
+ten (mean -0.23). That is not a marginal difference in a noisy statistic, it is
+a sign flip that holds across the whole late phase — and it is exactly what
+van Hasselt's analysis says the double estimator does: it does not remove the
+bias, it converts overestimation into underestimation.
+
+Note this is the same measurement that was inconclusive on CartPole, run in the
+regime the theory says it needs. The prediction recorded before the run — that
+Pong's larger action space and longer horizon would make the max-operator bias
+measurable — held.
+
+**But the performance comparison is not usable, and saying so matters more than
+the number.** Double DQN never learned here: 550k consecutive steps at -21. An
+earlier run of the *same code at the same default seed*, lost to a runtime
+reclaim at ~80%, had Double at **-14.0 against DQN's -16.0** — that is, ahead.
+Two runs of a nominally identical configuration produced opposite orderings,
+which is GPU nondeterminism compounding through a chaotic optimisation. With
+one seed per arm, this run cannot distinguish "Double DQN has a real failure
+mode on Pong" from "this trajectory diverged early and never recovered".
+
+**A limitation of the probe itself, worth carrying forward.** The measurement is
+`predicted V(s0) - actual discounted return`, which is a *joint* function of
+value calibration and policy quality. The two arms here ended at wildly
+different performance (-6.6 against -20.8), so the sign separation cannot be
+fully disentangled from the fact that one agent learned and the other did not.
+The clean version of this experiment compares arms at *matched* eval return
+rather than matched step; that was impossible here because Double never reached
+DQN's level. On CartPole the arms tracked each other closely enough that the
+confound never bit, which is why it went unnoticed until now.
 
 **Both item 2 and item 3 failed to show their effect cleanly for the same
 underlying reason, and that revises the plan.** The overestimation Double DQN targets needs value
