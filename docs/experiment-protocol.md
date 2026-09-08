@@ -86,6 +86,28 @@ training**. Decide the train/held-out split once, in C1, write it into the C1
 README, and reuse it unchanged for C3–C5. Re-picking the split after seeing
 results is how a backtest lies to you.
 
+## Items are written to be self-contained
+
+`ladder.md` is the teaching document, not an index. Each phase states the
+problem it solves and where it sits in the sequence; each item explains what is
+being asked, how to approach it, and what to expect — enough that no paper or
+notebook is needed to understand the task. Links are for depth, not for
+comprehension.
+
+Two constraints keep that honest:
+
+- **Checkbox lines stay verbatim** from the original tracker, so a tick always
+  refers to the item as written. Explanations go in an indented paragraph
+  beneath. The correspondence is checked mechanically against the archived HTML.
+- **Explanations state what to expect, including the failure.** Several items
+  are designed to fail; saying so up front is the difference between a reader
+  reproducing the lesson and thinking their code is broken.
+
+When a phase is finished, fold what the runs actually taught back into its item
+text if the original explanation turned out to be misleading — the A3 items now
+warn about measuring overestimation too early, because that is what the runs
+showed.
+
 ## Writeups cite their sources
 
 Each phase gets `docs/writeups/<phase>.md` explaining what the phase asks, why,

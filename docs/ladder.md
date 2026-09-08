@@ -24,6 +24,25 @@ Tick a box here when the phase README in `experiments/<phase>/` records the run
 that backs it. See [`experiment-protocol.md`](experiment-protocol.md) for what
 counts as done.
 
+## How to read this file
+
+Every phase opens with **what it is about** — the problem it solves and why it
+sits where it does in the sequence — and every checklist item carries an
+explanation of what is actually being asked, how to approach it, and what you
+should expect to see. The intent is that this file is self-contained: you should
+not have to open a paper or a course notebook to know what an item means or why
+it is worth doing. The reading and lab links are there to go *deeper*, not to
+make the item comprehensible.
+
+**The checkbox lines themselves are verbatim** from the original tracker
+(archived at [`assets/rl-ladder-tracker.html`](assets/rl-ladder-tracker.html)) —
+only the surrounding explanations are this repo's. That is checked
+mechanically, so a tick always refers to the item as originally written.
+
+Per-phase writeups in [`writeups/`](writeups/) go further still: the derivations,
+the design decisions behind each experiment, what the runs actually showed, and
+a table citing the source of every item.
+
 ## Cadence
 
 Work Part A roughly in order; **A7 and A8 are side branches**. Part B assumes
@@ -52,6 +71,15 @@ GPU compute.
 
 ## A1. Multi-Armed Bandits
 
+**What this phase is about.** A bandit is a Markov decision process with the
+state removed: one situation, `k` actions, a fixed reward distribution behind
+each. Everything that makes RL hard — credit assignment across time,
+bootstrapping, function approximation — is deliberately absent, leaving one
+difficulty standing alone: you can only learn about an action by taking it, and
+every pull spent learning is a pull not spent earning. That is the
+exploration/exploitation tradeoff, and this phase exists to make it concrete
+before anything is layered on top.
+
 **Goal.** The exploration/exploitation tradeoff in its purest form, before state
 or function approximation get added.
 
@@ -62,12 +90,47 @@ or function approximation get added.
 **Practical lab.** [Practical_RL week05_explore](https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore) (bandits, UCB, Thompson sampling)
 
 - [x] Implement ε-greedy, UCB1, and Thompson sampling on a synthetic k-armed bandit; plot regret curves
+
+  Three different answers to one question: how do you spend pulls on *learning*
+  rather than *earning*? Build a synthetic testbed — each arm has a hidden true
+  value `q*(a) ~ N(0,1)` and returns `reward ~ N(q*(a), 1)` — and implement all
+  three. Score them by cumulative regret, the reward given up against always
+  pulling the best arm, computed from the hidden `q*` rather than realised
+  rewards so the curve measures decisions and not luck. Expect Thompson ≲ UCB1
+  < ε-greedy, and note that a single run tells you nothing: average over many
+  seeds.
+
 - [x] Sweep ε and the UCB exploration constant; observe the exploration/exploitation tradeoff
+
+  Both parameters buy the same thing — exploration — at different prices. Sweep
+  each over a log-spaced grid and plot final performance against the parameter.
+  The shape you are looking for is an inverted U: too little exploration never
+  identifies the best arm, too much keeps paying the exploration tax after the
+  answer is known. The optimum is horizon-dependent, so record the budget you
+  swept at; a constant that looks wrong at 1000 pulls may be right at 100 000.
+
 - [x] Make the bandit non-stationary; show fixed-step-size ε-greedy tracking drift where sample-averaging fails
+
+  Let the arms drift: start them equal and give each an independent random
+  walk. Now run two ε-greedy agents that differ *only* in the update rule —
+  sample-average (`α = 1/N`) against a constant `α`. Unrolling the incremental
+  update shows why one tracks and one cannot: constant `α` is an exponential
+  recency average, while `1/N` weights the reward from pull 1 exactly as
+  heavily as pull 10 000. Expect the sample-average agent to lock onto
+  information that has gone stale, and look at the spread across seeds rather
+  than the mean — the failure is a bias toward old data, not extra noise.
 
 <a id="a2"></a>
 
 ## A2. Tabular RL: Q-Learning & SARSA
+
+**What this phase is about.** State comes back, and nothing else does: finitely
+many states and actions, values held in a table, no approximation anywhere.
+That makes this the last rung where the exact answer is computable, so it is
+where you get a reference to measure against. The phase solves the same problem
+twice — once with dynamic programming, which is *given* the transition model,
+and once with temporal-difference control, which only ever sees sampled
+transitions — and the gap between them is the cost of not having a model.
 
 **Goal.** The on-policy/off-policy distinction concretely, and why TD
 bootstrapping trades bias for variance reduction.
@@ -79,13 +142,68 @@ and [week03_model_free](https://github.com/yandexdataschool/Practical_RL/tree/ma
 (value/policy iteration, Q-learning, SARSA, TD(λ))
 
 - [x] Implement value iteration & policy iteration on a small GridWorld; confirm convergence to the known optimum
+
+  Both compute the optimal value function *given the model*, which is the
+  luxury every later phase loses. Value iteration repeatedly applies the
+  Bellman optimality backup until it stops moving; policy iteration alternates
+  exact evaluation of the current policy (a linear solve) with greedy
+  improvement. "Known optimum" needs a check that does not come from the same
+  equations: on a deterministic grid with −1 per step and γ = 1, the optimal
+  value of a state is exactly minus its shortest-path distance to the goal, so
+  compare against a breadth-first search. Watch for the trap that exact policy
+  evaluation needs γ < 1 — at γ = 1 a policy that walks into a wall forever
+  makes the linear system singular.
+
 - [x] Implement Q-learning and SARSA from scratch; compare policies near a hazard (cliff-walking style)
+
+  Identical update shape, one difference: the bootstrap target. Q-learning
+  takes the max over next actions and so evaluates a greedy policy it is not
+  following (off-policy); SARSA bootstraps from the action its ε-greedy policy
+  actually took (on-policy), and therefore prices in its own exploration. A
+  hazard is what makes the difference visible — use a cliff-walking grid where
+  the shortest route runs along a large penalty. Expect Q-learning to learn the
+  optimal edge-hugging path yet earn *less* online, because one exploratory
+  step in ten sends it over; SARSA earns more online while learning a detour.
+  Report both the online return and the value of the learned greedy policy, or
+  you will draw the opposite conclusion from whichever one you picked.
+
 - [x] Sweep discount factor γ and learning rate α
+
+  These are different kinds of object and should be swept with different tools.
+  **γ defines the objective**: build a small MDP with a near small reward and a
+  far larger one, derive by hand the γ at which the optimal action flips, and
+  confirm dynamic programming agrees — sweeping γ does not find a better
+  solution, it changes which solution is correct. **α controls the estimator**:
+  sweep it with TD control and look for instability at the top end. Run it on
+  both a deterministic and a stochastic version of the task, because that tells
+  you whether the noise α has to average comes from the environment or from the
+  agent's own exploration.
+
 - [x] Add a Dyna-Q planning step and measure the sample-efficiency gain over plain Q-learning
+
+  Record the transitions you have already seen as a model, and after every real
+  step replay `n` of them as extra Q-learning updates. Every arm takes the same
+  number of *real* environment steps, so any improvement is pure reuse of
+  experience rather than more of it. Expect a large drop in episodes-to-
+  convergence, because one-step Q-learning propagates value backwards only one
+  state per real transition and planning does that propagation in memory for
+  free. Note the assumption you are making: the model is deterministic and
+  trusted absolutely, which is the same staleness risk a replay buffer carries
+  in A3.
 
 <a id="a3"></a>
 
 ## A3. Value-Function Approximation: DQN
+
+**What this phase is about.** The table stops scaling the moment the state is
+continuous, so `Q` becomes a neural network trained by regression on TD
+targets. That one substitution destroys A2's guarantees: value iteration
+converged because the Bellman operator contracts in the space of exact value
+functions, and composing it with a function approximator's projection need not
+contract at all. The result is the *deadly triad* — bootstrapping, off-policy
+learning, and function approximation — which is fine in any pair and can
+diverge as a trio. This phase is about which stabiliser addresses which leg of
+it.
 
 **Goal.** The "deadly triad" (bootstrapping + off-policy + function
 approximation) and which fix addresses which part of it.
@@ -98,13 +216,64 @@ approximation) and which fix addresses which part of it.
 (experience replay, target networks, double/dueling/bootstrap DQN)
 
 - [x] Implement DQN on CartPole/LunarLander; disable replay buffer and target network independently, document the instability
+
+  The table is gone: `Q` is now a network trained by regression onto TD
+  targets. That single change breaks A2's convergence guarantee, because the
+  contraction argument assumed exact backups — bootstrapping, off-policy
+  learning and function approximation together are the "deadly triad". The two
+  stabilisers address different legs of it: **replay** attacks correlated data
+  and a training distribution that moves with the policy, and the **target
+  network** attacks the fact that the regression target shifts the moment the
+  parameters do. Remove them one at a time and you can see which does which.
+  Evaluate greedily and separately from training, record peak as well as final
+  (instability looks like a high peak followed by collapse), and measure
+  baselines — random, and each constant action — so you can distinguish
+  "learned badly" from "diverged".
+
 - [x] Add Double DQN; measure whether Q-value overestimation drops
+
+  A max over noisy estimates is biased upward, since `E[max] ≥ max E`, and
+  because the same noisy values both *select* and *evaluate* the action, the
+  error is selected for rather than averaged away. Double DQN splits those
+  roles: the online network picks the action, the target network scores it.
+  Measure the bias directly — the value the network predicts at a start state
+  minus the discounted return the greedy policy actually collects from it.
+  Train long enough to reach the regime you are measuring: early on the network
+  *under*estimates because it has not finished learning, and the overestimation
+  only appears once the estimates are good enough for the max bias to dominate.
+
 - [x] Add a dueling architecture; compare sample efficiency vs. vanilla DQN
+
+  Split the head into a state-value stream and an advantage stream and
+  recombine as `Q(s,a) = V(s) + (A(s,a) − mean_a A(s,a))`; subtracting the mean
+  is what makes the decomposition identifiable, since otherwise a constant can
+  slide between the two streams. The claim is *sample efficiency*, not final
+  score: `V(s)` is updated by every transition through `s` whatever action was
+  taken, while a plain head only updates the column of the action tried.
+  Compare at equal environment steps. Be aware the benefit should scale with
+  the number of actions, so a two-action task is close to the weakest possible
+  test of it.
+
 - [ ] Optional: run DQN on a small Atari environment (e.g. Pong)
+
+  The scale test: pixel observations, a convolutional trunk, frame stacking,
+  and millions of steps rather than tens of thousands. It is also the
+  environment where the previous two items actually resolve — Atari supplies
+  both the value noise Double DQN targets and the large action space dueling
+  targets, which is exactly why the original papers used it.
 
 <a id="a4"></a>
 
 ## A4. Policy Gradient & Actor-Critic
+
+**What this phase is about.** Everything so far learned *values* and derived a
+policy from them by taking an argmax. This phase parameterises the policy
+itself and improves it by gradient ascent on expected return. That removes the
+max operator and its bias entirely, works directly with continuous or
+structured action spaces, and gives a smooth, stochastic policy — at the cost
+of variance, since the gradient must be estimated from sampled returns. Almost
+every algorithm in Part B is a descendant of what is derived here, which makes
+this the most load-bearing phase in Part A.
 
 **Goal.** The policy-gradient theorem — the throughline connecting almost every
 algorithm in Part B.
@@ -117,12 +286,48 @@ algorithm in Part B.
 (REINFORCE, advantage actor-critic)
 
 - [ ] Implement REINFORCE on CartPole; compare variance/efficiency against your A3 DQN run
+
+  A different strategy entirely: instead of learning values and acting
+  greedily, parameterise the policy `π_θ(a|s)` and adjust it directly. The
+  policy-gradient theorem gives `∇J(θ) = E[∇ log π_θ(a|s) · G]` — push up the
+  log-probability of an action in proportion to the return that followed it. It
+  is unbiased and needs no value function, but the variance is severe, because
+  every action in an episode is credited with the whole episode's return
+  regardless of whether it helped. Compare against your A3 DQN on the same task
+  on sample efficiency, spread across seeds, and stability, and use A3's honest
+  final number rather than its peak.
+
 - [ ] Add a learned baseline + GAE; sweep λ and observe the bias/variance tradeoff
+
+  Subtracting any state-dependent baseline `b(s)` from the return leaves the
+  gradient unbiased — it has zero expectation against `∇ log π` — while
+  potentially cutting its variance a lot. The natural choice is a learned
+  `V(s)`, which turns the raw return into an advantage: how much better was
+  this action than the state's average. GAE then interpolates between a one-
+  step TD residual (low variance, biased by whatever error `V` has) and the
+  full Monte Carlo return (unbiased, high variance) with a single `λ`. Sweep it
+  and you should see both failure modes at the two ends rather than a monotone
+  curve.
+
 - [ ] Implement A2C on LunarLander; compare stability against REINFORCE-with-baseline
+
+  Actor and critic trained together, with several environments stepped in
+  parallel so that a batch is decorrelated without needing a replay buffer —
+  the on-policy answer to the problem replay solved in A3. Compare stability
+  against REINFORCE-with-baseline on a harder task than CartPole, where the
+  credit-assignment horizon is longer and the reward is shaped.
 
 <a id="a5"></a>
 
 ## A5. Continuous Control (Robotics)
+
+**What this phase is about.** In continuous action spaces `max_a Q(s,a)` is no
+longer a lookup over a handful of columns but an optimisation problem in its
+own right, solved afresh at every step. The algorithms here answer that with an
+actor: a learned function whose output *is* the maximising action. The phase is
+really about the failure modes that creates — an actor and critic that move
+together and can chase each other — and about three progressively better
+answers to them.
 
 **Goal.** What changes with continuous actions, and why SAC's entropy
 maximization tends to produce more robust policies.
@@ -135,13 +340,52 @@ maximization tends to produce more robust policies.
 (TRPO, PPO, DDPG for robot control)
 
 - [ ] Implement DDPG on Pendulum-v1; note training instability
+
+  With continuous actions the `max_a Q(s,a)` at the heart of Q-learning becomes
+  an optimisation problem rather than a lookup over a few columns. DDPG's
+  answer: learn a deterministic actor whose output *is* the maximising action,
+  and train it by gradient ascent through the critic. Expect instability, and
+  understand its source — the critic is being queried at actions the actor is
+  simultaneously moving, so the two can chase each other.
+
 - [ ] Implement TD3 (twin critics, delayed updates, target smoothing); compare stability to DDPG
+
+  Three targeted fixes to the specific ways DDPG fails. **Twin critics** with
+  the minimum taken, against the overestimation you measured in A3; **delayed
+  actor updates**, so the critic is reasonably fitted before it is used to
+  improve the policy; and **target policy smoothing**, noise added to the
+  target action so that a sharp error in the critic cannot be exploited by a
+  knife-edge action. Add them and compare — ideally one at a time, since the
+  paper's contribution is the combination and it is worth knowing which part
+  carries it.
+
 - [ ] Run/implement SAC on a harder continuous task; sweep the entropy-temperature coefficient
+
+  SAC maximises reward *plus* policy entropy, which makes exploration part of
+  the objective rather than noise injected on top of a deterministic policy.
+  Sweep the temperature that trades the two and watch what a too-high value
+  does (a policy that stays deliberately random) against a too-low one
+  (premature collapse to a narrow behaviour).
+
 - [ ] Optional: add action/observation noise at eval time; compare degradation across DDPG/TD3/SAC
+
+  Perturb actions or observations at evaluation time only, and compare how much
+  each algorithm degrades. The entropy-maximised policy should be flatter
+  around its optimum — it was trained to keep a distribution of good actions
+  rather than one — so it should lose less, which is the practical argument for
+  SAC beyond its learning curves.
 
 <a id="a6"></a>
 
 ## A6. Planning & Self-Play: MCTS / AlphaZero
+
+**What this phase is about.** Everything so far learned a reactive policy: see
+state, emit action. This phase adds *deliberation* — spending computation at
+decision time to search ahead through a model of the game. The interesting part
+is the combination: search produces better decisions than the current network,
+those decisions become training targets, and the improved network makes the
+next search better. It is also a useful contrast for B3, where GRPO averages
+over a group of rollouts instead of searching through them.
 
 **Goal.** How planning (search) and model-free learning combine — a useful
 contrast to GRPO's rollout-averaging in B3.
@@ -154,12 +398,38 @@ contrast to GRPO's rollout-averaging in B3.
 (UCB for MCTS)
 
 - [ ] Implement plain MCTS (UCT) on Tic-Tac-Toe/Connect Four; verify convergence to near-optimal play
+
+  Build a search tree by repeating four steps: select down the tree with a UCB
+  rule (A1's confidence bonus, applied to child nodes), expand a new node, roll
+  out to a result, and back the result up the path. No learning is involved —
+  the strength comes entirely from the simulations spent. Verify that with
+  enough of them it converges to near-optimal play on a game small enough that
+  you can check.
+
 - [ ] Add a learned policy/value net guiding search, trained via self-play; compare sample efficiency to plain MCTS
+
+  Replace the random rollout with a network that supplies a prior over moves
+  and an evaluation of the position, trained on the outcomes of the search's
+  own self-play games. Search improves the network's targets, and the improved
+  network makes search better — the loop that AlphaZero is. Compare the
+  simulations needed for equal playing strength.
+
 - [ ] Ablate the value network (random/uniform rollouts) to isolate search vs. learned-prior strength
+
+  Swap the learned evaluation back out for random rollouts while keeping
+  everything else. It separates how much of the strength is search and how much
+  is the learned prior, which is the question the previous item's improvement
+  leaves open.
 
 <a id="a7"></a>
 
 ## A7. Multi-Agent RL (optional)
+
+**What this phase is about.** Every convergence result so far assumed a
+stationary environment. Put two learning agents in one environment and each
+becomes part of the other's dynamics, so from either point of view the world
+changes as the opponent improves. This phase is about seeing that break, and
+about self-play as the standard response to it.
 
 **Goal.** Why multi-agent RL breaks single-agent convergence guarantees, and why
 self-play sidesteps rather than solves that.
@@ -173,11 +443,30 @@ self-play sidesteps rather than solves that.
 multi-agent environments; not covered by Practical_RL.
 
 - [ ] Train two independent Q-learners in a simple competitive game; observe non-stationarity from each agent's view
+
+  Each agent treats the other as part of the environment. But the other is
+  learning, so from either agent's point of view the environment's dynamics
+  change over time — and every single-agent convergence result assumed they do
+  not. Watch a policy that was good become bad because the opponent moved,
+  which is what breaks the guarantee.
+
 - [ ] Try self-play (one agent playing both sides); compare policy quality/stability to independent learners
+
+  One policy plays both sides, so improvement automatically produces a stronger
+  opponent and the curriculum is generated for free. Compare quality and
+  stability against the independent learners, and note what it does and does
+  not fix: self-play *sidesteps* non-stationarity by making both sides the same
+  object, it does not solve the underlying problem.
 
 <a id="a8"></a>
 
 ## A8. Imitation Learning & Inverse RL (optional)
+
+**What this phase is about.** So far the reward has been given. Here it is not:
+you have demonstrations of good behaviour and must either copy the behaviour
+(imitation) or recover the objective behind it (inverse RL). The distinction
+matters well beyond this phase — a reward model in Part B is exactly an attempt
+to recover an objective from human judgements rather than to imitate them.
 
 **Goal.** The difference between copying actions (imitation) and recovering the
 objective behind them (inverse RL) — relevant background for any
@@ -189,8 +478,27 @@ and [yet_another_week](https://github.com/yandexdataschool/Practical_RL/tree/mas
 it as bonus material beyond the core syllabus.
 
 - [ ] Implement behavioral cloning on a small control task (e.g. CartPole) from a handful of expert demonstrations; observe compounding error away from the expert's state distribution
+
+  Pure supervised learning: fit a policy to expert state-action pairs, no
+  reward involved. The failure mode is the interesting part — a small error
+  moves the agent to a state the expert never visited, where the policy has no
+  training data, so errors compound rather than correct. Measure that drift
+  rather than just the training accuracy.
+
 - [ ] Implement a simple inverse RL method (e.g. max-entropy IRL) to recover a reward function from the same demonstrations, then run Q-learning/PPO against the recovered reward
+
+  Instead of copying the actions, recover a reward function that would make the
+  demonstrations look optimal, then run ordinary RL against it. The motivation
+  is generalisation: a reward is a compact statement of the *objective*, and it
+  stays valid in states the demonstrations never reached, where a copied action
+  does not.
+
 - [ ] Compare the behavioral-cloning policy against the IRL-then-RL policy on states the expert demonstrations never visited
+
+  Evaluate both specifically on states outside the demonstration distribution.
+  That is where the two approaches should come apart, and it is the whole
+  reason to prefer recovering an objective over imitating a behaviour — the
+  same argument that motivates reward models in Part B.
 
 ---
 
@@ -203,6 +511,14 @@ via TRL for fast iteration.
 
 ## B1. Foundations: REINFORCE → PPO
 
+**What this phase is about.** The same policy-gradient machinery from A4,
+applied to a language model. The action space becomes a vocabulary of tens of
+thousands of tokens, an episode is a generated sequence, and the reward arrives
+once at the end from a model or a program rather than from an environment. Two
+things are genuinely new: the policy starts from a pretrained model worth
+preserving, and the reward is a learned proxy that can be exploited. PPO's
+clipping addresses the first problem, the KL-to-reference term the second.
+
 **Reading.** [Learning to Summarize w/ Human Feedback](https://arxiv.org/abs/2009.01325) ·
 [InstructGPT](https://arxiv.org/abs/2203.02155) ·
 [PPO paper](https://arxiv.org/abs/1707.06347)
@@ -211,12 +527,42 @@ via TRL for fast iteration.
 (PEFT & RLHF)
 
 - [ ] Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space
+
+  Same estimator, a radically different action space: the "actions" are tokens
+  from a vocabulary of tens of thousands, and an "episode" is a generated
+  sequence scored once at the end. Reuse A4's REINFORCE against a reward model
+  or a programmatic reward and watch how fast it finds degenerate outputs that
+  score well without being good — with no constraint tying the policy to the
+  pretrained model, nothing stops it.
+
 - [ ] Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference
+
+  PPO makes several gradient steps per batch of generations safe by clipping
+  the probability ratio between the new policy and the one that produced the
+  data, so an update cannot move far from the distribution it was estimated on.
+  RLHF adds a second leash: a KL penalty against the frozen reference model,
+  which keeps the fluency the pretraining bought. Sweep the clip range and the
+  KL coefficient and plot reward against KL-to-reference — that curve *is* the
+  tradeoff, and reading it is the point of the item.
+
 - [ ] Set the KL penalty near zero and document the resulting failure mode
+
+  Remove the anchor and document what breaks. Reward keeps climbing while the
+  text degenerates, because the reward model is a proxy trained on a
+  distribution the policy has now left. This is the cheapest possible
+  demonstration that the KL term is not a regulariser bolted on for stability —
+  it is what makes the proxy meaningful.
 
 <a id="b2"></a>
 
 ## B2. Direct Alignment: DPO / IPO
+
+**What this phase is about.** RLHF is an expensive pipeline: train a reward
+model, then run an RL loop that generates, scores and updates. DPO observes
+that the objective has a closed-form optimal policy, and that you can therefore
+fit the policy *directly* from preference pairs with a supervised-looking loss
+— no reward model, no sampling. This phase is about what that buys and what it
+quietly gives up.
 
 **Reading.** [DPO paper](https://arxiv.org/abs/2305.18290) ·
 [IPO paper](https://arxiv.org/abs/2310.12036)
@@ -225,12 +571,41 @@ via TRL for fast iteration.
 (supports both DPO and IPO loss via one config flag)
 
 - [ ] Build/synthesize a preference dataset; train DPO; compare against the best PPO run
+
+  DPO's insight is that the RLHF objective has a closed-form optimal policy, so
+  the reward model can be substituted out and the policy fitted *directly* from
+  preference pairs with a classification-style loss — no reward model, no
+  sampling loop, no RL. Build a preference set, train it, and compare against
+  your best PPO run on both quality and the engineering cost of getting there.
+
 - [ ] Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup
+
+  Train too long on too little and watch a specific pathology: the log-
+  probability of the *chosen* response falls. The loss only cares about the
+  margin between chosen and rejected, and pushing the rejected one down far
+  enough achieves that while dragging both down. Track chosen and rejected log-
+  probabilities separately, plus KL to the reference — the aggregate loss looks
+  fine while this happens.
+
 - [ ] Swap in IPO's bounded objective; compare stability
+
+  IPO replaces the unbounded log-sigmoid with an objective that saturates, so
+  an easy preference pair cannot be driven to an infinite margin. That is aimed
+  exactly at the failure above; check whether it actually fixes it in your
+  setup rather than assuming it does.
 
 <a id="b3"></a>
 
 ## B3. RLVR & GRPO
+
+**What this phase is about.** Two ideas that reshaped post-training. **RLVR**
+replaces the learned reward model with a verifier — a test suite, an exact
+answer match — so the reward cannot be flattered, only circumvented. **GRPO**
+removes the value network by sampling a group of completions per prompt and
+using the group's mean score as the baseline, which matters at a scale where
+the critic is another model as large as the policy. The phase asks you to
+derive GRPO rather than import it, because the derivation is where its
+assumptions are visible.
 
 **Reading.** [DeepSeekMath/GRPO](https://arxiv.org/abs/2402.03300) ·
 [DeepSeek-R1](https://arxiv.org/abs/2501.12948) ·
@@ -242,13 +617,50 @@ via TRL for fast iteration.
 [TRL GRPOTrainer docs](https://huggingface.co/docs/trl/grpo_trainer)
 
 - [ ] Implement GRPO from the derivation yourself — group rollouts, group-relative advantages, no value net
+
+  Sample a group of `G` completions for the same prompt, score them, and use
+  the group's mean score as the baseline. The advantage of a completion becomes
+  how much better it was than its own siblings — a Monte Carlo baseline
+  estimated from the group, which removes the need for a learned value network
+  entirely. That matters at LLM scale, where the critic is another model of
+  comparable size. Derive it before you implement it; the derivation is where
+  the assumptions live.
+
 - [ ] Cross-check against TRL's GRPOTrainer
+
+  Run yours and the library's on the same data and reconcile the differences.
+  They almost always hide in the same few places: whether advantages are
+  normalised and over what, whether the loss is averaged per token or per
+  sequence, and whether the KL term enters the reward or the loss. Assume yours
+  is wrong until shown otherwise, and record the discrepancy even after fixing
+  it.
+
 - [ ] Sweep group size; measure advantage-estimate variance
+
+  The group mean is an estimate of the baseline from `G` samples, so its
+  variance falls roughly as `1/G` while generation cost rises linearly with it.
+  Measure both sides of that trade rather than accepting a default, and
+  remember the cost is multiplied by every rollout you make.
+
 - [ ] Run RLVR against a gameable verifier and document reward hacking
+
+  Reinforcement learning from *verifiable* rewards replaces a learned reward
+  model with a checker — a test suite, a numeric answer match — which cannot be
+  flattered the way a reward model can. Then deliberately use a checker with a
+  loophole (matching the final number without the reasoning, say) and document
+  what the policy finds. Verifiable does not mean unhackable; it means the hack
+  has to be in the checker.
 
 <a id="b4"></a>
 
 ## B4. Reward Hacking & Overoptimization
+
+**What this phase is about.** Every reward here is a proxy for something you
+actually want, and optimising a proxy hard enough eventually moves away from
+the target. This phase makes that quantitative: track the proxy and a held-out
+gold metric together, find where they diverge, and measure how much a
+mitigation moves that point. It is the phase that turns "reward hacking" from a
+worry into a number.
 
 **Reading.** [Concrete Problems in AI Safety](https://arxiv.org/abs/1606.06565) ·
 [Scaling Laws for RM Overoptimization](https://arxiv.org/abs/2210.10760)
@@ -258,12 +670,36 @@ evaluate your own trained reward model against a standard suite before
 deliberately overoptimizing against it
 
 - [ ] Overoptimize PPO against a learned RM; plot proxy reward vs. held-out gold metric
+
+  Train hard against a learned reward model while tracking a held-out gold
+  metric that the model never saw. The expected shape is proxy reward rising
+  monotonically while the gold metric peaks and then declines — Goodhart's law
+  with an x-axis. The useful output is the *location* of that turn, in KL,
+  because that is the budget you actually have.
+
 - [ ] Repeat with GRPO on a verifiable reward; compare hackability
+
+  Same experiment with a checker instead of a learned model, to see how much of
+  the overoptimisation was the reward model's error surface rather than the
+  optimiser's strength.
+
 - [ ] Try one mitigation (RM ensembling, tighter KL); quantify the recovered budget
+
+  Pick one — an ensemble of reward models so that idiosyncratic errors
+  disagree, or simply a tighter KL — and quantify how much further you can
+  optimise before the gold metric turns. A mitigation that moves the turning
+  point is worth something; one that only lowers the whole curve is not.
 
 <a id="b5"></a>
 
 ## B5. On-Policy Distillation
+
+**What this phase is about.** Getting a small model to behave like a large one.
+The naive approach trains the student on the teacher's outputs, but the student
+will be evaluated on *its own* generations, and those diverge from the
+teacher's the moment it makes a mistake — the compounding-error problem from
+A8, in a new setting. On-policy distillation fixes the mismatch by having the
+student generate and the teacher label.
 
 **Reading.** [MiniLLM](https://arxiv.org/abs/2306.08543) ·
 [GKD](https://arxiv.org/abs/2306.13649) ·
@@ -273,12 +709,37 @@ deliberately overoptimizing against it
 (quantization, distillation, pruning, speculative decoding)
 
 - [ ] Offline-KD baseline: distill the best B3 model into a smaller student
+
+  Distil your best model into a smaller student on a fixed dataset of teacher
+  outputs. The flaw to keep in view: the student is trained on the teacher's
+  distribution but will be *evaluated* on its own, and those diverge as soon as
+  it makes its first mistake — the same compounding-error argument as
+  behavioural cloning in A8.
+
 - [ ] GKD-style on-policy distillation: student rollouts, teacher relabels
+
+  Let the student generate, and have the teacher label the student's own
+  sequences. The training distribution becomes the one the student will
+  actually be scored on, which is what "on-policy" means here. Compare against
+  the offline baseline, especially on longer generations where the drift has
+  room to accumulate.
+
 - [ ] Run both students through your quantized inference path; compare robustness
+
+  Quantisation perturbs the weights, so this asks whether the two distillation
+  methods produced students that are equally robust to that perturbation, not
+  just equally good in fp16.
 
 <a id="b6"></a>
 
 ## B6. Unifying View + Systems Port
+
+**What this phase is about.** Consolidation. Every method in Part B differs in
+a small number of dimensions — what serves as the baseline, how far off-policy
+the data may be, what limits the size of an update — and seeing them on those
+axes is worth more than remembering five algorithms. The Rust port is a
+comprehension test: an implementation forces every shape, reduction and
+normalisation to be explicit.
 
 **Reading.** [2026 unified off-policy/on-policy post-training survey](https://arxiv.org/abs/2604.07941) · optional
 
@@ -287,7 +748,17 @@ with PPO, DPO, GRPO, and GKD implementations side by side; reading the shared
 abstractions is a good proxy for the survey's unifying framework
 
 - [ ] Map B1–B5 onto the survey's unifying framework
+
+  Put PPO, DPO, GRPO and GKD in one picture and answer the same questions of
+  each: what plays the role of the baseline, how far off-policy is the data
+  allowed to be, and what constrains the size of an update. Most of the
+  apparent variety collapses once those three axes are fixed.
+
 - [ ] Port GRPO's core update into Rust against your Candle fork — a comprehension check, not a throughput play
+
+  Reimplement the update against your Candle fork. It is a comprehension check
+  rather than a throughput play — a port makes every implicit shape, reduction
+  and normalisation explicit, and you cannot port what you have not understood.
 
 ---
 
@@ -301,6 +772,14 @@ episodes for PPO/GRPO-style rollouts.
 
 ## C1. Baseline: Calibrated GLFT (no RL)
 
+**What this phase is about.** Before any learning, establish what good already
+looks like. The Guéant–Lehalle–Fernandez-Tapia model derives a market maker's
+optimal quotes in closed form from a few measurable quantities — order-arrival
+intensity and volatility — and its calibrated performance is the benchmark
+every RL variant in Part C must beat. Reproducing it exactly also validates
+your data pipeline and fill assumptions, which is where backtests usually go
+wrong.
+
 **Goal.** This fixed-calibration run is the benchmark every RL variant below has
 to beat — on the same held-out days, not just the training days.
 
@@ -311,12 +790,38 @@ your GLFT + grid-trading notes
 — likely the direct source of your own notes; run it as-is before modifying anything
 
 - [ ] Calibrate A, k (order-arrival intensity) and σ (volatility) from market data; derive c1, c2 and reproduce the GLFT half-spread/skew formulas
+
+  The GLFT model prices a market maker's quotes from a small number of
+  measurable quantities: how order arrivals fall off with distance from the mid
+  (the intensity parameters `A` and `k`), and volatility `σ`. Estimate them
+  from data, derive the model's coefficients, and reproduce its closed-form
+  half-spread and inventory skew. This is the analytic model that Part C's RL
+  will later adjust rather than replace.
+
 - [ ] Run the calibrated GLFT grid market maker in hftbacktest on the sample data; reproduce the reported Sharpe/Sortino/MaxPositionValue stats
+
+  Replay real order-book data through the calibrated quoter and reproduce the
+  published statistics. Getting the same numbers is the check that your
+  calibration and your fill assumptions are right, before anything is learned
+  on top of them.
+
 - [ ] Reproduce the simplified non-parametric HF-grid variant (percentile-based intensity, micro-price) and compare against the parametric GLFT baseline
+
+  The same strategy with the parametric intensity fit replaced by empirical
+  percentiles and the mid replaced by a micro-price. Comparing them tells you
+  how much of the baseline's performance comes from the model's functional form
+  versus from the market microstructure it is reading.
 
 <a id="c2"></a>
 
 ## C2. Framing Market Making as an RL Problem
+
+**What this phase is about.** Turning market making into an RL problem, with
+one deliberate constraint: the policy adjusts the *coefficients* of the
+analytic model rather than emitting raw quotes. That keeps the known-good
+functional form in the loop, makes every action interpretable in the language
+the desk already uses, and makes the fixed-coefficient baseline a strict
+special case of the learned policy — so "did RL help" has a clean answer.
 
 **Goal.** The key design choice: RL adjusts the coefficients of a known-good
 analytic model rather than replacing the model outright — keeps the policy
@@ -328,13 +833,46 @@ auditable.
 — the standard pattern for wrapping hftbacktest as a `step()`/`reset()` Gym-style env
 
 - [ ] Define state: inventory q, short-horizon volatility estimate, order-book imbalance / micro-price features, basis & APT alpha signals
+
+  What the policy is allowed to see. Inventory matters because risk is a
+  function of position; short-horizon volatility and order-book imbalance
+  because they predict adverse selection; basis and alpha signals because they
+  predict direction. Anything you leave out, the policy cannot condition on —
+  and anything you put in, it can overfit to.
+
 - [ ] Define the action space as the GLFT coefficient set itself — γ, c1, and a half-spread/skew scaling term — rather than raw quote prices, so the policy stays interpretable inside the existing formula
+
+  The central design decision of Part C. Rather than emitting raw quote prices,
+  the policy outputs the *coefficients* of a model that is already known to be
+  reasonable. The analytic form stays in the loop, so the policy cannot produce
+  nonsense quotes, every action remains interpretable in terms the desk already
+  uses, and the fixed-coefficient baseline is a strict special case — which
+  makes "did RL help" a well-posed question.
+
 - [ ] Define reward as mark-to-market PnL minus an inventory-risk penalty (e.g. −η·q²), mirroring the risk term the GLFT model already encodes analytically
+
+  PnL alone would reward taking unbounded inventory risk that happens not to
+  have been punished on the training days. Subtracting a penalty in the squared
+  position mirrors the risk aversion the GLFT model already encodes
+  analytically, so the learned objective and the baseline's objective are
+  comparable.
+
 - [ ] Wrap hftbacktest as a Gym-style environment: one episode per trading session, one step per grid-refresh interval
+
+  One episode per trading session, one step per grid refresh. The engineering
+  here is mostly making sure the environment's step boundary matches the
+  strategy's real decision points, and that nothing from the future leaks into
+  the observation.
 
 <a id="c3"></a>
 
 ## C3. Continuous Control on the Coefficient Set
+
+**What this phase is about.** The first real test: do learned, state-
+conditioned coefficients beat well-calibrated fixed ones? The algorithms are
+A5's, unchanged; what is new is an environment where the reward is money, the
+episodes are trading sessions, and the evaluation must be on days the policy
+never saw.
 
 **Goal.** A real answer to whether learned, state-conditioned coefficients beat a
 well-calibrated fixed formula, and which coefficients are worth learning at all.
@@ -346,12 +884,34 @@ and [SAC docs](https://stable-baselines3.readthedocs.io/en/master/modules/sac.ht
 — battle-tested reference implementations to validate your own against
 
 - [ ] Apply DDPG/TD3/SAC to the C2 environment: policy outputs (γ, c1, half-spread-scale) per step, conditioned on state
+
+  Reuse the A5 implementations directly. The action is a low-dimensional
+  continuous vector, which is the setting those algorithms were designed for —
+  the novelty is entirely in the environment.
+
 - [ ] Compare against the C1 fixed-calibration baseline on held-out days: Sharpe, Sortino, MaxPositionValue, ReturnOverMDD
+
+  On days never used for calibration or training. Report the risk-adjusted
+  measures, not just PnL: a strategy that earns more by carrying more inventory
+  has not improved anything.
+
 - [ ] Ablate: fix γ at its calibrated value and let RL learn only c1/skew, vs. letting RL learn all three jointly — compare sample efficiency and stability
+
+  Learning fewer coefficients is a smaller hypothesis class and therefore
+  harder to overfit. Comparing "learn one" against "learn all three" tells you
+  which coefficients genuinely benefit from being state-conditioned, and which
+  were fine as constants.
 
 <a id="c4"></a>
 
 ## C4. PPO/GRPO for Parameter Search
+
+**What this phase is about.** The bridge between Part B and Part C. The same
+PPO and GRPO implementations used for language models are applied to a three-
+dimensional continuous action, which is a direct test of whether GRPO's value-
+network-free baseline is a general idea or an artefact of the LLM setting. It
+is also where Part B's reward-hacking lens gets pointed at a backtest, which is
+one of the easiest places in this ladder to fool yourself.
 
 **Goal.** The direct bridge between the LLM post-training RL work and this quant
 research — same algorithms, a much smaller and more interpretable action space.
@@ -364,12 +924,36 @@ GRPO outside LM tooling, so the group-relative-advantage update here is genuinel
 from-scratch code
 
 - [ ] Since the action here is a low-dimensional continuous vector, compare PPO (B1) directly against a GRPO-style approach: sample K coefficient sets per episode, rank by realized PnL, apply a group-relative-advantage update as in B3
+
+  A direct test of whether GRPO's central trick survives outside language
+  modelling. Sample `K` coefficient sets per episode, rank them by realised
+  PnL, and apply a group-relative advantage update — the group mean replaces
+  the value network exactly as it does in B3.
+
 - [ ] Check whether GRPO's group-baseline idea (no value network) transfers outside language modeling to this much lower-dimensional control problem
+
+  The question behind the previous item. GRPO's baseline works partly because
+  LLM value functions are expensive and hard to fit; in a three-dimensional
+  continuous action space a critic is cheap and easy, so the trade may simply
+  not pay. A negative result here is informative.
+
 - [ ] Apply the B4 reward-hacking lens: check whether RL-tuned coefficients overfit to microstructure quirks of the training days (e.g. only widening spread around a few known volatility spikes) rather than learning a generalizable policy — validate strictly out-of-sample
+
+  Backtests are the easiest place in this whole ladder to fool yourself. The
+  specific failure to look for: coefficients that encode "widen the spread at
+  14:30 on the third Tuesday" rather than a policy — memorising the training
+  days' microstructure instead of learning to respond to state. Validate
+  strictly out of sample, and treat an implausibly good result as a bug report.
 
 <a id="c5"></a>
 
 ## C5. Multi-Signal Extension
+
+**What this phase is about.** Whether RL earns its complexity. Fold directional
+alpha signals into the state and see whether the policy discovers the
+interaction between signal and quoting coefficients by itself — or whether it
+merely rediscovers what you would have written by hand in an afternoon. A
+negative answer here is a genuine finding, not a failure.
 
 **Goal.** Tests whether RL buys you anything over manually engineering the alpha
 signal into the analytic formula.
@@ -381,4 +965,15 @@ signal into the analytic formula.
 APT) your notes are based on
 
 - [ ] Fold the basis/APT alpha signals into the state (or into a directly-predicted fair-price adjustment) and re-run C3/C4
+
+  Give the policy directional information and re-run. Either it uses it or it
+  does not, and both answers are useful.
+
 - [ ] Check whether the RL-tuned coefficients learn to widen/narrow skew in response to the alpha signal automatically, versus the manual extension a fixed-form model would need
+
+  The real question of Part C: does RL discover the *interaction* between an
+  alpha signal and the quoting coefficients on its own, or does it merely
+  reproduce what you would have written by hand? If it is the latter, the
+  analytic model with a manual extension is the better engineering choice, and
+  knowing that is worth the experiment.
+
