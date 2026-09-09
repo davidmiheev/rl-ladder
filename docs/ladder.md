@@ -477,7 +477,7 @@ and [yet_another_week](https://github.com/yandexdataschool/Practical_RL/tree/mas
 (imitation learning and inverse RL). This phase is lab-first: the course treats
 it as bonus material beyond the core syllabus.
 
-- [ ] Implement behavioral cloning on a small control task (e.g. CartPole) from a handful of expert demonstrations; observe compounding error away from the expert's state distribution
+- [x] Implement behavioral cloning on a small control task (e.g. CartPole) from a handful of expert demonstrations; observe compounding error away from the expert's state distribution
 
   Pure supervised learning: fit a policy to expert state-action pairs, no
   reward involved. The failure mode is the interesting part — a small error
@@ -485,7 +485,7 @@ it as bonus material beyond the core syllabus.
   training data, so errors compound rather than correct. Measure that drift
   rather than just the training accuracy.
 
-- [ ] Implement a simple inverse RL method (e.g. max-entropy IRL) to recover a reward function from the same demonstrations, then run Q-learning/PPO against the recovered reward
+- [x] Implement a simple inverse RL method (e.g. max-entropy IRL) to recover a reward function from the same demonstrations, then run Q-learning/PPO against the recovered reward
 
   Instead of copying the actions, recover a reward function that would make the
   demonstrations look optimal, then run ordinary RL against it. The motivation
@@ -493,7 +493,7 @@ it as bonus material beyond the core syllabus.
   stays valid in states the demonstrations never reached, where a copied action
   does not.
 
-- [ ] Compare the behavioral-cloning policy against the IRL-then-RL policy on states the expert demonstrations never visited
+- [x] Compare the behavioral-cloning policy against the IRL-then-RL policy on states the expert demonstrations never visited
 
   Evaluate both specifically on states outside the demonstration distribution.
   That is where the two approaches should come apart, and it is the whole
