@@ -227,7 +227,25 @@ experiment tests the wrong axis for the hypothesis it was built to check. A
 sharper version would perturb the dynamics (mass, damping) rather than the
 observation.
 
-## 9. Where these items come from
+## 9. What this sets up
+
+- **C3 reuses these implementations directly.** The market-making environment's
+  action is a low-dimensional continuous vector — the GLFT coefficient set — so
+  DDPG, TD3 and SAC transfer with no algorithmic change at all. What changes is
+  that the reward is money and the episodes are trading sessions, which makes
+  the overestimation measured here a financial rather than academic concern: a
+  critic that overvalues an action is a quoter that takes a position it should
+  not.
+- **A5's twin critics are A3's Double DQN under a different name**, and C3's
+  ablation of which coefficients to learn is the same attribution question this
+  phase asked of TD3's three fixes.
+- **B1's PPO** solves the same instability from the opposite direction. DDPG
+  stabilises an actor climbing a critic by fixing the critic (twin, delayed,
+  smoothed); PPO stabilises it by bounding how far the actor may move per
+  update. Trust region versus better value estimate is the axis those two
+  answers sit on.
+
+## 10. Where these items come from
 
 | item | primary source | why it was picked |
 | --- | --- | --- |

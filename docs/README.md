@@ -5,6 +5,7 @@ Start here.
 | doc | what it covers |
 | --- | --- |
 | [`ladder.md`](ladder.md) | **The curriculum.** 19 phases, 59 checklist items, reading and labs. Canonical — tick boxes here. |
+| [`part-a-summary.md`](part-a-summary.md) | **Part A retrospective** — what eight phases taught, including the mistakes. Read after finishing Part A. |
 | [`writeups/`](writeups/) | Per-phase explainers: what the phase asks, why, and what the runs showed. [A1](writeups/a1-bandits.md), [A2](writeups/a2-tabular.md), [A3](writeups/a3-dqn.md), [A4](writeups/a4-policy-gradient.md), [A5](writeups/a5-continuous-control.md). |
 | [`setup.md`](setup.md) | Environments, per-part extras, verifying the install |
 | [`compute.md`](compute.md) | What hardware each part needs; GPU pod sizing for Part B |

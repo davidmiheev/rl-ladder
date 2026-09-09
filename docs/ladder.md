@@ -502,6 +502,10 @@ it as bonus material beyond the core syllabus.
 
 ---
 
+> **Part A is complete (26/26).** The cross-cutting lessons — including the six
+> times a headline metric hid the effect being measured — are collected in
+> [`part-a-summary.md`](part-a-summary.md).
+
 # Part B — LLM Post-Training RL
 
 This is where you want a vast.ai (or RunPod) GPU pod. Small HF model (0.5–3B)

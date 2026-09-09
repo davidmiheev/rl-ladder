@@ -39,10 +39,16 @@ distribution; at deployment the agent visits $d^{\pi_\theta}$, its own. The
 moment it errs it moves somewhere the expert never was, where it has no training
 signal, so it errs again.
 
-The standard result (Ross & Bagnell 2010) makes the compounding precise: if the
-cloned policy has expected per-step classification error $\varepsilon$ under the
-expert's distribution, its regret over a horizon $T$ is bounded by
-$O(\varepsilon T^2)$, not $O(\varepsilon T)$. The extra factor of $T$ is the
+The standard result (Ross & Bagnell 2010) makes the compounding precise. If the
+cloned policy errs with probability at most $\varepsilon$ under the expert's own
+distribution,
+
+$$\mathbb{E}_{s \sim d^{\pi^*}}\left[\mathbb{1}\{\pi_\theta(s) \ne \pi^*(s)\}\right] \le \varepsilon
+\quad\Longrightarrow\quad
+J(\pi^*) - J(\pi_\theta) \le O\!\left(\varepsilon T^2\right)$$
+
+over a horizon $T$ — quadratic, not the $O(\varepsilon T)$ that supervised
+intuition suggests. The extra factor of $T$ is the
 distribution shift — an error at step $t$ does not just cost one step's reward,
 it changes every state that follows. This is why DAgger and friends exist, and
 why item 1 asks to *observe* the compounding rather than take it on faith.
@@ -79,8 +85,15 @@ that potential-based shaping
 
 $$r'(s,a,s') = r(s,a,s') + \gamma\Phi(s') - \Phi(s)$$
 
-leaves the optimal policy unchanged for *any* $\Phi$. So an infinite family of
-rewards explains any set of demonstrations equally well, and IRL can only ever
+leaves the optimal policy unchanged for *any* $\Phi$, because the shaping term
+telescopes along every trajectory:
+
+$$\sum_{t=0}^{T-1} \gamma^t\left[\gamma\Phi(s_{t+1}) - \Phi(s_t)\right] = \gamma^T \Phi(s_T) - \Phi(s_0)$$
+
+which depends only on the endpoints and so shifts every trajectory's return by
+the same amount, leaving the ordering — and hence the argmax — untouched. An
+infinite family of rewards therefore explains any set of demonstrations equally
+well, and IRL can only ever
 return a member of that class. Scaling is free too, and a constant offset
 changes nothing.
 

@@ -30,6 +30,16 @@ which contains $\pi_2$. As agent 2 learns, $P_1$ changes, so agent 1 is solving
 a **different MDP at every moment**. There is no fixed point for it to converge
 to, and no contraction argument to make.
 
+Concretely, the operator each agent iterates is
+
+$$(\mathcal{T}_1 Q)(s,a) = \mathbb{E}_{a_2 \sim \pi_2}\left[r(s,a,a_2) + \gamma \sum_{s'} P(s' \mid s,a,a_2)\max_{a'} Q(s',a')\right]$$
+
+which is still a $\gamma$-contraction *for fixed $\pi_2$* — so each agent would
+converge if the other ever stopped. The failure is not that the operator is bad,
+it is that $\mathcal{T}_1$ is re-indexed by $\pi_2$ at every step, and a sequence
+of contractions with moving fixed points has no reason to converge to any of
+them.
+
 Worse, the pair need not be heading anywhere at all. The natural solution
 concept becomes a Nash equilibrium rather than an optimum, and independent
 Q-learning has no mechanism aiming at one: each agent computes a best response
@@ -134,10 +144,16 @@ failure — exploitability stayed pinned at $1.00$ while coverage rose
 $0.509 \to 0.947$ in a separate sweep. Walking the exploiter's best line to the
 first mistake shows that at the critical position the never-tried actions sit at
 their zero initialisation while every tried action is *negative*, because those
-moves lose. **Zero-initialised $Q$ is optimistic in a zero-sum game**, where
-nearly every true value is $\le 0$, so a greedy policy is systematically drawn
-toward whatever it has not tried — exactly where a best-response opponent
-steers. Exploitability demands correctness along the whole line, so one such
+moves lose. **Zero-initialised $Q$ is optimistic in a zero-sum game.** Every true value
+satisfies $Q^*(s,a) \in [-1, +1]$ with the great majority at $\le 0$, so for an
+untried action
+
+$$Q_0(s,a) = 0 \;\ge\; Q^*(s,a) \quad\text{for most } (s,a)$$
+
+and the greedy policy is systematically drawn toward whatever it has not tried —
+exactly where a best-response opponent steers. This is A3's optimism with the
+sign flipped into a different failure: there an over-valued action was merely
+pursued, here it is *selected against by an adversary*. Exploitability demands correctness along the whole line, so one such
 state is fatal.
 
 That is the sharpest statement of this phase's lesson: a policy that is optimal

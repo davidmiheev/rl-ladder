@@ -34,6 +34,17 @@ $$\pi_\theta \;\xrightarrow{\text{search}}\; \pi_{\text{MCTS}} \;\xrightarrow{\t
 Search makes the network's moves better; the network makes the next search
 better; iterate. Neither component alone is the algorithm.
 
+Concretely, the network is fitted to the search's own output. With
+$\boldsymbol{\pi}$ the normalised root visit counts and $z$ the game's result
+from that position's mover's perspective:
+
+$$\mathcal{L}(\theta) = -\boldsymbol{\pi}^\top \log p_\theta(s) + \left(v_\theta(s) - z\right)^2$$
+
+The first term is a cross-entropy onto a *better policy than $p_\theta$ produced*
+— which is what makes this policy improvement rather than mere self-distillation
+— and the second regresses the value head onto outcomes the improved policy
+actually achieved.
+
 ## 3. Why UCT converges (item 1)
 
 MCTS repeats four steps — select, expand, evaluate, back up — and the only
@@ -46,6 +57,15 @@ is chosen. That is **A1's UCB1 applied to a tree**, which is what "UCT" stands
 for, and the reason A1's exploration bonus is worth having derived: the
 $\sqrt{\ln N / N_a}$ term is the same confidence-interval width, and the same
 argument that made regret logarithmic there makes the search consistent here.
+
+Writing $\bar{X}_a$ for a child's mean value and $N_a$ for its visits, the bonus
+is the same Hoeffding half-width A1 derived: for $N_a$ i.i.d. samples in a
+bounded range,
+
+$$\Pr\left(\left|\bar{X}_a - \mathbb{E}[X_a]\right| \ge \sqrt{\frac{2\ln N}{N_a}}\right) \le 2N^{-4}$$
+
+so the index is an upper confidence bound that holds uniformly over the search,
+and the $\ln N$ numerator is exactly what buys that uniformity.
 
 The consistency result (Kocsis & Szepesvári 2006) is that the value estimate at
 the root converges to the minimax value, and the probability of selecting a
@@ -93,8 +113,12 @@ games a random continuation says little about a position's true value.
 $$\arg\max_a \left[ Q(s,a) + c\, P(s,a)\, \frac{\sqrt{\sum_b N_b}}{1 + N_a} \right]$$
 
 The exploration term is now *weighted by the prior*, so search effort is
-concentrated on moves the network considers plausible, and the $\sqrt{N}/(1+N_a)$
-form makes the prior dominate early and the empirical $Q$ dominate later.
+concentrated on moves the network considers plausible. The functional form
+matters: at $N_a = 0$ the bonus is $c\,P(s,a)\sqrt{N}$, which is *linear* in the
+prior, so an unvisited move is tried in proportion to how plausible the network
+finds it; as $N_a$ grows the bonus decays like $1/N_a$ rather than
+$1/\sqrt{N_a}$, so the empirical $Q$ takes over faster than under UCT. Prior
+first, statistics later, with the crossover set by $c$.
 
 **Measuring "sample efficiency" for a searcher** is best done in the currency
 the searcher spends. The question this repo asks is: *how many simulations does
@@ -196,7 +220,24 @@ multiplier on top of the network. GRPO forgoes it because language has no cheap
 simulator: backing a value up through a tree of token sequences means paying
 generation cost at every node.
 
-## 8. Where these items come from
+## 8. What this sets up
+
+- **B3's GRPO is this phase's contrast**, and section 7 states it: GRPO averages
+  independent rollouts, MCTS spends the same budget on a tree whose simulations
+  share prefixes and steer one another. The 2× search-equivalence measured here
+  is what that structure is worth when a cheap simulator exists — and language
+  has none, which is the whole reason GRPO forgoes it.
+- **The policy-improvement framing recurs throughout Part B.** Search here,
+  best-of-$n$ sampling and rejection sampling there: all are operators that
+  produce a better policy than the network at inference cost, which is then
+  distilled back into the weights. AlphaZero is the clean case because the
+  operator is exact and the improvement is measurable.
+- **The prior-beats-value result predicts something about B3's group size**:
+  where compute is scarce relative to the branching factor, *allocating* it well
+  beats *evaluating* better. A group of 8 rollouts in a vocabulary of 50,000 is
+  an extreme version of the 50-simulations-over-7-moves regime measured here.
+
+## 9. Where these items come from
 
 | item | primary source | why it was picked |
 | --- | --- | --- |
