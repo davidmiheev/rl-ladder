@@ -160,7 +160,72 @@ Carried over from earlier phases:
 
 ## 8. Results
 
-Filled in from the runs; see the phase README.
+Tables in the [phase README](../../experiments/a5_continuous_control/README.md).
+What changes how the phase should be read:
+
+**The ablation attributes TD3's contribution, and the informative metric is not
+return.** On Pendulum all five arms finish within 5 points of one another
+against a seed spread of $\pm 20$ — a null result on performance, because the
+task is too easy to separate them. The value bias separates cleanly:
+
+| arm | bias | change vs full TD3 |
+| --- | --- | --- |
+| TD3 (all three) | $-9.8$ | — |
+| $-$ twin critics | $+7.6$ | $+17.4$ |
+| $-$ target smoothing | $-0.1$ | $+9.7$ |
+| $-$ delayed actor | $-11.2$ | $-1.4$ |
+| DDPG | $+26.3$ | $+36.1$ |
+
+The ordering is exactly what section 4 predicts. Twin critics move the bias
+furthest and are the only fix whose removal flips its sign, because
+$\mathbb{E}[\min(X_1,X_2)] \le \min(\mathbb{E}[X_1],\mathbb{E}[X_2])$ is a
+*direct* downward correction. Smoothing matters about half as much: it removes
+spurious spikes by averaging the target over a neighbourhood, which corrects the
+bias only incidentally. The delayed actor changes it by $1.4$ — nothing — which
+is correct, since the timescale argument for it makes no claim about bias at
+all. A fix can be worth having and still not be the one doing the work on any
+given metric.
+
+**DDPG's instability showed up in its critic, not its returns.** Its swing
+between evaluations ($102.7$) was the *lowest* of the five arms, not the
+highest. What it does show is a critic overestimating by $+26.3$ while every arm
+with twin critics sits at or below zero. On a task this forgiving the
+overestimation never gets the chance to become a policy failure — which is a
+fact about Pendulum as a testbed more than about DDPG, and the same lesson A3
+learned from CartPole: an environment can be too easy to exhibit the phenomenon
+you built the experiment to see.
+
+**The temperature sweep came out monotone, so the range was wrong.** Return
+rises all the way from $\alpha = 0.01$ ($-17.6$) to $\alpha = 0.5$ ($224.1$),
+meaning the optimum sits at or past the top of the swept range and the expected
+interior optimum never appears. That $\alpha$ is scale-dependent is the content
+rather than an annoyance — it is a rate of exchange between reward and nats, so
+a task with returns in the hundreds needs a larger $\alpha$ than one with
+returns in single digits, and that is precisely why later SAC learns it against
+a target entropy instead of exposing it.
+
+The variance result is the stronger one: at $\alpha = 0.2$ the three seeds land
+at $-20, 72, 266$ ($\pm 119$); at $\alpha = 0.5$ at $221, 203, 248$
+($\pm 18$). A sixfold reduction in across-seed spread *while* the mean rises —
+on this task the entropy term buys reliability rather than trading performance
+for it.
+
+**Item 4 contradicted its own hypothesis, and the design is partly to blame.**
+Section 6 argued the entropy objective should make SAC degrade least. Under
+action noise nothing degrades at all — all three are flat, and TD3 and SAC
+marginally improve, which is what small action noise does to a policy balancing
+a pendulum at an unstable equilibrium. Under observation noise everything
+collapses and **SAC collapses most** ($646.2$ against TD3's $558.5$).
+
+Two limits before that is taken as a refutation. Per-seed spread was not
+recorded for the noise sweep, so a 90-point gap between arms whose training
+returns already vary by $\pm 20$ is not established as real. More importantly
+the entropy argument concerns perturbations *of the action* — the axis where all
+three were already flat — whereas observation noise corrupts the policy's
+*input*, a failure mode the entropy objective makes no claim about. The
+experiment tests the wrong axis for the hypothesis it was built to check. A
+sharper version would perturb the dynamics (mass, damping) rather than the
+observation.
 
 ## 9. Where these items come from
 

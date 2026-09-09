@@ -339,7 +339,7 @@ maximization tends to produce more robust policies.
 **Practical lab.** [Practical_RL week09_policy_II](https://github.com/yandexdataschool/Practical_RL/tree/master/week09_policy_II)
 (TRPO, PPO, DDPG for robot control)
 
-- [ ] Implement DDPG on Pendulum-v1; note training instability
+- [x] Implement DDPG on Pendulum-v1; note training instability
 
   With continuous actions the `max_a Q(s,a)` at the heart of Q-learning becomes
   an optimisation problem rather than a lookup over a few columns. DDPG's
@@ -348,7 +348,7 @@ maximization tends to produce more robust policies.
   understand its source — the critic is being queried at actions the actor is
   simultaneously moving, so the two can chase each other.
 
-- [ ] Implement TD3 (twin critics, delayed updates, target smoothing); compare stability to DDPG
+- [x] Implement TD3 (twin critics, delayed updates, target smoothing); compare stability to DDPG
 
   Three targeted fixes to the specific ways DDPG fails. **Twin critics** with
   the minimum taken, against the overestimation you measured in A3; **delayed
@@ -359,7 +359,7 @@ maximization tends to produce more robust policies.
   paper's contribution is the combination and it is worth knowing which part
   carries it.
 
-- [ ] Run/implement SAC on a harder continuous task; sweep the entropy-temperature coefficient
+- [x] Run/implement SAC on a harder continuous task; sweep the entropy-temperature coefficient
 
   SAC maximises reward *plus* policy entropy, which makes exploration part of
   the objective rather than noise injected on top of a deterministic policy.
@@ -367,7 +367,7 @@ maximization tends to produce more robust policies.
   does (a policy that stays deliberately random) against a too-low one
   (premature collapse to a narrow behaviour).
 
-- [ ] Optional: add action/observation noise at eval time; compare degradation across DDPG/TD3/SAC
+- [x] Optional: add action/observation noise at eval time; compare degradation across DDPG/TD3/SAC
 
   Perturb actions or observations at evaluation time only, and compare how much
   each algorithm degrades. The entropy-maximised policy should be flatter
