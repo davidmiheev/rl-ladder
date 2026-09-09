@@ -442,7 +442,7 @@ self-play sidesteps rather than solves that.
 (Farama Foundation) — independent-learner and self-play training on standard
 multi-agent environments; not covered by Practical_RL.
 
-- [ ] Train two independent Q-learners in a simple competitive game; observe non-stationarity from each agent's view
+- [x] Train two independent Q-learners in a simple competitive game; observe non-stationarity from each agent's view
 
   Each agent treats the other as part of the environment. But the other is
   learning, so from either agent's point of view the environment's dynamics
@@ -450,7 +450,7 @@ multi-agent environments; not covered by Practical_RL.
   not. Watch a policy that was good become bad because the opponent moved,
   which is what breaks the guarantee.
 
-- [ ] Try self-play (one agent playing both sides); compare policy quality/stability to independent learners
+- [x] Try self-play (one agent playing both sides); compare policy quality/stability to independent learners
 
   One policy plays both sides, so improvement automatically produces a stronger
   opponent and the curriculum is generated for free. Compare quality and
