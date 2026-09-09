@@ -148,7 +148,53 @@ win rate would have been believed. Reporting a quantity whose correct value is
 
 ## 7. Results
 
-Filled in from the runs; see the phase README.
+Tables in the [phase README](../../experiments/a6_mcts/README.md). What changes
+how the phase should be read:
+
+**UCT converges, verifiably.** Move accuracy rises $0.539 \to 0.993$ and the
+draw rate against a perfect opponent $0.200 \to 0.980$ across a budget sweep
+from 10 to 800 simulations, with the win rate pinned at exactly $0.000$
+throughout. The seed spread *tightens* with budget ($\pm 0.041 \to \pm 0.007$),
+which is the visible signature of the asymptotic argument in section 3: more
+simulations means less dependence on which rollouts happened to occur. A 2% loss
+rate survives at 800 simulations, which is correct — consistency is a statement
+about the limit, not about any finite budget.
+
+**The network is worth a doubling of search.** AZ at 50 simulations beats plain
+MCTS at 50 ($0.708$) and sits at parity with plain MCTS at 100 ($0.492$). Stating
+it as a simulation-equivalence rather than a win rate is what makes it portable:
+900 self-play games bought exactly as much as doubling the compute spent at
+decision time. It is a lower bound — a two-layer convnet and 900 games is
+nothing next to the original — and the per-iteration curve is only 20 games per
+point, so its swings are sampling noise around a rising trend.
+
+**The prior does almost all the work.** The 2×2 attributes the gain sharply:
+
+| component | gain over plain MCTS |
+| --- | --- |
+| policy prior alone | $+0.162$ |
+| value head alone | $+0.019$ |
+| both | $+0.194$ |
+
+Two reasons compound. **Training signal:** the policy target is a full visit
+distribution at every position — dense — while the value target is one noisy
+$\pm 1$ shared across a whole game, so at this scale the policy head has seen
+far more usable information. **Budget:** at 50 simulations across 7 legal moves,
+*where* simulations are spent matters more than how well leaves are evaluated,
+because the prior decides which parts of the tree come into existence at all,
+whereas a better leaf value only refines estimates inside a tree already shaped.
+
+That second reason yields a prediction the experiment does not test: the value
+head's contribution should grow with the simulation budget and the prior's
+should shrink. Re-running the 2×2 at 400 simulations would check it cheaply.
+
+**The contrast this phase exists to set up.** B3's GRPO estimates an action's
+worth by averaging independent rollouts — no tree, no reuse between samples.
+MCTS spends the same budget on a *tree*, so simulations share prefixes and each
+informs where the next should go, and here that structure is worth a 2×
+multiplier on top of the network. GRPO forgoes it because language has no cheap
+simulator: backing a value up through a tree of token sequences means paying
+generation cost at every node.
 
 ## 8. Where these items come from
 

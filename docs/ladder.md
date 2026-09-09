@@ -397,7 +397,7 @@ contrast to GRPO's rollout-averaging in B3.
 (MCTS for toy tasks) and [week05_explore](https://github.com/yandexdataschool/Practical_RL/tree/master/week05_explore)
 (UCB for MCTS)
 
-- [ ] Implement plain MCTS (UCT) on Tic-Tac-Toe/Connect Four; verify convergence to near-optimal play
+- [x] Implement plain MCTS (UCT) on Tic-Tac-Toe/Connect Four; verify convergence to near-optimal play
 
   Build a search tree by repeating four steps: select down the tree with a UCB
   rule (A1's confidence bonus, applied to child nodes), expand a new node, roll
@@ -406,7 +406,7 @@ contrast to GRPO's rollout-averaging in B3.
   enough of them it converges to near-optimal play on a game small enough that
   you can check.
 
-- [ ] Add a learned policy/value net guiding search, trained via self-play; compare sample efficiency to plain MCTS
+- [x] Add a learned policy/value net guiding search, trained via self-play; compare sample efficiency to plain MCTS
 
   Replace the random rollout with a network that supplies a prior over moves
   and an evaluation of the position, trained on the outcomes of the search's
@@ -414,7 +414,7 @@ contrast to GRPO's rollout-averaging in B3.
   network makes search better — the loop that AlphaZero is. Compare the
   simulations needed for equal playing strength.
 
-- [ ] Ablate the value network (random/uniform rollouts) to isolate search vs. learned-prior strength
+- [x] Ablate the value network (random/uniform rollouts) to isolate search vs. learned-prior strength
 
   Swap the learned evaluation back out for random rollouts while keeping
   everything else. It separates how much of the strength is search and how much
