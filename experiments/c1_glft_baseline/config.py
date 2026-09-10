@@ -37,6 +37,15 @@ TICK_SIZE = SYMBOLS[SYMBOL]["tick_size"]
 LOT_SIZE = SYMBOLS[SYMBOL]["lot_size"]
 
 
+def register_symbol(symbol: str, tick_size: float, lot_size: float, roi_ub: float) -> None:
+    """Add a symbol at run time, for the cross-asset study.
+
+    Part C's own asset is declared above; the study measures tick and lot sizes
+    from the data instead of trusting a table, and registers what it finds.
+    """
+    SYMBOLS[symbol] = {"tick_size": tick_size, "lot_size": lot_size, "roi_ub": roi_ub}
+
+
 def use_symbol(symbol: str) -> None:
     """Point every path and every backtest at a different symbol.
 
@@ -160,6 +169,12 @@ def _resample_feed_latency(ev, exch_ts, local_ts, bucket_ns, out_exch, out_local
             if current >= 0:
                 n += 1
             current = bucket
+        # numba does not bounds-check, so an undersized buffer here corrupts
+        # the heap rather than raising.  The caller sizes it from the day's
+        # time span; this is the backstop that turns a silent memory bug into
+        # a truncated result.
+        if n >= len(out_exch):
+            return n
         out_exch[n] = exch_ts[i]
         out_local[n] = local_ts[i]
     if current >= 0:
@@ -181,7 +196,11 @@ def ensure_latency(date: str, mul_entry: float = MUL_ENTRY, mul_resp: float = MU
         return out
 
     data = load_day(date)
-    cap = len(data) // 100 + 1024
+    # One row per bucket at most, and never more than one per event.  Sizing
+    # this from the event count alone is wrong for a thin symbol: a day with
+    # 5 million events still has 86,400 one-second buckets.
+    span = int(data["local_ts"][-1] - data["local_ts"][0])
+    cap = min(span // 1_000_000_000 + 2, len(data) + 1) + 1024
     out_exch = np.zeros(cap, np.int64)
     out_local = np.zeros(cap, np.int64)
     n = _resample_feed_latency(

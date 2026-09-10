@@ -164,6 +164,44 @@ python experiments/c1_glft_baseline/run_backtest.py --symbol xrpusdt --days one 
     --strategy glft-grid --order-qty 1500 --max-position 30000 --tag xrp
 ```
 
+**Ten assets, one day, all the same conclusion.** Every symbol in the dataset
+except BTCUSDT (a gigabyte a day; BTCUSDC covers the same asset), on
+2025-08-26, with tick and lot sizes measured from the data:
+
+![cross-asset](../../docs/assets/c1/cross-asset.png)
+![cross-asset PnL](../../docs/assets/c1/cross-asset-pnl.png)
+
+Gross trading PnL is negative on all ten and the rebate is the entire income.
+Only BNBUSDC ends net positive (+0.038%), on the second-lowest fill count in
+the table — the same "least bad is least active" pattern the sweeps showed.
+`touch` loses 10–31% of book in a day on every asset. The exponential
+intensity form fits everywhere (R² 0.94–0.999), so item 3's premise fails for
+all ten, not just ETHUSDC. Adverse selection at 1 s is `0.68·sigma + 0.48` bp
+across assets (r = 0.57) — the same slope as the within-ETHUSDC regression.
+
+Two honest caveats on that figure. Two assets (XRPUSDT, ENAUSDT) clear the
+break-even bar at a 1 s horizon and still lose in the backtest, because 1 s is
+a convention rather than their holding period. And the 1 s measurement does
+*not* rank the assets by realised cost (r = 0.10): it lands in the same range,
+but which asset a given quoter loses least on depends on where it quotes and
+how long it holds.
+
+```bash
+python experiments/c1_glft_baseline/run_cross_asset.py --hours 4
+python experiments/c1_glft_baseline/run_cross_asset.py --replot runs/c1/cross-asset__<stamp>
+```
+
+**A bug worth recording.** The order-latency generator sized its output buffer
+from the event count (`len(data) // 100`), which is fine for a 60-million-event
+day and catastrophically wrong for a thin symbol: ENAUSDC has 5.4 million
+events but still 86,400 one-second buckets, so the njit kernel wrote past the
+end of the array and corrupted the heap. numba does not bounds-check. The
+buffer is now sized from the day's time span, the kernel returns early rather
+than overrunning, and the output is re-verified against hftbacktest's packaged
+helper. No committed ETHUSDC or XRPUSDT result was affected — every latency
+file generated before the fix is full length, which is the check that
+establishes it rather than assumes it.
+
 **What I would do differently.** I chose ETHUSDC to be the closest analogue of
 the notebook's ETHUSDT and only measured the touch spread afterwards — 1 tick
 98.4% of the time, which makes GLFT's continuous quote-depth derivation

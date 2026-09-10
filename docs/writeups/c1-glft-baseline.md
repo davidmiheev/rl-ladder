@@ -383,6 +383,89 @@ unit is 1.9× the rebate on XRPUSDT, against 2.0× on ETHUSDC's training days
 and 1.25× on its held-out ones. Whatever is wrong here is not a property of
 ETHUSDC, and it is not a property of where GLFT chooses to quote.
 
+### Ten assets, not one
+
+The cross-check above is one symbol; this is all ten in the dataset
+(BTCUSDT excluded — a gigabyte a day, and BTCUSDC covers the same asset), one
+day each, 2025-08-26, with tick and lot sizes measured from the data rather
+than taken from a table
+([`run_cross_asset.py`](../../experiments/c1_glft_baseline/run_cross_asset.py)).
+Everything is in basis points, because a tick is 0.009 bp on BTCUSDC and 1.59 bp
+on ENAUSDC and the two are otherwise incomparable. In bp the rebate is a
+constant 0.5 bp for every asset.
+
+| symbol | tick | price | tick (bp) | σ (bp/√s) | spread = 1 tick | k | R² | GLFT half spread | income (bp) | adverse @1 s (bp) | cost / income |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| enausdc | 0.0001 | 0.629 | 1.591 | 1.64 | 98.6% | 0.834 | 0.943 | 1.4 | 1.295 | 2.094 | 1.62 |
+| bnbusdc | 0.01 | 846.8 | 0.118 | 0.60 | 98.7% | 0.080 | 0.976 | 13.1 | 0.559 | 1.057 | 1.89 |
+| avaxusdc | 0.001 | 23.50 | 0.426 | 1.02 | 65.7% | 0.272 | 0.990 | 4.1 | 0.713 | 1.671 | 2.34 |
+| enausdt | 0.0001 | 0.628 | 1.592 | 1.58 | 99.9% | 0.722 | 0.963 | 1.5 | 1.296 | 1.105 | **0.85** |
+| xrpusdc | 0.0001 | 2.917 | 0.343 | 0.85 | 99.3% | 0.298 | 0.986 | 3.6 | 0.671 | 1.182 | 1.76 |
+| suiusdc | 0.00001 | 3.407 | 0.029 | 1.06 | 77.8% | 0.014 | 0.999 | 99.7 | 0.515 | 1.454 | 2.83 |
+| btcusdc | 0.1 | 110113 | 0.009 | 0.42 | 99.1% | 0.008 | 0.968 | 143.8 | 0.505 | 0.857 | 1.70 |
+| suiusdt | 0.0001 | 3.407 | 0.294 | 1.04 | 99.2% | 0.183 | 0.994 | 5.7 | 0.647 | 0.822 | 1.27 |
+| xrpusdt | 0.0001 | 2.916 | 0.343 | 0.83 | 99.7% | 0.222 | 0.964 | 4.7 | 0.671 | 0.524 | **0.78** |
+| ethusdc | 0.01 | 4442 | 0.023 | 1.06 | 98.4% | 0.014 | 0.981 | 87.2 | 0.511 | 0.951 | 1.86 |
+
+![cross-asset](../assets/c1/cross-asset.png)
+
+Four things this says that one asset could not.
+
+**The exponential intensity form holds everywhere** (panel a): $R^2$ between
+0.94 and 0.999 across three orders of magnitude of $k$. Item 3's premise — that
+the parametric fit is the problem — is not true of any asset here, not just of
+ETHUSDC.
+
+**The touch spread is one tick almost everywhere.** Eight of ten assets sit at
+one tick more than 98% of the time. The two exceptions are the fine-tick pairs,
+AVAXUSDC (65.7%) and SUIUSDC (77.8%), and they are the *worst* two by cost over
+income (2.34 and 2.83) — so having room inside the spread does not help, which
+is the opposite of what the large-tick framing would predict.
+
+**σ explains most of the cost across assets, as it did across days** (panel d):
+adverse selection at 1 s $= 0.68\,\sigma + 0.48$ bp, $r = 0.57$ over ten assets.
+The same slope, in the same units, as the within-ETHUSDC regression.
+
+**Two assets clear the bar at 1 s and neither survives a backtest.** ENAUSDT
+(0.85) and XRPUSDT (0.78) have adverse selection below their income. But the
+1 s horizon is a convention, not their holding period: panel (c) shows the
+curves still falling at 30 s, and the backtests below lose on both. A
+necessary condition is not a sufficient one, and I should not have expected
+otherwise.
+
+### PnL, across the same ten assets
+
+Same day, same quoters, sized by notional so the curves share an axis: $4,400
+an order against an $88,000 position cap and a $100,000 book.
+
+![cross-asset PnL](../assets/c1/cross-asset-pnl.png)
+
+| symbol | `glft-grid` net | of which rebates | fills | `touch` net |
+| --- | --- | --- | --- | --- |
+| btcusdc | −0.007% | +0.101% | 459 | −13.18% |
+| bnbusdc | **+0.038%** | +0.224% | 1,016 | −9.96% |
+| xrpusdt | −1.608% | +1.972% | 8,924 | −18.19% |
+| xrpusdc | −1.342% | +1.578% | 7,150 | −18.36% |
+| avaxusdc | −0.833% | +0.827% | 3,742 | −21.07% |
+| suiusdt | −1.507% | +1.920% | 8,730 | −28.67% |
+| ethusdc | −0.898% | +0.596% | 2,688 | −31.18% |
+| suiusdc | −0.045% | +0.176% | 798 | −28.44% |
+| enausdt | −1.418% | +1.514% | 6,868 | −21.37% |
+| enausdc | −0.677% | +0.755% | 3,426 | −20.54% |
+
+**Gross trading PnL is negative on all ten**, and the rebate is the entire
+income (panel c). One asset, BNBUSDC, ends the day net positive (+0.038%), and
+it does so on 1,016 fills — the second-lowest count in the table. The pattern
+from ETHUSDC's sweeps reappears across assets: what separates the least-bad
+from the worst is how little each one trades. The `touch` quoter, which cannot
+decline a fill, loses 10–31% of book on *every* asset in a single day.
+
+**The 1 s measurement does not rank the assets** (panel d, $r = 0.10$). It
+lands in the same range as the backtest's realised cost — 0.4 to 1.3 bp — but
+does not say which asset a given quoter loses least on. That depends on where
+the quoter chooses to sit and how long it holds, and only the backtest knows.
+Worth stating plainly because the tidier claim was the one I expected to make.
+
 ### Why it loses: the diagnosis
 
 Everything above collapses into one number. Group the strategy-days by that
@@ -548,10 +631,10 @@ at the observed volatility.
   ranges +2.0 to −57.6 on held-out days). Medians are reported alongside every
   per-day value for exactly that reason, and no claim here rests on a
   difference smaller than the day-to-day range.
-- **The cross-check is one day on one other symbol.** XRPUSDT 2025-08-26
-  reproduces the finding at the same adverse-selection-to-rebate ratio, which
-  rules out "this is an ETHUSDC quirk" but not "this is a late-2025 crypto
-  quirk". The claim this phase supports is that *this family of
+- **The cross-check is one day, on ten symbols.** All ten reproduce the
+  finding, which rules out "this is an ETHUSDC quirk" but not "this is a
+  2025-08-26 quirk" — one day cannot separate an asset effect from a regime
+  effect, and 2025-08-26 is the most volatile day in the ETHUSDC training set. The claim this phase supports is that *this family of
   fixed-calibration quoters* loses on *these* venues in *this* period, with
   a measured reason. It is not a claim about GLFT in general, and certainly
   not about market making in general — real makers win the queue and are
