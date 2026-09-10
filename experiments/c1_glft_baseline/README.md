@@ -150,10 +150,25 @@ and earns its half tick (mark-to-mid −0.45 at the instant of the fill, against
 by 0.5 s. So the expensive fix buys the small term. This is the finding that
 lets C2 keep a cheap 100 ms step.
 
+**The finding is not ETHUSDC-specific.** The same three quoters on XRPUSDT
+2025-08-26 (tick 0.0001 at 2.857, so the rebate is worth 1.43 ticks; sized to
+the same risk budget at 1500 XRP an order) give SR −148.7 / −180.9 / −135.6 for
+`touch` / `glft-grid` / `simplified`, with gross value per unit traded of
+−2.76 / −2.63 / −2.74 ticks. GLFT quotes 3.6 ticks out here instead of 60.9,
+because XRPUSDT's fitted `k` is an order of magnitude larger — a completely
+different operating point, the same conclusion, at the same ratio of adverse
+selection to rebate (1.9x, against 2.0x on ETHUSDC training days).
+
+```bash
+python experiments/c1_glft_baseline/run_backtest.py --symbol xrpusdt --days one \
+    --strategy glft-grid --order-qty 1500 --max-position 30000 --tag xrp
+```
+
 **What I would do differently.** I chose ETHUSDC to be the closest analogue of
 the notebook's ETHUSDT and only measured the touch spread afterwards — 1 tick
 98.4% of the time, which makes GLFT's continuous quote-depth derivation
 inapplicable before a single backtest is run. Measuring the spread distribution
 should have been step one of item 1, not a by-product of it. The
-`--symbol xrpusdt` cross-check exists for this reason and is still unrun; until
-it is, this phase's negative result is about ETHUSDC, not about GLFT.
+`--symbol xrpusdt` cross-check exists for this reason, and it is one day on one
+symbol: enough to rule out an ETHUSDC quirk, not enough to say anything about
+GLFT in general.

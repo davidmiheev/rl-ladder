@@ -54,14 +54,20 @@ def load(tag: str, days: str) -> dict[str, dict]:
 
 
 def per_fill_ticks(blob: dict, price: float) -> tuple[float, float, float]:
-    """Net, rebate and gross value of one fill, in ticks, medianed over days."""
+    """Net, rebate and gross value of a fill, in ticks per unit traded.
+
+    Per *unit*, not per order, so the number is comparable across assets and
+    order sizes: a 1500-XRP order and a 1-ETH order are different amounts of
+    risk but the same kind of quote.  Medianed over the days in the run.
+    """
     nets, grosses = [], []
     rebate = -config.MAKER_FEE * price / config.TICK_SIZE
+    qty = blob["knobs"].get("order_qty", 1.0)
     for row in blob["per_day"]:
         if row["DailyNumberOfTrades"] <= 0:
             continue
         net = row["Return"] * blob["knobs"].get("book_size", 100_000.0)
-        net = net / row["DailyNumberOfTrades"] / config.TICK_SIZE
+        net = net / row["DailyNumberOfTrades"] / qty / config.TICK_SIZE
         nets.append(net)
         grosses.append(net - rebate)
     return float(np.median(nets)), rebate, float(np.median(grosses))
@@ -90,7 +96,8 @@ def volatility_regression(runs: dict[str, dict], price: float) -> list[tuple[flo
             sigma = day_sigma(row["date"])
             if row["DailyNumberOfTrades"] <= 0 or not np.isfinite(sigma):
                 continue
-            net = row["Return"] * book / row["DailyNumberOfTrades"] / config.TICK_SIZE
+            qty = blob["knobs"].get("order_qty", 1.0)
+            net = row["Return"] * book / row["DailyNumberOfTrades"] / qty / config.TICK_SIZE
             points.append((sigma, net - rebate))
     return points
 

@@ -363,6 +363,26 @@ percentile grid stopped at a tighter quote than GLFT's, and tighter is worse
 here. Per fill the two are indistinguishable (−45.0 vs −56.6 train, −31.0 vs
 −21.7 held out). Neither functional form is doing anything the other is not.
 
+### A second asset
+
+A negative result on one symbol is a result about that symbol, so the same
+three quoters were run on **XRPUSDT** (tick 0.0001 at a price of 2.857, so a
+tick is 0.35 bp and the rebate is worth only 1.43 ticks) for 2025-08-26, sized
+to the same risk budget: 1500 XRP an order, 30,000 XRP of cap.
+
+| strategy | SR | Return | fills/day | half spread | net/fill | gross/fill |
+| --- | --- | --- | --- | --- | --- | --- |
+| `touch` | −148.7 | −18.0% | 90,013 | 0.5 | −1.33 | −2.76 |
+| `glft-grid` | −180.9 | −1.6% | 8,925 | 3.6 | −1.20 | −2.63 |
+| `simplified` | −135.6 | −6.9% | 35,307 | 1.5 | −1.31 | −2.74 |
+
+The absolute numbers are a different world — GLFT quotes 3.6 ticks out here
+rather than 60.9, because XRPUSDT's fitted $k$ is an order of magnitude larger
+— and the conclusion is the same one, at the same ratio. Adverse selection per
+unit is 1.9× the rebate on XRPUSDT, against 2.0× on ETHUSDC's training days
+and 1.25× on its held-out ones. Whatever is wrong here is not a property of
+ETHUSDC, and it is not a property of where GLFT chooses to quote.
+
 ### Why it loses: the diagnosis
 
 Everything above collapses into one number. Group the strategy-days by that
@@ -528,10 +548,15 @@ at the observed volatility.
   ranges +2.0 to −57.6 on held-out days). Medians are reported alongside every
   per-day value for exactly that reason, and no claim here rests on a
   difference smaller than the day-to-day range.
-- **The negative result is about this asset, not about GLFT.** A cross-check on
-  a second symbol was set up (`--symbol xrpusdt`) but not run to completion;
-  until it is, "GLFT does not work here" is the claim, and "GLFT does not
-  work" is not.
+- **The cross-check is one day on one other symbol.** XRPUSDT 2025-08-26
+  reproduces the finding at the same adverse-selection-to-rebate ratio, which
+  rules out "this is an ETHUSDC quirk" but not "this is a late-2025 crypto
+  quirk". The claim this phase supports is that *this family of
+  fixed-calibration quoters* loses on *these* venues in *this* period, with
+  a measured reason. It is not a claim about GLFT in general, and certainly
+  not about market making in general — real makers win the queue and are
+  filled by uninformed flow, which is the one strategy this data cannot
+  represent.
 
 ## 8. Where these items come from
 
