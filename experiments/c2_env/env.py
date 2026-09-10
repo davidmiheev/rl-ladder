@@ -292,6 +292,10 @@ class MarketMakingEnv(gym.Env):
             session, which is what every reported result uses; a cap exists
             for smoke tests and makes the episode a truncation rather than a
             session, so do not report from it.
+        action_ranges (`dict[str, tuple[float, float]]`, *optional*):
+            Override the range of named actions, e.g.
+            `MarketMakingEnv.FORCED_PARTICIPATION`. The default ranges let the
+            policy leave the market entirely.
         allow_held_out (`bool`, *optional*, defaults to `False`):
             Permit a held-out day. Off by default so a training loop cannot
             silently read the test set.
@@ -320,6 +324,16 @@ class MarketMakingEnv(gym.Env):
     #: The coefficients that reproduce C1's `glft-grid` baseline exactly.
     BASELINE = (0.05, 1.0, 1.0, 0.05)
 
+    #: A narrower half-spread range in which "leave the market" is not
+    #: representable.  With the default range the best policy available on a
+    #: training day is the corner that quotes 600 ticks out, takes no fills
+    #: and returns exactly zero -- which is a true answer to the wrong
+    #: question.  Capping the scale at 2x the calibrated half spread forces
+    #: the policy to actually make a market, so that "do learned coefficients
+    #: beat fixed ones" is asked of two market makers rather than of a market
+    #: maker and an empty order book.  The baseline is still interior.
+    FORCED_PARTICIPATION = {"half_spread_scale": (0.5, 2.0)}
+
     def __init__(
         self,
         date: str,
@@ -332,6 +346,7 @@ class MarketMakingEnv(gym.Env):
         step_interval_ns: int = STEP_INTERVAL_NS,
         quote_interval_ns: int = QUOTE_INTERVAL_NS,
         max_steps: int = 0,
+        action_ranges: dict[str, tuple[float, float]] | None = None,
         allow_held_out: bool = False,
     ) -> None:
         super().__init__()
@@ -351,7 +366,12 @@ class MarketMakingEnv(gym.Env):
         self.max_steps = max_steps
         self.n_inner = max(1, step_interval_ns // quote_interval_ns)
 
-        self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.ACTION_RANGES),), dtype=np.float32)
+        overrides = action_ranges or {}
+        self.action_ranges = tuple(
+            (name, *overrides.get(name, (low, high)))
+            for name, low, high in self.ACTION_RANGES
+        )
+        self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.action_ranges),), dtype=np.float32)
         self.observation_space = spaces.Box(-10.0, 10.0, shape=(len(FEATURES),), dtype=np.float32)
 
         self._hbt = None
@@ -363,7 +383,7 @@ class MarketMakingEnv(gym.Env):
         """Map an action in [-1, 1]^4 to GLFT coefficients, log-spaced."""
         action = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         out = []
-        for value, (_, low, high) in zip(action, self.ACTION_RANGES, strict=True):
+        for value, (_, low, high) in zip(action, self.action_ranges, strict=True):
             fraction = (value + 1.0) / 2.0
             out.append(float(np.exp(np.log(low) + fraction * (np.log(high) - np.log(low)))))
         return tuple(out)  # type: ignore[return-value]
@@ -371,7 +391,7 @@ class MarketMakingEnv(gym.Env):
     def baseline_action(self) -> np.ndarray:
         """The action whose coefficients are C1's fixed baseline."""
         out = []
-        for target, (_, low, high) in zip(self.BASELINE, self.ACTION_RANGES, strict=True):
+        for target, (_, low, high) in zip(self.BASELINE, self.action_ranges, strict=True):
             fraction = (np.log(target) - np.log(low)) / (np.log(high) - np.log(low))
             out.append(2.0 * fraction - 1.0)
         return np.array(out, dtype=np.float32)

@@ -132,6 +132,14 @@ def main() -> None:
     parser.add_argument("--explore-episodes", type=int, default=1,
                         help="episodes of uniform-random actions before the policy takes over")
     parser.add_argument("--symbol", default="ethusdc")
+    parser.add_argument(
+        "--participation",
+        default="free",
+        choices=["free", "forced"],
+        help="'free' lets the policy leave the market, which on training days "
+             "is the highest-scoring thing it can do; 'forced' caps the "
+             "half-spread scale so it has to make a market",
+    )
     parser.add_argument("--max-steps", type=int, default=0,
                         help="cap the episode length, for smoke tests only")
     args = parser.parse_args()
@@ -142,8 +150,9 @@ def main() -> None:
 
     config = Config(buffer_size=500_000, learning_starts=0,
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo])
+    ranges = MarketMakingEnv.FORCED_PARTICIPATION if args.participation == "forced" else None
     env = MarketMakingEnv(date=market_config.TRAIN_DAYS[0], symbol=args.symbol,
-                          max_steps=args.max_steps)
+                          max_steps=args.max_steps, action_ranges=ranges)
     obs_dim = int(np.prod(env.observation_space.shape))
     act_dim = int(np.prod(env.action_space.shape))
     baseline = env.baseline_action()
@@ -153,13 +162,13 @@ def main() -> None:
     agent = build_agent(config, obs_dim, act_dim, 1.0)
     buffer = ReplayBuffer(config.buffer_size, obs_dim, act_dim)
 
-    name = f"{args.algo}-{args.learnable}-s{args.seed}"
+    name = f"{args.algo}-{args.participation}-{args.learnable}-s{args.seed}"
     run = Run(phase="c3", name=name, config={
         "algo": args.algo, "seed": args.seed, "passes": args.passes,
         "learnable": args.learnable, "learnable_indices": mask,
         "update_every": args.update_every, "explore_episodes": args.explore_episodes,
         "symbol": args.symbol, "train_days": market_config.TRAIN_DAYS,
-        "max_steps": args.max_steps,
+        "max_steps": args.max_steps, "participation": args.participation,
         "gamma_rl": config.gamma, "batch_size": config.batch_size,
         "hidden": config.hidden,
         "eta": env.eta, "algo_overrides": ALGOS[args.algo],
@@ -174,7 +183,8 @@ def main() -> None:
     for _ in range(args.passes):
         for date in market_config.TRAIN_DAYS:
             started = time.time()
-            env = MarketMakingEnv(date=date, symbol=args.symbol, max_steps=args.max_steps)
+            env = MarketMakingEnv(date=date, symbol=args.symbol, max_steps=args.max_steps,
+                                  action_ranges=ranges)
             summary = episode(
                 env, agent, config, buffer, rng, act_dim, baseline, mask,
                 explore=index < args.explore_episodes, updates_from=config.batch_size,

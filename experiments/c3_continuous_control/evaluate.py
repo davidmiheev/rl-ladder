@@ -56,7 +56,8 @@ def load_policy(path: Path):
     agent = build_agent(config, obs_dim, act_dim, 1.0)
     agent.actor.load_state_dict(blob["actor"])
     agent.actor.eval()
-    return agent, np.asarray(blob["baseline"], dtype=np.float32), list(blob["mask"]), config
+    return (agent, np.asarray(blob["baseline"], dtype=np.float32), list(blob["mask"]),
+            config, blob.get("participation", "free"))
 
 
 @torch.no_grad()
@@ -69,8 +70,10 @@ def act(agent, obs, is_sac: bool) -> np.ndarray:
     return action.squeeze(0).numpy().astype(np.float32)
 
 
-def run_day(date: str, symbol: str, agent, baseline, mask, is_sac: bool) -> dict:
-    env = MarketMakingEnv(date=date, symbol=symbol, allow_held_out=True)
+def run_day(date: str, symbol: str, agent, baseline, mask, is_sac: bool,
+            participation: str = "free") -> dict:
+    ranges = MarketMakingEnv.FORCED_PARTICIPATION if participation == "forced" else None
+    env = MarketMakingEnv(date=date, symbol=symbol, allow_held_out=True, action_ranges=ranges)
     obs, _ = env.reset(seed=0)
     coefficients = []
     truncated = False
@@ -113,22 +116,24 @@ def main() -> None:
     if args.policy == "baseline":
         env = MarketMakingEnv(date=market_config.TRAIN_DAYS[0], symbol=args.symbol)
         agent, baseline, mask, is_sac = None, env.baseline_action(), [], False
+        participation = "free"
         env.close()
         label = args.label or "baseline"
     else:
-        agent, baseline, mask, config = load_policy(Path(args.policy))
+        agent, baseline, mask, config, participation = load_policy(Path(args.policy))
         is_sac = config.algo == "sac"
         label = args.label or Path(args.policy).parent.name
 
     run = Run(phase="c3", name=f"eval-{label}-{args.days}",
-              config={"policy": args.policy, "days": days, "symbol": args.symbol})
+              config={"policy": args.policy, "days": days, "symbol": args.symbol,
+                      "participation": participation})
 
     print(f"{label} on {args.days} days")
     print(f"{'date':>12} {'SR':>9} {'Sortino':>9} {'Return':>9} {'RoMDD':>8} {'MaxPos':>10} "
           f"{'fills':>8} {'half':>6} {'skew':>6}")
     rows = []
     for i, date in enumerate(days):
-        stats = run_day(date, args.symbol, agent, baseline, mask, is_sac)
+        stats = run_day(date, args.symbol, agent, baseline, mask, is_sac, participation)
         rows.append(stats)
         run.log(step=i, **stats)
         print(f"{date:>12} {stats['SR']:9.2f} {stats['Sortino']:9.2f} {stats['Return']:9.4f} "
