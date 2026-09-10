@@ -13,6 +13,33 @@ deterministic policy gradient, why the min of twin critics biases downward, SAC'
 Boltzmann optimal policy, and the tanh Jacobian correction are in
 [`docs/writeups/a5-continuous-control.md`](../../docs/writeups/a5-continuous-control.md).
 
+## Correction: these numbers were not reproducible from their seeds
+
+Found while refactoring this file for C3, which reuses these algorithms
+unchanged. `train` called `env.reset(seed=seed)` and then drew its first 1,000
+exploration actions from `env.action_space.sample()` — and Gymnasium seeds the
+*environment* from `reset`, not the *action space*. Those 1,000 actions came
+from an unseeded RNG, so two runs of the same seed disagreed:
+
+```
+same code, same seed, two runs:
+  -1507.194, -1479.145, -1154.098
+  -1507.211, -1487.547, -1196.327
+```
+
+Fixed by seeding the action space explicitly; the same code now returns
+identical numbers across runs. The tables above were produced before the fix,
+so they are reproducible **in distribution but not exactly** — re-running the
+DDPG arm gives per-seed finals of −150, −151, −154, −197, −143 against the
+committed −161, −146, −145, −194, −147, and means of −159.0 against −158.5.
+Every conclusion in this phase rests on differences far larger than that
+spread, so the tables are left as run rather than quietly replaced.
+
+The lesson is the one this repo keeps relearning: a seed argument is not
+evidence of determinism. Checking that two runs of one seed agree costs a
+minute and was never done here.
+
+
 ## Algorithms as implemented
 
 **The problem.** With $a \in \mathbb{R}^d$, $\arg\max_a Q(s,a)$ is a non-convex

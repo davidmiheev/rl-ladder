@@ -44,7 +44,7 @@ from typing import Any
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
-from hftbacktest import BUY, BUY_EVENT, GTX, LIMIT, SELL
+from hftbacktest import BUY, BUY_EVENT, GTX, LIMIT, SELL, Recorder
 from numba import njit
 from numba.typed import Dict
 
@@ -102,7 +102,7 @@ def _squash(x: float, scale: float) -> float:
 
 @njit
 def quote_once(
-    hbt, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
+    hbt, recorder, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
     gamma, c1_scale, half_scale, skew_scale,
     order_qty, max_position, grid_num, interval_ns,
 ):
@@ -232,20 +232,21 @@ def quote_once(
         if order_id not in orders:
             hbt.submit_sell_order(0, order_id, order_price, order_qty, GTX, LIMIT, False)
 
+    recorder.record(hbt)
     state[S_T] = t + 1
     return 0
 
 
 @njit
 def advance(
-    hbt, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
+    hbt, recorder, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
     gamma, c1_scale, half_scale, skew_scale,
     order_qty, max_position, grid_num, interval_ns, n_inner,
 ):
     """`n_inner` quoting iterations under one set of coefficients."""
     for _ in range(n_inner):
         if quote_once(
-            hbt, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
+            hbt, recorder, buf_arrival, buf_midchg, buf_flow, tmp, ticks, state,
             gamma, c1_scale, half_scale, skew_scale,
             order_qty, max_position, grid_num, interval_ns,
         ) != 0:
@@ -347,7 +348,7 @@ class MarketMakingEnv(gym.Env):
         self.observation_space = spaces.Box(-10.0, 10.0, shape=(len(FEATURES),), dtype=np.float32)
 
         self._hbt = None
-        self._buffers_for = None
+        self._recorder = None
 
     # -- action mapping ----------------------------------------------------
 
@@ -376,6 +377,9 @@ class MarketMakingEnv(gym.Env):
         config.use_symbol(self.symbol)
         config.ensure_latency(self.date)
         self._hbt = config.build_backtest(self.date)
+        # Recorded every quoting iteration, so an episode can be scored with
+        # exactly the machinery C1 used and the two tables are comparable.
+        self._recorder = Recorder(1, glft.buffer_steps(self.quote_interval_ns) + 1024)
 
         size = glft.buffer_steps(self.quote_interval_ns)
         self._arrival = np.full(size, np.nan)
@@ -399,8 +403,8 @@ class MarketMakingEnv(gym.Env):
         warmup = glft.window_steps(self.quote_interval_ns)
         gamma, c1_scale, half_scale, skew_scale = self.BASELINE
         status = advance(
-            self._hbt, self._arrival, self._midchg, self._flow, self._tmp, self._ticks,
-            self._state, gamma, c1_scale, half_scale, skew_scale,
+            self._hbt, self._recorder.recorder, self._arrival, self._midchg, self._flow,
+            self._tmp, self._ticks, self._state, gamma, c1_scale, half_scale, skew_scale,
             self.order_qty, self.max_position, self.grid_num, self.quote_interval_ns, warmup,
         )
         self._done = status != 0
@@ -412,9 +416,10 @@ class MarketMakingEnv(gym.Env):
             raise RuntimeError("call reset() before step()")
         gamma, c1_scale, half_scale, skew_scale = self.to_coefficients(action)
         status = advance(
-            self._hbt, self._arrival, self._midchg, self._flow, self._tmp, self._ticks,
-            self._state, gamma, c1_scale, half_scale, skew_scale,
-            self.order_qty, self.max_position, self.grid_num, self.quote_interval_ns, self.n_inner,
+            self._hbt, self._recorder.recorder, self._arrival, self._midchg, self._flow,
+            self._tmp, self._ticks, self._state, gamma, c1_scale, half_scale, skew_scale,
+            self.order_qty, self.max_position, self.grid_num, self.quote_interval_ns,
+            self.n_inner,
         )
         self._steps += 1
 
@@ -438,6 +443,15 @@ class MarketMakingEnv(gym.Env):
             "num_trades": self._num_trades(),
         }
         return self._observe(), float(reward), False, bool(truncated), info
+
+    def equity_record(self) -> np.ndarray:
+        """The episode's equity path, in the format `hftbacktest.stats` expects.
+
+        Sampled every quoting iteration, so C3 can score a learned policy with
+        the same `LinearAssetRecord` call C1 used for the fixed baseline and
+        the two result tables mean the same thing.
+        """
+        return self._recorder.get(0)
 
     def close(self) -> None:
         if self._hbt is not None:

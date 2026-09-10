@@ -132,6 +132,117 @@ class ReplayBuffer:
 
 
 @dataclass
+class Agent:
+    """The networks, their targets and their optimisers, in one place.
+
+    Split out of `train` so that a different outer loop can drive the same
+    update rather than a copy of it: C3 runs these algorithms against a
+    market-making environment where one episode costs ninety seconds and the
+    loop has to cycle over trading days, but the algorithm must stay the one
+    A5 measured.
+    """
+
+    actor: nn.Module
+    critic: nn.Module
+    actor_target: nn.Module
+    critic_target: nn.Module
+    actor_opt: torch.optim.Optimizer
+    critic_opt: torch.optim.Optimizer
+    act_limit: float
+    is_sac: bool
+
+
+def build_agent(config: Config, obs_dim: int, act_dim: int, act_limit: float) -> Agent:
+    is_sac = config.algo == "sac"
+    actor_cls = GaussianActor if is_sac else DeterministicActor
+    actor = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
+    critic = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
+    actor_target = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
+    critic_target = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
+    actor_target.load_state_dict(actor.state_dict())
+    critic_target.load_state_dict(critic.state_dict())
+    return Agent(
+        actor=actor,
+        critic=critic,
+        actor_target=actor_target,
+        critic_target=critic_target,
+        actor_opt=torch.optim.Adam(actor.parameters(), lr=config.lr),
+        critic_opt=torch.optim.Adam(critic.parameters(), lr=config.lr),
+        act_limit=act_limit,
+        is_sac=is_sac,
+    )
+
+
+def select_action(agent: Agent, obs, config: Config, rng: np.random.Generator, act_dim: int):
+    """The behaviour policy: SAC samples, DDPG and TD3 add Gaussian noise."""
+    with torch.no_grad():
+        obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+        if agent.is_sac:
+            action, _ = agent.actor(obs_t)
+            return action.squeeze(0).numpy()
+        action = agent.actor(obs_t).squeeze(0).numpy()
+    noisy = action + config.exploration_noise * agent.act_limit * rng.normal(size=act_dim)
+    return np.clip(noisy, -agent.act_limit, agent.act_limit)
+
+
+def update_step(config: Config, agent: Agent, batch, step: int) -> float:
+    """One critic update, plus actor and target updates every `policy_delay`."""
+    b_obs, b_act, b_rew, b_next, b_term = batch
+    act_limit = agent.act_limit
+
+    with torch.no_grad():
+        if agent.is_sac:
+            next_action, next_logp = agent.actor_target(b_next)
+        else:
+            next_action = agent.actor_target(b_next)
+            if config.target_noise:
+                # Target policy smoothing: a sharp critic error at one
+                # action cannot be exploited if the target is averaged
+                # over a small neighbourhood of it.
+                noise = (config.target_noise * act_limit * torch.randn_like(next_action)
+                         ).clamp(-config.target_noise_clip * act_limit,
+                                 config.target_noise_clip * act_limit)
+                next_action = (next_action + noise).clamp(-act_limit, act_limit)
+
+        q1_t, q2_t = agent.critic_target(b_next, next_action)
+        next_q = q1_t if q2_t is None else torch.min(q1_t, q2_t)
+        if agent.is_sac:
+            next_q = next_q - config.alpha * next_logp
+        target_q = b_rew + config.gamma * (1.0 - b_term) * next_q
+
+    q1, q2 = agent.critic(b_obs, b_act)
+    critic_loss = nn.functional.mse_loss(q1, target_q)
+    if q2 is not None:
+        critic_loss = critic_loss + nn.functional.mse_loss(q2, target_q)
+    agent.critic_opt.zero_grad()
+    critic_loss.backward()
+    agent.critic_opt.step()
+
+    if step % config.policy_delay == 0:
+        if agent.is_sac:
+            new_action, logp = agent.actor(b_obs)
+            q1_pi, q2_pi = agent.critic(b_obs, new_action)
+            q_pi = q1_pi if q2_pi is None else torch.min(q1_pi, q2_pi)
+            actor_loss = (config.alpha * logp - q_pi).mean()
+        else:
+            q1_pi, _ = agent.critic(b_obs, agent.actor(b_obs))
+            actor_loss = -q1_pi.mean()
+        agent.actor_opt.zero_grad()
+        actor_loss.backward()
+        agent.actor_opt.step()
+
+        with torch.no_grad():
+            for net, target_net in (
+                (agent.actor, agent.actor_target),
+                (agent.critic, agent.critic_target),
+            ):
+                for p, p_t in zip(net.parameters(), target_net.parameters(), strict=True):
+                    p_t.mul_(1 - config.tau).add_(config.tau * p)
+
+    return float(critic_loss.detach())
+
+
+@dataclass
 class Metrics:
     eval_steps: list[int] = field(default_factory=list)
     eval_returns: list[float] = field(default_factory=list)
@@ -194,33 +305,22 @@ def train(config: Config, seed: int):
     act_dim = int(np.prod(env.action_space.shape))
     act_limit = float(env.action_space.high[0])
 
-    is_sac = config.algo == "sac"
-    actor_cls = GaussianActor if is_sac else DeterministicActor
-    actor = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
-    critic = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
-    actor_target = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
-    critic_target = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
-    actor_target.load_state_dict(actor.state_dict())
-    critic_target.load_state_dict(critic.state_dict())
-
-    actor_opt = torch.optim.Adam(actor.parameters(), lr=config.lr)
-    critic_opt = torch.optim.Adam(critic.parameters(), lr=config.lr)
+    agent = build_agent(config, obs_dim, act_dim, act_limit)
+    actor, critic = agent.actor, agent.critic
     buffer = ReplayBuffer(config.buffer_size, obs_dim, act_dim)
     metrics = Metrics()
 
     obs, _ = env.reset(seed=seed)
+    # `reset(seed=...)` seeds the environment, not the action space, so the
+    # `learning_starts` exploration phase below was drawing from an unseeded
+    # RNG and two runs of the same seed did not agree.  Seeding it explicitly
+    # is what makes a run reproducible from its seed alone.
+    env.action_space.seed(seed)
     for step in range(1, config.total_steps + 1):
         if step < config.learning_starts:
             action = env.action_space.sample()
-        elif is_sac:
-            with torch.no_grad():
-                a, _ = actor(torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0))
-            action = a.squeeze(0).numpy()
         else:
-            with torch.no_grad():
-                a = actor(torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0))
-            action = a.squeeze(0).numpy() + config.exploration_noise * act_limit * rng.normal(size=act_dim)
-            action = np.clip(action, -act_limit, act_limit)
+            action = select_action(agent, obs, config, rng, act_dim)
 
         next_obs, reward, terminated, truncated, _ = env.step(action)
         buffer.add(obs, action, reward, next_obs, terminated)
@@ -229,55 +329,10 @@ def train(config: Config, seed: int):
             obs, _ = env.reset()
 
         if step >= config.learning_starts:
-            b_obs, b_act, b_rew, b_next, b_term = buffer.sample(config.batch_size, rng)
-
-            with torch.no_grad():
-                if is_sac:
-                    next_action, next_logp = actor_target(b_next)
-                else:
-                    next_action = actor_target(b_next)
-                    if config.target_noise:
-                        # Target policy smoothing: a sharp critic error at one
-                        # action cannot be exploited if the target is averaged
-                        # over a small neighbourhood of it.
-                        noise = (config.target_noise * act_limit * torch.randn_like(next_action)
-                                 ).clamp(-config.target_noise_clip * act_limit,
-                                         config.target_noise_clip * act_limit)
-                        next_action = (next_action + noise).clamp(-act_limit, act_limit)
-
-                q1_t, q2_t = critic_target(b_next, next_action)
-                next_q = q1_t if q2_t is None else torch.min(q1_t, q2_t)
-                if is_sac:
-                    next_q = next_q - config.alpha * next_logp
-                target_q = b_rew + config.gamma * (1.0 - b_term) * next_q
-
-            q1, q2 = critic(b_obs, b_act)
-            critic_loss = nn.functional.mse_loss(q1, target_q)
-            if q2 is not None:
-                critic_loss = critic_loss + nn.functional.mse_loss(q2, target_q)
-            critic_opt.zero_grad()
-            critic_loss.backward()
-            critic_opt.step()
+            batch = buffer.sample(config.batch_size, rng)
+            loss = update_step(config, agent, batch, step)
             if step % 100 == 0:
-                metrics.critic_loss.append(float(critic_loss.detach()))
-
-            if step % config.policy_delay == 0:
-                if is_sac:
-                    new_action, logp = actor(b_obs)
-                    q1_pi, q2_pi = critic(b_obs, new_action)
-                    q_pi = q1_pi if q2_pi is None else torch.min(q1_pi, q2_pi)
-                    actor_loss = (config.alpha * logp - q_pi).mean()
-                else:
-                    q1_pi, _ = critic(b_obs, actor(b_obs))
-                    actor_loss = -q1_pi.mean()
-                actor_opt.zero_grad()
-                actor_loss.backward()
-                actor_opt.step()
-
-                with torch.no_grad():
-                    for net, target_net in ((actor, actor_target), (critic, critic_target)):
-                        for p, p_t in zip(net.parameters(), target_net.parameters(), strict=True):
-                            p_t.mul_(1 - config.tau).add_(config.tau * p)
+                metrics.critic_loss.append(loss)
 
         if step % config.eval_every == 0:
             ret, pred, act = evaluate(eval_env, actor, critic, config, seed)
