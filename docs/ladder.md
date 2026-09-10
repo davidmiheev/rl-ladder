@@ -843,10 +843,13 @@ auditable.
 
 **Reading.** Your order-book-imbalance, basis, and APT alpha notes.
 
+**Writeup.** [`writeups/c2-env.md`](writeups/c2-env.md) ·
+lab notebook [`experiments/c2_env/README.md`](../experiments/c2_env/README.md)
+
 **Practical lab.** [Gymnasium custom environment tutorial](https://gymnasium.farama.org/introduction/create_custom_env/)
 — the standard pattern for wrapping hftbacktest as a `step()`/`reset()` Gym-style env
 
-- [ ] Define state: inventory q, short-horizon volatility estimate, order-book imbalance / micro-price features, basis & APT alpha signals
+- [x] Define state: inventory q, short-horizon volatility estimate, order-book imbalance / micro-price features, basis & APT alpha signals
 
   What the policy is allowed to see. Inventory matters because risk is a
   function of position; short-horizon volatility and order-book imbalance
@@ -854,7 +857,7 @@ auditable.
   predict direction. Anything you leave out, the policy cannot condition on —
   and anything you put in, it can overfit to.
 
-- [ ] Define the action space as the GLFT coefficient set itself — γ, c1, and a half-spread/skew scaling term — rather than raw quote prices, so the policy stays interpretable inside the existing formula
+- [x] Define the action space as the GLFT coefficient set itself — γ, c1, and a half-spread/skew scaling term — rather than raw quote prices, so the policy stays interpretable inside the existing formula
 
   The central design decision of Part C. Rather than emitting raw quote prices,
   the policy outputs the *coefficients* of a model that is already known to be
@@ -863,7 +866,7 @@ auditable.
   uses, and the fixed-coefficient baseline is a strict special case — which
   makes "did RL help" a well-posed question.
 
-- [ ] Define reward as mark-to-market PnL minus an inventory-risk penalty (e.g. −η·q²), mirroring the risk term the GLFT model already encodes analytically
+- [x] Define reward as mark-to-market PnL minus an inventory-risk penalty (e.g. −η·q²), mirroring the risk term the GLFT model already encodes analytically
 
   PnL alone would reward taking unbounded inventory risk that happens not to
   have been punished on the training days. Subtracting a penalty in the squared
@@ -871,7 +874,7 @@ auditable.
   analytically, so the learned objective and the baseline's objective are
   comparable.
 
-- [ ] Wrap hftbacktest as a Gym-style environment: one episode per trading session, one step per grid-refresh interval
+- [x] Wrap hftbacktest as a Gym-style environment: one episode per trading session, one step per grid-refresh interval
 
   One episode per trading session, one step per grid refresh. The engineering
   here is mostly making sure the environment's step boundary matches the
