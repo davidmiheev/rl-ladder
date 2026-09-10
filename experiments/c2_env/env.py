@@ -287,6 +287,11 @@ class MarketMakingEnv(gym.Env):
             session. Calibrating it against the PnL term's per-step standard
             deviation instead would be wrong by two orders of magnitude, since
             that term is near zero-mean noise while the penalty accumulates.
+        max_steps (`int`, *optional*, defaults to `0`):
+            Cap the episode at this many policy steps. `0` runs the whole
+            session, which is what every reported result uses; a cap exists
+            for smoke tests and makes the episode a truncation rather than a
+            session, so do not report from it.
         allow_held_out (`bool`, *optional*, defaults to `False`):
             Permit a held-out day. Off by default so a training loop cannot
             silently read the test set.
@@ -326,6 +331,7 @@ class MarketMakingEnv(gym.Env):
         eta: float = 0.015,
         step_interval_ns: int = STEP_INTERVAL_NS,
         quote_interval_ns: int = QUOTE_INTERVAL_NS,
+        max_steps: int = 0,
         allow_held_out: bool = False,
     ) -> None:
         super().__init__()
@@ -342,6 +348,7 @@ class MarketMakingEnv(gym.Env):
         self.book_size = book_size
         self.eta = eta
         self.quote_interval_ns = quote_interval_ns
+        self.max_steps = max_steps
         self.n_inner = max(1, step_interval_ns // quote_interval_ns)
 
         self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.ACTION_RANGES),), dtype=np.float32)
@@ -396,6 +403,8 @@ class MarketMakingEnv(gym.Env):
         self._steps = 0
         self._equity = 0.0
         self._session_steps = int(24 * 3600 * 1e9 / (self.n_inner * self.quote_interval_ns))
+        if self.max_steps:
+            self._session_steps = min(self._session_steps, self.max_steps)
 
         # The model needs one calibration window before it can quote at all, so
         # the episode starts after it.  The policy is not asked for decisions
