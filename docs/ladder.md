@@ -51,7 +51,9 @@ strictly needs familiarity with policy gradients and value functions to start.
 B1–B4 build on each other directly; **B5 can run in parallel with B4**; B6 is
 optional, once B1–B3 feel mechanical. Part C can start any time after A5
 (continuous control) — C4 additionally reuses B1/B3's PPO/GRPO implementations
-directly, so it is the natural place to do Part C after touching Part B.
+directly, so it is the natural place to do Part C after touching Part B. In
+practice this repo ran Part C first, after Part A: only C4 needs B1/B3, and
+everything before it needs A5 at most.
 
 Where a phase lists a **Practical lab**, that is a hands-on notebook from
 Yandex School of Data Analysis's [Practical_RL](https://github.com/yandexdataschool/Practical_RL)
@@ -505,6 +507,11 @@ it as bonus material beyond the core syllabus.
 > **Part A is complete (26/26).** The cross-cutting lessons — including the six
 > times a headline metric hid the effect being measured — are collected in
 > [`part-a-summary.md`](part-a-summary.md).
+>
+> **Part C is being worked before Part B**, on the reasoning that Part A is the
+> prerequisite for both and Part C needs nothing from Part B until C4. The
+> ladder below is left in its original order; work jumps to
+> [Part C](#part-c--quant-research-market-making-parameter-rl) and comes back here.
 
 # Part B — LLM Post-Training RL
 
@@ -790,10 +797,13 @@ to beat — on the same held-out days, not just the training days.
 **Reading.** [Guéant–Lehalle–Fernandez-Tapia paper](https://arxiv.org/abs/1605.01862) ·
 your GLFT + grid-trading notes
 
+**Writeup.** [`writeups/c1-glft-baseline.md`](writeups/c1-glft-baseline.md) ·
+lab notebook [`experiments/c1_glft_baseline/README.md`](../experiments/c1_glft_baseline/README.md)
+
 **Practical lab.** [hftbacktest's official GLFT + grid-trading notebook](https://github.com/nkaz001/hftbacktest/blob/master/examples/GLFT%20Market%20Making%20Model%20and%20Grid%20Trading.ipynb)
 — likely the direct source of your own notes; run it as-is before modifying anything
 
-- [ ] Calibrate A, k (order-arrival intensity) and σ (volatility) from market data; derive c1, c2 and reproduce the GLFT half-spread/skew formulas
+- [x] Calibrate A, k (order-arrival intensity) and σ (volatility) from market data; derive c1, c2 and reproduce the GLFT half-spread/skew formulas
 
   The GLFT model prices a market maker's quotes from a small number of
   measurable quantities: how order arrivals fall off with distance from the mid
@@ -802,14 +812,14 @@ your GLFT + grid-trading notes
   half-spread and inventory skew. This is the analytic model that Part C's RL
   will later adjust rather than replace.
 
-- [ ] Run the calibrated GLFT grid market maker in hftbacktest on the sample data; reproduce the reported Sharpe/Sortino/MaxPositionValue stats
+- [x] Run the calibrated GLFT grid market maker in hftbacktest on the sample data; reproduce the reported Sharpe/Sortino/MaxPositionValue stats
 
   Replay real order-book data through the calibrated quoter and reproduce the
   published statistics. Getting the same numbers is the check that your
   calibration and your fill assumptions are right, before anything is learned
   on top of them.
 
-- [ ] Reproduce the simplified non-parametric HF-grid variant (percentile-based intensity, micro-price) and compare against the parametric GLFT baseline
+- [x] Reproduce the simplified non-parametric HF-grid variant (percentile-based intensity, micro-price) and compare against the parametric GLFT baseline
 
   The same strategy with the parametric intensity fit replaced by empirical
   percentiles and the mid replaced by a micro-price. Comparing them tells you

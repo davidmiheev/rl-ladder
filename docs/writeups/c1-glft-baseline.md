@@ -139,6 +139,27 @@ eight-field event format. Ten days: five training
 in [`config.py`](../../experiments/c1_glft_baseline/config.py) so C3–C5 cannot
 re-pick it; see [`docs/data.md`](../data.md).
 
+**The ten days**, described once with no orders placed
+([`measure_days.py`](../../experiments/c1_glft_baseline/measure_days.py)). The
+$\sigma$ column is the one that decides everything in §5:
+
+| date | set | $\sigma$ (ticks$/\sqrt{s}$) | spread = 1 tick | steps with a trade | median arrival depth |
+| --- | --- | --- | --- | --- | --- |
+| 2025-08-26 | train | 47.1 | 98.4% | 249,144 | 0.5 |
+| 2025-08-27 | train | 43.0 | 98.5% | 181,221 | 0.5 |
+| 2025-08-28 | train | 32.4 | 99.3% | 154,155 | 0.5 |
+| 2025-09-01 | train | 35.2 | 99.0% | 164,695 | 0.5 |
+| 2025-09-08 | train | 21.3 | 99.6% | 132,727 | 0.5 |
+| 2025-09-15 | held out | 31.2 | 98.8% | 156,399 | 0.5 |
+| 2025-09-18 | held out | 24.5 | 99.4% | 138,274 | 0.5 |
+| 2025-09-20 | held out | 12.8 | 99.8% | 53,244 | 0.5 |
+| 2025-09-22 | held out | 47.0 | 97.9% | 194,038 | 3.5 |
+| 2025-09-25 | held out | 49.4 | 96.8% | 266,256 | 3.5 |
+
+Reading $\sigma$ for a held-out day is a description of the market, not a
+selection on a result: no PnL is involved, and it is used below only to explain
+numbers that were already computed.
+
 **Order latency** is not in the dataset, so it is synthesised from the feed
 latency the data itself carries (`local_ts - exch_ts`) at hftbacktest's own
 multipliers — entry $4\times$, response $3\times$ — giving a round trip of about
@@ -186,6 +207,17 @@ them containing a trade:
 | inventory that cancels the whole half spread | 0.67 units |
 | trading steps reaching the half spread | 0.81% |
 
+![calibration](../assets/c1/calibration.png)
+
+The left panel is worth pausing on, because it refutes the premise item 3 was
+written under. On ETHUSDC the exponential form **fits well**: $R^2 = 0.984$
+across the full 500-bucket range, and refitting on the first 70 buckets barely
+moves $k$ (0.0135 → 0.0136). In the source notebook the same refit *tripled*
+$k$ (0.0170 → 0.0424), which is what motivated replacing the parametric form
+with percentiles in the first place. Here there is nothing for a non-parametric
+estimator to fix — the intensity really is exponential in depth, and the
+trouble is what the fitted $k$ implies, not how well it fits.
+
 Rolling recalibration every 5 s on a trailing 10-minute window, 17,160 windows
 over the day (median [p5, p95]): $A$ 1.09 [0.62, 2.74], $k$ 0.0196 [0.0124,
 0.0261], $\sigma$ 38.2 [25.7, 84.5], half spread 75.7 [55.2, 131.2], skew 100.7
@@ -217,15 +249,199 @@ times theirs, and both differences push the quote further out.
 
 ### Item 2 — the backtest
 
-_(filled in below from the final runs)_
+Every strategy, every day, one lot a side against a 100,000 book, at the
+notebook's 100 ms reaction interval
+([`summarise.py`](../../experiments/c1_glft_baseline/summarise.py)):
+
+**Training days**
+
+| strategy | SR (median) | Sortino | Return | days profitable | fills/day | half spread | net/fill | gross/fill |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `touch` | −176.5 | −207.9 | −19.3% | 0/5 | 106,101 | 0.5 | −23.2 | −45.2 |
+| `glft` | −359.3 | −354.6 | −1.9% | 0/5 | 8,275 | 60.9 | −21.3 | −43.3 |
+| `glft-adj` | −58.5 | −68.2 | −1.4% | 0/5 | 5,735 | 60.9 | −23.7 | −45.7 |
+| `glft-grid` | **−32.3** | −42.1 | −0.9% | 0/5 | 2,886 | 60.9 | −34.6 | −56.6 |
+| `simplified` | −62.9 | −71.4 | −3.6% | 0/5 | 12,928 | 36.5 | −23.0 | −45.0 |
+| `simplified-mid` | −62.8 | −71.3 | −3.6% | 0/5 | 12,928 | 36.5 | −22.9 | −44.9 |
+
+**Held-out days**
+
+| strategy | SR (median) | Sortino | Return | days profitable | fills/day | half spread | net/fill | gross/fill |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `touch` | −78.3 | −95.9 | −7.2% | 0/5 | 113,469 | 0.5 | −6.8 | −28.8 |
+| `glft` | −132.9 | −141.2 | −0.7% | 0/5 | 10,117 | 46.9 | −7.4 | −29.4 |
+| `glft-adj` | −18.3 | −20.8 | −0.4% | 0/5 | 6,961 | 46.9 | −5.3 | −27.3 |
+| `glft-grid` | **+0.37** | +0.43 | +0.0% | **3/5** | 3,868 | 46.9 | +0.3 | −21.7 |
+| `simplified` | −17.3 | −19.5 | −0.7% | 0/5 | 12,849 | 30.5 | −9.0 | −31.0 |
+| `simplified-mid` | −17.1 | −19.3 | −0.7% | 0/5 | 12,855 | 30.5 | −8.9 | −30.9 |
+
+"net/fill" and "gross/fill" are in ticks: what one fill was worth after and
+before the maker rebate, which is +22.0 ticks at a price of 4400.
+
+The reproduction succeeds in shape and fails in sign.
+
+- **The unadjusted model loses, exactly as published.** hftbacktest reports
+  SR −246.4, ReturnOverMDD −0.9987, ReturnOverTrade $-3.5\times10^{-5}$ for
+  `glft` on ETHUSDT 2022-10-03; we get SR −359.3, ReturnOverMDD −1.000,
+  ReturnOverTrade $-4.9\times10^{-5}$. Same pathology, same order of magnitude.
+- **`adj2` helps by the same mechanism.** Damping the skew lets the quoter hold
+  inventory (MaxPositionValue 13.0k → 45.1k) and cuts the bleed roughly in
+  half, as in the source.
+- **The grid helps again**, and it is the best variant on both sets, as
+  published — but where the notebook reaches SR +19.8 over five ETHUSDT days,
+  we reach −32.3 on training days and +0.37 on held-out ones.
+- **MaxPositionValue reproduces as a ratio**, which is the only way it can:
+  the notebook's grid peaks at 30,859 against a 20 ETH cap at ~1330, i.e.
+  1.16× the nominal cap; ours peaks at 89,816 against a 20 ETH cap at ~4400,
+  i.e. 1.02×. Both overshoot the cap for the same reason — the whole 20-deep
+  ladder can fill before the position gate closes.
+
+The published numbers themselves cannot be reproduced bit for bit: they are for
+ETHUSDT on 2022-10-03 to -07, and that file is not obtainable (the host the
+project links for sample data,
+`reach.stratosphere.capital`, serves a certificate that does not match its
+hostname, and disabling verification is not an acceptable way around that). So
+what is reproduced is the pipeline, the calibration and the qualitative
+ordering of the three variants, on different days.
+
+**Held-out is kinder than training, which is the wrong way round** — and it is
+the clue. The held-out set's median $\sigma$ is 31.2 against training's 35.2,
+and `glft-grid`'s per-day Sharpe on held-out days orders *perfectly* by that
+day's volatility:
+
+| day | $\sigma$ | `glft-grid` SR |
+| --- | --- | --- |
+| 2025-09-20 | 12.8 | **+2.0** |
+| 2025-09-18 | 24.5 | +0.7 |
+| 2025-09-15 | 31.2 | +0.4 |
+| 2025-09-22 | 47.0 | −43.1 |
+| 2025-09-25 | 49.4 | −57.6 |
+
+A median of +0.37 over that spread is not a profitable strategy; it is a
+strategy whose sign is decided by the volatility regime. Reporting the median
+alone would have hidden a −57.6 day.
 
 ### Item 3 — non-parametric intensity and the micro-price
 
-_(filled in below from the final runs)_
+The percentile half spread was chosen on training days only, over
+$\{65, 80, 92\}$:
+
+| percentile | SR (median, train) | Return | fills/day | half spread |
+| --- | --- | --- | --- | --- |
+| 65 | −339.4 | −46.4% | 272,916 | 7.5 |
+| 80 | −147.9 | −11.2% | 58,848 | 18.5 |
+| 92 | **−62.9** | −3.6% | 12,928 | 36.5 |
+
+**The selection is degenerate**, and saying so is more useful than reporting the
+winner. Every sweep in this phase — $\gamma$, `adj1`, the percentile — is
+monotone in how little the strategy trades, so "tuning" walks towards not
+quoting at all. The `adj1` sweep makes it starkest: at `adj1` 0.02, 0.05, 0.1,
+0.25, 0.5, 1.0 the median training Sharpe is −667, −502, −397, −245, −116,
+−32, with fills/day falling 664k → 2.9k. There is no interior optimum to find.
+`percentile = 92` is where the grid stopped, not where an optimum was.
+
+First, a correction to the item's premise, from §5's calibration plot: the
+parametric fit is *good* here ($R^2 = 0.984$, and the shallow refit barely
+moves $k$), where the source's motivation for going non-parametric was a fit
+that failed near the mid. So this item is testing a fix for a problem this
+asset does not have, and the result should be read that way.
+
+**The micro-price makes no difference at all**: `simplified` and
+`simplified-mid` agree to three significant figures on every metric, on both
+sets. That is a null with a mechanical explanation rather than a mystery.
+Quote prices must land on a tick; the micro-price differs from the mid by less
+than one tick when the touch spread *is* one tick, which is 98% of steps; and
+the grid then snaps the ladder to an interval of `round(half_spread)` ticks —
+30 or more — which is a hundred times coarser than the signal. The source's
+claim that the micro-price "can be highly effective for large tick size pairs"
+is about assets where the *spread* is wide in ticks. ETHUSDC's spread is one
+tick, so there is no room inside it for a sub-tick fair value to point to.
+
+Against the parametric baseline, the non-parametric variant is **worse on both
+sets** (−62.9 vs −32.3 train, −17.3 vs +0.37 held out) — but only because the
+percentile grid stopped at a tighter quote than GLFT's, and tighter is worse
+here. Per fill the two are indistinguishable (−45.0 vs −56.6 train, −31.0 vs
+−21.7 held out). Neither functional form is doing anything the other is not.
 
 ### Why it loses: the diagnosis
 
-_(filled in below)_
+Everything above collapses into one number. Group the strategy-days by that
+day's volatility and regress the gross value of a fill on it:
+
+$$\text{gross ticks per fill} = -0.72\,\sigma - 16.2, \qquad r = -0.58,\ n = 60.$$
+
+A market maker's income per fill is the half spread plus the rebate. Here the
+half spread is 0.5 ticks and the rebate is $|{-0.00005}| \times 4400 / 0.01 = 22.0$
+ticks, so income is 22.5 ticks and **essentially all of it is the rebate**. The
+strategy is therefore profitable exactly when
+
+$$0.72\,\sigma + 16.2 < 22.0 \quad\Longleftrightarrow\quad \sigma < 8.0 \ \text{ticks}/\sqrt{s}.$$
+
+The quietest day in the whole split is 12.8. hftbacktest's published ETHUSDT
+day is 10.7 — just above the line, which is consistent with that notebook's
+marginal SR of +1.2 for the single quoter. **The baseline did not fail because
+it was implemented wrong. It failed because ETH's price tripled while its tick
+size did not, so the model's income scales with price/tick while its cost
+scales with volatility in ticks, and volatility in ticks grew faster.**
+
+What is the $-0.72\sigma$? Adverse selection: the price moves against the
+position a fill opens. Three independent measurements agree on its size
+([`run_interval_study.py`](../../experiments/c1_glft_baseline/run_interval_study.py)),
+which matters, because a number this large is exactly what a broken simulator
+would also produce.
+
+![adverse selection](../assets/c1/adverse-selection.png)
+
+**1. Mark-to-mid of a fill, by horizon**, for the one-lot touch quoter on
+2025-08-26 (ticks; negative is against us):
+
+| interval | latency | fills | 0 s | 0.1 s | 0.5 s | 1 s | 5 s | 30 s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 100 ms | recorded | 13,579 | −27.5 | −38.2 | −44.1 | −44.2 | −45.8 | −45.7 |
+| 25 ms | recorded | 16,181 | −17.9 | −37.0 | −43.8 | −44.1 | −45.4 | −45.9 |
+| 10 ms | recorded | 17,584 | −15.2 | −36.7 | −43.8 | −44.2 | −45.9 | −46.0 |
+| 2 ms | recorded | 19,416 | −13.7 | −36.5 | −43.7 | −44.4 | −45.8 | −46.0 |
+| 100 ms | 0.1× | 14,071 | −26.6 | −38.4 | −44.5 | −44.7 | −45.9 | −46.1 |
+| 10 ms | 0.1× | 16,479 | −10.4 | −36.9 | −45.1 | −45.3 | −46.6 | −46.7 |
+| 2 ms | 0.1× | 16,627 | **−0.45** | −36.2 | −45.2 | −45.3 | −46.8 | −46.9 |
+
+The $0\,\text{s}$ column is *execution quality* — how far through the market the
+fill happened — and it is entirely a function of how fast the quoter reacts:
+reacting every 2 ms with 2 ms of latency, a fill lands at the touch and earns
+its half tick (−0.45 is +0.5 minus a small tail). **Reacting faster fixes
+execution and changes nothing else.** Every row converges to the same −45 within
+half a second.
+
+**2. The queue model is not responsible.** Holding the interval at 2 ms and
+swapping hftbacktest's queue-position model — risk-adverse, power(2), power2(2),
+power3(3), log, log2 — moves the 0.1 s figure over the range −35.6 to −36.4.
+This is worth checking explicitly because market-by-price data cannot see
+individual orders, so the queue model is a guess, and
+[`docs/data.md`](../data.md) warns that an optimistic one is the most likely
+way to get a wrong Part C result. Here it is not the binding assumption.
+
+**3. The same number, with no orders placed at all.** For every 2 ms step of the
+same day, record whether an aggressive trade crossed the touch and which way,
+then measure the mid a fixed time later — pure market data, the simulator's
+order handling never involved:
+
+| horizon | 0.1 s | 0.5 s | 1 s | 2 s | 5 s | 30 s |
+| --- | --- | --- | --- | --- | --- | --- |
+| mid move felt by a maker filled by that flow | −31.8 | −41.6 | −42.3 | −43.5 | −43.6 | −46.9 |
+
+Only 1.07% of 2 ms steps contain an aggressive trade, and the unconditional
+100 ms mid move has a standard deviation of 16.8 ticks. So a single at-touch
+trade predicts a **1.9σ** move in its own direction over the next 100 ms. That
+is the whole of ETHUSDC's price formation: the price moves when someone crosses
+the spread, and a passive maker is on the other side of every one of those
+crossings by construction.
+
+This is why no reparameterisation helps. GLFT prices *inventory risk* — the
+variance of holding a position — and adds a skew to unload it. It has no term
+for adverse selection, because its arrival intensity $\lambda(\delta)$ is
+assumed independent of what the price does next. On this asset that assumption
+is false by 1.9 standard deviations per trade, and no choice of $\gamma$,
+`adj1`, `adj2` or quote percentile can repair a missing term.
 
 ## 6. Checks with known answers
 
@@ -246,7 +462,76 @@ shows up as a disagreement rather than as a plausible-looking number.
 
 ## 7. What this sets up
 
-_(filled in below)_
+C1 was supposed to hand Part C a benchmark. It hands over something more
+specific and more useful: a measured obstacle, and the numbers that say what
+would have to be true to get past it.
+
+**The bar for C3–C5 is not "beat GLFT".** Every fixed-calibration variant loses
+on training days, so clearing that bar means nothing; an agent that learns to
+stop quoting clears it. The honest bar is three-sided, on held-out days:
+
+1. beat `glft-grid` (median SR +0.37, but −57.6 on the worst day),
+2. beat `touch` (SR −78.3), which is what "quote and hope" is worth, and
+3. beat **zero** — doing nothing is a legitimate and currently competitive
+   strategy here, so any learned policy has to justify trading at all.
+
+**C2's environment design follows from §5 rather than from taste.**
+
+- *The action space must include not quoting.* Every sweep here is monotone
+  towards trading less; a policy that cannot decline to quote is being asked to
+  choose the least bad way to lose.
+- *The state must carry order-flow information.* The $-0.72\sigma$ is the only
+  large term in the accounting, and the flow measurement says it is
+  predictable in principle: an at-touch trade calls the next 100 ms with a
+  1.9σ mean. A state of (inventory, spread, volatility) cannot see it; one
+  with queue imbalance and recent signed flow can.
+- *A 100 ms step is defensible after all.* The interval study separates
+  execution quality, which is entirely a function of reaction speed, from
+  post-fill drift, which is not: the 0.5 s mark is −44 whether the quoter
+  reacts every 100 ms or every 2 ms. Since the drift is what dominates, C2 can
+  keep the cheap 100 ms step for training without changing what it is learning
+  about — and can spend the saved compute on episodes instead. This is worth
+  stating as a prediction that C3 can falsify.
+- *The reward must be marked to market each step, not realised at unwind.*
+  Almost none of the loss is in the execution price; nearly all of it appears
+  while the position is held. A reward that only credits closed round trips
+  gives the agent no gradient on the thing that actually costs it money.
+
+**C4 has its failure mode named in advance.** The degenerate sweeps here are
+exactly what reward hacking will look like in C3: the policy that maximises the
+metric is the policy that barely trades. C4's overfitting checks should include
+a fill-count floor, and the observation that a Sharpe computed over a strategy
+that trades twice a day is not a Sharpe.
+
+**C5 has a quantified target.** The order-flow continuation *is* the alpha the
+phase is about, and §5 says how much of it there is: conditional mean 31.8
+ticks against an unconditional 100 ms standard deviation of 16.8. A signal
+that lets a quoter avoid a third of those fills turns the accounting positive
+at the observed volatility.
+
+### Limits worth stating
+
+- **One asset, one month, one fee tier.** ETHUSDC over 31 days, with Binance's
+  best market-maker rebate assumed throughout. The rebate is 98% of the gross
+  income in the accounting above; at a standard 0.02% maker fee every result
+  here gets worse by 30 ticks a fill, and nothing in this family is close.
+- **Order latency is modelled, not measured.** Round trip ≈ 20 ms, synthesised
+  from the recorded feed latency at hftbacktest's multipliers. §5 shows the
+  conclusions do not turn on it — cutting latency tenfold changes the 0.5 s
+  mark by under 2 ticks — but the absolute execution figures do.
+- **Queue priority cannot be represented.** Market-by-price data cannot say
+  where in a queue an order sits, so hftbacktest guesses. §5 shows the guess
+  is not what decides these results, but it also means C1 cannot speak to the
+  strategy real market makers actually run, which is to win the queue and be
+  filled by uninformed flow. That strategy is invisible in this data.
+- **The five-day sets are small and the daily spread is enormous** (`glft-grid`
+  ranges +2.0 to −57.6 on held-out days). Medians are reported alongside every
+  per-day value for exactly that reason, and no claim here rests on a
+  difference smaller than the day-to-day range.
+- **The negative result is about this asset, not about GLFT.** A cross-check on
+  a second symbol was set up (`--symbol xrpusdt`) but not run to completion;
+  until it is, "GLFT does not work here" is the claim, and "GLFT does not
+  work" is not.
 
 ## 8. Where these items come from
 
