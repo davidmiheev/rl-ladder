@@ -71,13 +71,13 @@ the writeup.
 | `glft-final` | (4.6)/(4.7) verbatim | train | −359.3 | −1.9% | 0/5 | 8,275 | −43.3 |
 | `glft-adj-final` | + `adj2 = 0.05` | train | −58.5 | −1.4% | 0/5 | 5,735 | −45.7 |
 | `glft-grid-final` | + 20-deep grid | train | **−32.3** | −0.9% | 0/5 | 2,886 | −56.6 |
-| `simplified-final` | percentile 92 + micro-price | train | −62.9 | −3.6% | 0/5 | 12,928 | −45.0 |
+| `simplified-final` | percentile 92 + micro-price | train | −63.0 | −3.5% | 0/5 | 12,666 | −45.1 |
 | `simplified-mid-final` | percentile 92 + mid | train | −62.8 | −3.6% | 0/5 | 12,928 | −44.9 |
 | `touch-final` | touch at the touch, no model | held out | −78.3 | −7.2% | 0/5 | 113,469 | −28.8 |
 | `glft-final` | (4.6)/(4.7) verbatim | held out | −132.9 | −0.7% | 0/5 | 10,117 | −29.4 |
 | `glft-adj-final` | + `adj2 = 0.05` | held out | −18.3 | −0.4% | 0/5 | 6,961 | −27.3 |
 | `glft-grid-final` | + 20-deep grid | held out | **+0.37** | +0.0% | **3/5** | 3,868 | −21.7 |
-| `simplified-final` | percentile 92 + micro-price | held out | −17.3 | −0.7% | 0/5 | 12,849 | −31.0 |
+| `simplified-final` | percentile 92 + micro-price | held out | −16.3 | −0.7% | 0/5 | 12,594 | −30.6 |
 | `simplified-mid-final` | percentile 92 + mid | held out | −17.1 | −0.7% | 0/5 | 12,855 | −30.9 |
 
 Calibration on 2025-08-26: $A = 2.28$, $k = 0.0136$, $\sigma = 47.1$ ticks$/\sqrt{s}$
@@ -123,13 +123,33 @@ it (0.0170 → 0.0424), which is what motivated the non-parametric variant. Item
 
 ![calibration](../../docs/assets/c1/calibration.png)
 
-**The micro-price does nothing here, for a mechanical reason.** `simplified` and
-`simplified-mid` agree to three significant figures on every metric. Quote
-prices land on ticks, the micro-price differs from the mid by less than a tick
-when the spread is one tick, and the grid then snaps the ladder to 30-tick
-intervals. The source recommends the micro-price for large-tick assets, meaning
-assets whose *spread* is wide in ticks; ETHUSDC's spread is one tick, so there
-is nothing inside it to point at.
+**The micro-price does something, and it is far too small to matter.** On
+held-out days it moves median Sharpe from −17.1 to −16.3 and the gross value
+of a fill from −30.9 to −30.6 ticks; on training days it is marginally worse.
+Both sit well inside the day-to-day range (−8.9 to −68.1 on held-out days).
+Against 21 ticks per fill of adverse selection, a sub-tick refinement of the
+fair price is not the instrument that fixes this.
+
+**A second bug worth recording, because it produced a published number.** The
+first version of this README reported that `simplified` and `simplified-mid`
+were *identical* to three significant figures, and explained it as grid
+quantisation swamping a sub-tick signal. Both the number and the explanation
+were wrong. hftbacktest 2.4.4's Python binding wires
+`ROIVectorMarketDepth.best_bid_qty` to the FFI symbol for the best *price*
+(`binding.py` line 284 calls `roivecdepth_best_bid`; the correct
+`roivecdepth_best_bid_qty` is declared at line 204, and the
+`HashMapMarketDepth` version is fine). With both sizes equal to the price the
+micro-price `(Pb*qa + Pa*qb)/(qa+qb)` collapses to `(Pb+Pa)/2`, the mid — so
+the two strategies were one strategy. Fixed by reading sizes with
+`bid_qty_at_tick`; the tables above are the re-run.
+
+The lesson is not "check library bindings". It is that the identity was
+*consistent with a story I already believed*, so I explained it rather than
+tested it — and two supposedly different strategies agreeing to three
+significant figures is far too strong a coincidence to explain away. This
+phase's own protocol says to report a quantity whose correct value is known in
+advance; "these two differ somewhere" was one, and I skipped it. It surfaced
+only because C2 needed the same field.
 
 ![adverse selection](../../docs/assets/c1/adverse-selection.png)
 

@@ -562,8 +562,15 @@ def simplified_grid_mm(
         mid_price_chg[t] = mid_price_tick - prev_mid_price_tick
 
         if two_sided and use_micro_price:
-            bid_qty = depth.best_bid_qty
-            ask_qty = depth.best_ask_qty
+            # NOT depth.best_bid_qty: in hftbacktest 2.4.4 that property is
+            # wired to the wrong FFI symbol for ROIVectorMarketDepth and
+            # returns the best *price* (binding.py line 284 calls
+            # roivecdepth_best_bid, though roivecdepth_best_bid_qty is
+            # declared right above it at line 204; the HashMapMarketDepth
+            # version is correct).  Using it makes the micro-price collapse to
+            # exactly the mid, silently.
+            bid_qty = depth.bid_qty_at_tick(best_bid_tick)
+            ask_qty = depth.ask_qty_at_tick(best_ask_tick)
             fair_price_tick = (best_bid_tick * ask_qty + best_ask_tick * bid_qty) / (bid_qty + ask_qty)
         else:
             fair_price_tick = mid_price_tick

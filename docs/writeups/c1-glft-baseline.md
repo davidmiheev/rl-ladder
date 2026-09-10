@@ -261,7 +261,7 @@ notebook's 100 ms reaction interval
 | `glft` | −359.3 | −354.6 | −1.9% | 0/5 | 8,275 | 60.9 | −21.3 | −43.3 |
 | `glft-adj` | −58.5 | −68.2 | −1.4% | 0/5 | 5,735 | 60.9 | −23.7 | −45.7 |
 | `glft-grid` | **−32.3** | −42.1 | −0.9% | 0/5 | 2,886 | 60.9 | −34.6 | −56.6 |
-| `simplified` | −62.9 | −71.4 | −3.6% | 0/5 | 12,928 | 36.5 | −23.0 | −45.0 |
+| `simplified` | −63.0 | −71.9 | −3.5% | 0/5 | 12,666 | 36.5 | −23.1 | −45.1 |
 | `simplified-mid` | −62.8 | −71.3 | −3.6% | 0/5 | 12,928 | 36.5 | −22.9 | −44.9 |
 
 **Held-out days**
@@ -272,7 +272,7 @@ notebook's 100 ms reaction interval
 | `glft` | −132.9 | −141.2 | −0.7% | 0/5 | 10,117 | 46.9 | −7.4 | −29.4 |
 | `glft-adj` | −18.3 | −20.8 | −0.4% | 0/5 | 6,961 | 46.9 | −5.3 | −27.3 |
 | `glft-grid` | **+0.37** | +0.43 | +0.0% | **3/5** | 3,868 | 46.9 | +0.3 | −21.7 |
-| `simplified` | −17.3 | −19.5 | −0.7% | 0/5 | 12,849 | 30.5 | −9.0 | −31.0 |
+| `simplified` | −16.3 | −18.4 | −0.7% | 0/5 | 12,594 | 30.5 | −8.6 | −30.6 |
 | `simplified-mid` | −17.1 | −19.3 | −0.7% | 0/5 | 12,855 | 30.5 | −8.9 | −30.9 |
 
 "net/fill" and "gross/fill" are in ticks: what one fill was worth after and
@@ -346,16 +346,41 @@ moves $k$), where the source's motivation for going non-parametric was a fit
 that failed near the mid. So this item is testing a fix for a problem this
 asset does not have, and the result should be read that way.
 
-**The micro-price makes no difference at all**: `simplified` and
-`simplified-mid` agree to three significant figures on every metric, on both
-sets. That is a null with a mechanical explanation rather than a mystery.
-Quote prices must land on a tick; the micro-price differs from the mid by less
-than one tick when the touch spread *is* one tick, which is 98% of steps; and
-the grid then snaps the ladder to an interval of `round(half_spread)` ticks —
-30 or more — which is a hundred times coarser than the signal. The source's
-claim that the micro-price "can be highly effective for large tick size pairs"
-is about assets where the *spread* is wide in ticks. ETHUSDC's spread is one
-tick, so there is no room inside it for a sub-tick fair value to point to.
+**The micro-price makes a difference, and it is far too small to matter.** On
+held-out days it moves median Sharpe from −17.1 to −16.3 and the gross value of
+a fill from −30.9 to −30.6 ticks; on training days it is marginally *worse*
+(−63.0 against −62.8). Both differences sit inside the day-to-day range, which
+on held-out days runs from −8.9 to −68.1. Against an adverse-selection cost of
+21 ticks per fill, a sub-tick refinement of the fair price is not the
+instrument that fixes this.
+
+> **Correction.** An earlier version of this writeup reported that the two were
+> *identical* to three significant figures, and explained it as grid
+> quantisation swamping a sub-tick signal. That was wrong, and it was a bug in
+> my code, not a property of the market. hftbacktest 2.4.4's Python binding
+> wires `ROIVectorMarketDepth.best_bid_qty` to the FFI symbol for the best
+> *price* (`binding.py` line 284 calls `roivecdepth_best_bid`, though the
+> correct `roivecdepth_best_bid_qty` is declared thirty lines above at 204; the
+> `HashMapMarketDepth` version is correct). With both "quantities" equal to the
+> price, the micro-price
+> $(P_b q_a + P_a q_b)/(q_a + q_b)$ collapses algebraically to $(P_b + P_a)/2$
+> — exactly the mid. The two strategies were the same strategy. The code now
+> reads sizes with `bid_qty_at_tick(best_bid_tick)`; the numbers above are the
+> re-run.
+>
+> Two things let this through and both are worth naming. The observed identity
+> was *consistent* with a story I already believed, so I explained it instead of
+> checking it — and an identity to three significant figures between two
+> supposedly different strategies is a coincidence too strong to explain away.
+> C1's own protocol says report a quantity whose correct value is known in
+> advance; "these two differ somewhere" was exactly such a quantity and I did
+> not test it. The bug surfaced only because C2 needed the same field.
+
+Grid quantisation may still be *why* the real effect is small — quote prices
+land on ticks, the micro-price moves the fair value by less than a tick when
+the touch spread is one tick, and the ladder is then snapped to an interval of
+`round(half_spread)` ticks. That is a plausible mechanism and this phase did
+not test it; it is stated as conjecture, not as the finding.
 
 Against the parametric baseline, the non-parametric variant is **worse on both
 sets** (−62.9 vs −32.3 train, −17.3 vs +0.37 held out) — but only because the
