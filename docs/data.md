@@ -25,33 +25,71 @@ result about market making rather than about clairvoyance.
 
 ## Getting data
 
-Two supported paths, both documented in hftbacktest's
-`examples/Data Preparation.ipynb`:
+The data Part C actually runs on is the private Hugging Face dataset
+[`cardinalai/backtest_data`](https://huggingface.co/datasets/cardinalai/backtest_data):
+Binance USDⓈ-M perpetual feeds already normalised into the format above, one
+`.npz` per symbol per day, 2025-08-26 to 2025-09-25, for ETH/BTC/XRP/SUI/BNB/
+AVAX/ENA against both USDT and USDC. Access needs a token with read rights on
+that dataset:
+
+```bash
+export HF_TOKEN=...            # never written into the repo; data/ is gitignored
+python - <<'EOF'
+from huggingface_hub import hf_hub_download
+hf_hub_download("cardinalai/backtest_data", "ethusdc_2025-08-26.npz",
+                repo_type="dataset", local_dir="data/npz")
+EOF
+```
+
+Each day's file opens with a depth-clear plus a full book snapshot inside its
+first second, so days are self-contained: no external end-of-previous-day
+snapshot is needed and any single day can be replayed on its own. (Verify this
+before assuming it of a new symbol — it is a property of how this feed was
+recorded, not of the format.)
+
+Two fallbacks, both documented in hftbacktest's `examples/Data Preparation.ipynb`,
+if that dataset is unavailable:
 
 1. **Tardis.dev sample data** — free single-day samples of Binance futures
    incremental L2 book and trades (`datasets.tardis.dev/v1/binance-futures/...`).
-   Enough to reproduce C1 and to develop C2's environment wrapper against.
 2. **hftbacktest's own collector** (`companions/hftbacktest/collector/`) — a Rust
-   feed recorder you run yourself to accumulate days. This is the path to a real
-   train/held-out split, since one sample day cannot support one.
+   feed recorder you run yourself to accumulate days.
 
-Convert either into the normalized `.npz` format with the Data Preparation
-notebook before use.
+Either has to go through the Data Preparation notebook to reach the normalized
+format.
 
-## Layout
+## Order latency
 
-```
-data/
-├── raw/<exchange>/<symbol>/<YYYYMMDD>.csv.gz     as downloaded/collected
-├── npz/<exchange>/<symbol>/<YYYYMMDD>.npz        normalized, what backtests read
-└── latency/<exchange>/<YYYYMMDD>.npz             order-latency data, if collected
-```
+The dataset carries no recorded order latency, so C1 synthesises it from the
+feed latency the data already contains (`local_ts - exch_ts`), following
+hftbacktest's [Order Latency Data](https://hftbacktest.readthedocs.io/en/latest/tutorials/Order%20Latency%20Data.html)
+tutorial: entry latency is 4x the feed latency and response latency 3x, sampled
+once a second and interpolated between. On these days that is a round trip of
+roughly 20 ms, which says the feed was recorded from outside the exchange's
+colocation. Every Part C result is conditional on that assumption; it is the
+single most load-bearing modelling choice in the whole of Part C, because a
+market maker's fills live and die by whether its cancel arrives before the
+trade does.
+
+`experiments/c1_glft_baseline/config.py` writes the generated files to
+`data/latency/`, and `run_calibrate.py --verify-latency DATE` checks the
+generator against hftbacktest's own helper (they agree bit for bit; ours exists
+only because the packaged one copies a whole day through polars and does not
+fit in memory).
 
 ## The split rule
 
-Decide the train/held-out day split **once**, in C1, and record the exact dates
-in `experiments/c1_glft_baseline/README.md`. C3, C4 and C5 all reuse it
-unchanged. Every Part C claim ("RL beats the calibrated formula") is a claim
+Decided **once**, in C1, and recorded in
+[`experiments/c1_glft_baseline/config.py`](../experiments/c1_glft_baseline/config.py),
+which is where every Part C script reads it from so it cannot drift:
+
+- **train** — 2025-08-26 to 2025-09-14. Calibration, sweeps, and (later) RL
+  training all live here.
+- **held out** — 2025-09-15 to 2025-09-25. Read once, at the end of a phase.
+
+The split is chronological because the data is a time series: a random split of
+days would leak the regime a policy is about to be tested in. C3, C4 and C5 all
+reuse it unchanged. Every Part C claim ("RL beats the calibrated formula") is a claim
 about held-out days; re-picking the split after seeing results makes the number
 meaningless, and C4's third item exists specifically to check for that failure.
 
