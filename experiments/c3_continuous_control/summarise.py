@@ -72,7 +72,7 @@ def plot(test: dict[str, list[dict]], train: dict[str, list[dict]], out: Path) -
                     color="black", zorder=5, label="C1 baseline")
         ax1.axhline(base_total, color="0.6", lw=0.9, ls="--")
     ax1.axhline(0, color="0.85", lw=0.8)
-    ax1.annotate("a handful of fills is not\na market maker", (0.03, 0.55),
+    ax1.annotate("dashed line: the fixed formula", (0.03, 0.30),
                  xycoords="axes fraction", fontsize=8, color="0.35")
     ax1.set_xscale("log")
     ax1.set_xlabel("total fills over the five held-out sessions (log)")

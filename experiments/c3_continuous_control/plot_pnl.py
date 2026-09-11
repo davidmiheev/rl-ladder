@@ -35,10 +35,10 @@ from rl_ladder.run import Run  # noqa: E402
 
 #: (directory glob, label). Chosen to span the outcomes, not to flatter them.
 CHOSEN = [
-    ("td3-forced-all-s2", "TD3 forced, seed 2 (best held out)"),
-    ("ddpg-forced-all-s2", "DDPG forced, seed 2 (best on training days)"),
-    ("sac-forced-all-s0", "SAC forced, seed 0 (most stable, worst)"),
-    ("td3-forced-no-gamma-s0", "TD3, gamma pinned, seed 0 (stopped quoting)"),
+    ("td3-forced-all-s2", "TD3 forced, seed 2 (best held out, -0.63%)"),
+    ("ddpg-forced-all-s2", "DDPG forced, seed 2 (-1.74%)"),
+    ("sac-forced-all-s0", "SAC forced, seed 0 (tightest seed agreement)"),
+    ("td3-forced-no-gamma-s0", "TD3, gamma pinned, seed 0 (the ablation)"),
 ]
 
 
