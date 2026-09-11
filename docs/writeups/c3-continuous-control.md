@@ -137,227 +137,200 @@ None of that survives contact with held-out data.
 
 ### Item 2 — held-out days
 
-> **Correction.** The first version of this section reported that no learned
-> configuration beat the fixed baseline, on the strength of the median Sharpe
-> across held-out sessions. That summary statistic was the wrong one, and it
-> inverted the conclusion. What follows is the corrected analysis; the
-> mistake is dissected below rather than quietly fixed, because it is the
-> seventh instance in this repo of a headline metric hiding the effect it was
-> chosen to measure, and the first one to reverse a phase's answer.
+> **This section has been corrected twice.** First for using the median of
+> per-session Sharpes, a summary that is blind to the tail and inverted the
+> conclusion. Then because every *forced-participation* policy had been
+> evaluated with the wrong action ranges: the `participation` flag was added
+> to the checkpoint in an edit that silently failed to apply, so
+> `load_policy` defaulted it to `"free"` and replayed policies trained with
+> `half_spread_scale ∈ [0.5, 2]` under `[0.125, 8]`. That is a different
+> coefficient mapping, so those numbers described policies that were never
+> trained. Both are dissected below; the tables are the corrected ones.
 
-The five held-out sessions as **one track record**, which is what an
-allocator sees. Ranked by cumulative return; the baseline row is C1's
-`glft-grid` re-scored through C3's code path, reproducing its published
-numbers exactly.
+The five held-out sessions as **one track record**, ranked by cumulative
+return. The baseline is C1's `glft-grid` re-scored through C3's code path.
 
-| configuration | seed | cumulative % | Sharpe (ann.) | worst session % | fills | sessions up |
+| configuration | seed | cumulative % | Sharpe (ann.) | worst session % | fills | up |
 | --- | --- | --- | --- | --- | --- | --- |
-| `td3-forced` | 2 | **+0.60** | **+4.97** | −0.20 | 33,859 | 2/5 |
-| `td3-forced`, γ pinned | 0, 2 | +0.01 | — | 0.00 | **1** | 1/5 |
-| `ddpg-forced` | 2 | −0.23 | −1.01 | −0.92 | 4,439 | 2/5 |
+| `td3-forced` | 2 | **−0.63** | −13.65 | **−0.30** | 5,689 | 1/5 |
+| `ddpg-forced` | 2 | −1.74 | −5.98 | −1.70 | 18,234 | 1/5 |
+| `td3-forced` | 1 | −2.19 | −11.34 | −1.38 | 8,182 | 1/5 |
 | `td3-free` | 0 | −2.96 | −12.60 | −1.66 | 12,702 | 1/5 |
 | `td3-free` | 1 | −3.16 | −7.52 | −2.99 | 7,003 | 1/5 |
-| `td3-forced` | 0 | −3.19 | −6.60 | −2.88 | 8,444 | 2/5 |
 | `ddpg-free` | 1 | −3.88 | −11.40 | −2.41 | 29,921 | 1/5 |
-| `td3-forced` | 1 | −4.00 | −9.68 | −3.14 | 17,607 | 0/5 |
+| `td3-forced` | 0 | −4.37 | −11.71 | −2.58 | 2,331 | 1/5 |
+| `ddpg-forced` | 0 | −4.71 | −10.11 | −2.70 | 13,667 | 2/5 |
 | `sac-free` | 1 | −4.76 | −15.08 | −2.43 | 14,758 | 0/5 |
-| `ddpg-forced` | 0 | −4.82 | −17.46 | −1.93 | 14,438 | 0/5 |
 | `sac-free` | 0 | −4.93 | −15.28 | −2.37 | 17,189 | 0/5 |
 | `ddpg-free` | 0 | −5.19 | −11.31 | −3.22 | 58,109 | 1/5 |
-| `sac-forced` | 0 | −5.32 | −15.98 | −2.35 | 21,777 | 0/5 |
-| `sac-forced` | 2 | −6.37 | −14.39 | −3.27 | 24,489 | 0/5 |
-| `sac-forced` | 1 | −6.60 | −15.11 | −3.17 | 26,379 | 0/5 |
-| **C1 baseline** | — | **−8.44** | **−11.19** | **−4.96** | 23,897 | 3/5 |
-| `ddpg-forced` | 1 | −18.19 | −19.67 | −7.26 | 402,209 | 0/5 |
-| `td3-forced`, γ pinned | 1 | −20.88 | −20.84 | −8.38 | 418,116 | 0/5 |
+| `sac-forced` | 0 | −5.56 | −15.25 | −2.64 | 23,319 | 0/5 |
+| `sac-forced` | 1 | −6.34 | −15.47 | −2.91 | 25,400 | 0/5 |
+| `td3-forced`, γ pinned | 1 | −6.48 | −10.09 | −4.86 | 27,136 | 1/5 |
+| `td3-forced`, γ pinned | 0 | −6.77 | −13.61 | −3.68 | 24,341 | 0/5 |
+| `td3-forced`, γ pinned | 2 | −6.95 | −8.58 | −5.93 | 24,160 | 2/5 |
+| `sac-forced` | 2 | −6.95 | −13.88 | −3.67 | 25,278 | 0/5 |
+| **C1 baseline** | — | **−8.44** | −11.19 | **−4.96** | 23,897 | 3/5 |
+| `ddpg-forced` | 1 | −11.58 | −13.34 | −6.55 | 163,418 | 1/5 |
 
-**The fixed baseline finishes seventeenth of nineteen.** Fifteen of the
-eighteen learned configurations beat it, and every configuration *family*
-beats it on its median seed:
+**Nothing is profitable, and the fixed formula is still second-worst.**
+Seventeen of the eighteen learned configurations beat it — the exception is
+DDPG seed 1, which takes 163,418 fills and loses 11.58% — but the best of
+them, TD3 forced seed 2, still ends the period at −0.63%.
 
-| family | median cumulative % | seeds |
-| --- | --- | --- |
-| `td3-free` | −3.06 | −2.96, −3.16 |
-| `td3-forced` | −3.19 | −3.19, −4.00, **+0.60** |
-| `ddpg-free` | −4.54 | −5.19, −3.88 |
-| `ddpg-forced` | −4.82 | −4.82, −18.19, −0.23 |
-| `sac-free` | −4.85 | −4.93, −4.76 |
-| `sac-forced` | −6.37 | −5.32, −6.60, −6.37 |
-| **C1 baseline** | **−8.44** | — |
+Per family, median seed:
 
-**One configuration is genuinely good, and it is not good by refusing to
-play.** TD3 forced, seed 2: +0.60% of book over the period against the
-baseline's −8.44%, annualised Sharpe +4.97 against −11.19, worst session
-−0.20% against −4.96% — and it does this while taking **42% more fills than
-the baseline** (33,859 against 23,897). That rules out the degeneracy C2
-warned about. The two γ-pinned seeds sitting just below it, on a *combined
-total of one fill*, are the degeneracy, and the fills column is what separates
-them.
+| family | median cumulative % | seed spread | seeds |
+| --- | --- | --- | --- |
+| `td3-forced` | **−2.19** | 3.74 | −4.37, −2.19, −0.63 |
+| `td3-free` | −3.06 | 0.19 | −3.16, −2.96 |
+| `ddpg-free` | −4.54 | 1.32 | −5.19, −3.88 |
+| `ddpg-forced` | −4.71 | 9.84 | −11.58, −4.71, −1.74 |
+| `sac-free` | −4.85 | 0.17 | −4.93, −4.76 |
+| `sac-forced` | −6.34 | 1.39 | −6.95, −6.34, −5.56 |
+| `td3-forced`, γ pinned | −6.77 | 0.47 | −6.95, −6.77, −6.48 |
+| **C1 baseline** | **−8.44** | — | — |
 
-**But the win is risk management, not profit.** Exactly one of eighteen
-configurations ends the period positive while actually trading. The median
-TD3-forced seed is −3.19%. The correct summary is that learned coefficients
-lose *less* than the calibrated formula on held-out days, mostly by not
-blowing up in the volatile regime — and that one seed of three found something
-better than that.
+**So the answer to item 2 is: no, but not for the reason the phase first
+reported.** Learned coefficients do not beat the fixed formula in the sense
+that matters — none of them makes money. They do reliably lose *less*,
+by 2 to 6 points of book over five sessions, and the mechanism is visible in
+the worst-session column: the baseline's worst session is −4.96% and every
+configuration above it caps its worst session between −0.30% and −3.7%.
+What RL bought here is a smaller left tail, not an edge.
 
 ![held out](../assets/c3/held-out.png)
 
-### Why the first version of this concluded the opposite
+### Why the first version concluded the opposite
 
-The two summaries disagree because of what the baseline's held-out
-distribution looks like:
+The two summaries disagree because of the baseline's held-out distribution:
 
 | | 09-15 | 09-18 | 09-20 | 09-22 | 09-25 |
 | --- | --- | --- | --- | --- | --- |
 | σ (bp/√s), from C1 | 31.2 | 24.5 | **12.8** | **47.0** | **49.4** |
 | C1 baseline, % of book | +0.01 | +0.02 | +0.04 | **−4.96** | **−3.55** |
-| `td3-forced` seed 2 | +0.66 | +0.38 | −0.15 | **−0.10** | **−0.20** |
 
 The baseline wins three sessions by hundredths of a percent and loses two by
 whole percents. Its **median session is the best in the table and its period
-is second-worst**. TD3 seed 2 gives up the small wins and caps the two
-volatile sessions at −0.10% and −0.20%.
+is second-worst of nineteen**.
 
-So a median over five sessions is blind to precisely the tail that defines a
+A median over five sessions is blind to precisely the tail that defines a
 market maker's risk — and C1 had already measured that tail and said where it
 lives: the gross value of a fill is $-0.72\sigma - 16.2$ ticks, so the
-volatile days are where the money goes. I had that number in hand and still
-chose a statistic that averages it away.
+volatile sessions are where the money goes. I had that number in hand and
+still chose a statistic that averages it away.
 
-The reasoning that produced the mistake is in §4 of the first draft, and it
-was not careless: *"five held-out sessions are few enough that one session
-decides a mean, which is the mistake Part A kept making"*. That is true. The
-error was treating the median as the safe alternative. A median protects
-against one session distorting a typical-day estimate; it does not protect
-against anything when the question is a period's total, and for a strategy
-whose losses are concentrated in two of five sessions it actively removes the
+The reasoning behind the mistake was not careless, which is what makes it
+worth recording: *"five held-out sessions are few enough that one session
+decides a mean, which is the mistake Part A kept making"*. True — but the
+median is not the safe alternative. It protects a typical-day estimate from
+one outlier; it does nothing when the question is a period's total, and for a
+distribution whose character is two bad sessions in five it removes the
 answer. The right response to a heavy tail is to report the tail — worst
 session, cumulative, drawdown — not to summarise it away.
 
-Both tables are now printed by `summarise.py`, the period one by default.
+### And why the second version was wrong too
 
-### The item's own metrics, per session
+The first corrected table had TD3 forced seed 2 at **+0.60%**, the only
+profitable row in the phase. It was an artefact. Forced-participation
+policies were being replayed with the free action ranges, so a network output
+of, say, 0.5 became a half-spread scale of 2.8 instead of 1.0. Nine of
+fifteen rows were affected, and the headline was one of them.
 
-For completeness, the median-over-sessions figures the item's wording asks
-for. These are the numbers the first version led with, and they rank the
-baseline first:
-
-| configuration | SR | Sortino | Return | RoMDD | MaxPos | fills/day | days + |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **C1 baseline** | **+0.37** | **+0.43** | **+0.0001** | **+0.018** | 89,816 | 3,868 | **3/5** |
-| `td3-forced` s2 | −0.80 | −1.01 | −0.0010 | −0.055 | 144,523 | 8,016 | 2/5 |
-| `ddpg-forced` s2 | −3.61 | −4.90 | −0.0019 | −0.165 | 125,656 | 945 | 2/5 |
-| `td3-forced` s0 | −4.21 | −6.01 | −0.0007 | −0.302 | 109,719 | 1,526 | 2/5 |
-| `sac-forced` (3 seeds) | −27.2 to −30.4 | −29.5 to −34.1 | −0.004 | −0.89 to −0.91 | 61–83k | 3,690–4,115 | 0/5 |
-
-MaxPositionValue is the one per-session figure that still says something the
-period table does not: most learned policies hold more inventory than the
-baseline (110–185k against 89.8k). They are taking more position risk and, on
-the period, being paid for it — which is a trade, not a free lunch.
+The cause was mechanical and entirely mine: the edit that added
+`participation` to the checkpoint was one of three `str.replace` calls in the
+same script that silently failed to match, and I asserted on none of them.
+The same failure left the γ-pinned ablation running with a confound I had
+announced as fixed. Recovering it needed no retraining — the run directory's
+`config.json` records `participation` correctly — but nine reported numbers
+were wrong for a day.
 
 ### Is any of it overfitting?
 
-> **Second correction.** The first version of this section reported that four
-> of fourteen runs beat the baseline on training days and none beat it on
-> held-out days, and called that a textbook generalisation gap. That was the
-> same median-of-per-session-Sharpes artefact. On the period metric the gap
-> does not exist.
-
-The same deterministic policies over the five **training** sessions, measured
-against the baseline on those same sessions, next to the held-out figure
-(cumulative % of book; the baseline is −4.53% on training sessions and −8.44%
-on held-out ones):
+Same deterministic policies over the five **training** sessions, measured
+against the baseline on those same sessions (cumulative % of book; the
+baseline is −4.53% on training sessions and −8.44% on held-out ones):
 
 | configuration | vs baseline, train | vs baseline, held out |
 | --- | --- | --- |
-| `td3-forced` s2 | −4.08 | **+9.04** |
-| `ddpg-forced` s2 | +6.36 | **+8.21** |
-| `td3-forced` s0 | +2.98 | **+5.26** |
-| `td3-forced` s1 | +0.92 | **+4.45** |
-| `ddpg-forced` s0 | +3.90 | **+3.63** |
-| `sac-forced` s0, s1, s2 | +0.93, +0.99, +0.92 | **+3.12, +1.84, +2.07** |
-| `ddpg-forced` s1 | −47.13 | −9.74 |
-| `td3-forced`, γ pinned s1 | −41.81 | −12.44 |
+| `td3-forced` s2 | +3.67 | **+7.82** |
+| `ddpg-forced` s2 | +2.35 | **+6.70** |
+| `td3-forced` s1 | +3.89 | **+6.25** |
+| `td3-forced` s0 | +5.80 | +4.08 |
+| `ddpg-forced` s0 | +4.59 | +3.73 |
+| `sac-forced` s0, s1, s2 | +0.96, +1.08, +1.04 | **+2.88, +2.10**, +1.49 |
+| `td3-forced`, γ pinned s0, s1, s2 | +0.25, +0.94, +2.07 | **+1.67, +1.96**, +1.49 |
+| `ddpg-forced` s1 | −20.12 | **−3.14** |
 
-**Every configuration that beats the baseline beats it by more on the
-held-out sessions than on the sessions it was fitted to** — in panel (b),
-every point sits above the dotted line. TD3 seed 2 is the extreme case: 4.08
-points *worse* than the baseline on training sessions and 9.04 points better
-on held-out ones.
+**Every configuration beats the baseline on both sets**, and nine of twelve
+beat it by *more* out of sample than in. There is no generalisation gap to
+report: whatever these policies learned, they did not learn it about five
+specific days.
 
-That is not overfitting; it is close to the opposite, and it has a mechanical
-explanation rather than being luck. The learned policies' entire advantage is
-avoiding the baseline's tail, and the held-out set contains proportionally
-more tail — two of its five sessions have σ above 47 bp/√s against one of
-five in the training set. An edge that consists of not blowing up shows up
-most where there is most opportunity to blow up.
+That is consistent with what they learned being very simple. The edge is
+avoiding the baseline's tail, and the held-out set has proportionally more
+tail — two of five sessions above σ 47 bp/√s against one of five in
+training — so an edge made of not blowing up shows up more where there is
+more opportunity to blow up.
 
-It also means C3 supplies no positive control for C4's reward-hacking item.
+C3 therefore supplies **no positive control** for C4's reward-hacking item.
+C4 will have to construct one, the obvious candidate being a policy
+deliberately trained on a single session.
 
 ### Item 3 — the ablation
 
-> **Item 3's result is currently withdrawn.** The ablation below was run with
-> a confound I had claimed to remove. Commit `c15a515` says pinned
-> coefficients were taken out of the agent's action space; they were not —
-> three `str.replace` calls silently failed to match and I asserted on none of
-> them, so every γ-pinned run used a four-output actor whose fourth column the
-> critic never saw vary. That is exactly the unidentified-gradient confound
-> §3 describes, and it is a live candidate for the instability reported here.
-> The arm is being re-run with the fix verified rather than assumed (the
-> checkpoint's actor now has three outputs); items 1 and 2 are unaffected,
-> because with all four coefficients learnable the overwrite is the identity.
+> **Withdrawn once and now restored with the opposite conclusion.** The first
+> version of this ablation ran with a four-output actor whose fourth column
+> the critic never saw vary — the confound §3 describes and that commit
+> `c15a515` wrongly claimed to have removed. It reported wild instability:
+> two seeds taking zero fills, one taking 79,332. With the action space
+> actually fixed, none of that reproduces.
 
-The ladder's prior is that learning fewer coefficients should be more stable:
-a smaller hypothesis class is harder to overfit. **The measurement says the
-opposite.**
+γ pinned at its calibrated 0.05 and removed from the action space, against
+the same algorithm with all four coefficients learnable:
 
-| configuration | cumulative % by seed | total held-out fills by seed |
-| --- | --- | --- |
-| `td3-forced`, all four | −3.19, −4.00, **+0.60** | 8,444 / 17,607 / 33,859 |
-| `td3-forced`, γ pinned | +0.01, **−20.88**, +0.01 | **1** / 418,116 / **1** |
+| configuration | median cumulative % | seed spread | seeds | fills |
+| --- | --- | --- | --- | --- |
+| `td3-forced`, all four | **−2.19** | **3.74** | −4.37, −2.19, −0.63 | 2,331–8,182 |
+| `td3-forced`, γ pinned | −6.77 | **0.47** | −6.95, −6.77, −6.48 | 24,160–27,136 |
 
-Pinning γ at its calibrated 0.05 produced the two most extreme outcomes in the
-whole phase — two seeds that take a combined *one fill* across five sessions,
-and one that takes 418,116 and loses 20.88% of book — where the same algorithm
-with γ free kept all three seeds trading between 8,000 and 34,000 fills and
-within four points of each other.
+**The ladder's prior is right about stability and wrong about what it buys.**
+Pinning γ shrinks the seed-to-seed spread eightfold — the three seeds land
+within half a point of each other, against 3.74 points with γ free — which is
+exactly what a smaller hypothesis class should do. It also costs 4.6 points
+of cumulative return, and every γ-pinned seed is worse than every γ-free one.
 
-This is the one conclusion that does not change under the corrected metric.
-Its median cumulative return (+0.01%) is nominally the best in the table, and
-it is worthless: two of the three seeds achieved it by not quoting. This is
-precisely why the fills column is printed first.
+So the answer to "which coefficients are worth learning at all" is that γ is,
+and the reason is not stability. With γ free, a policy can widen its quotes
+by *raising γ*, which lifts `c1` and `c2` together and keeps the half spread
+and the skew in the ratio the model intends; the γ-free seeds do exactly that
+and end up quoting far less often (2,331–8,182 fills against 24,160–27,136).
+With γ pinned, the same widening has to come from `c1_scale` alone, and the
+policy converges — tightly, across all three seeds — on a configuration that
+trades three times as much and loses three times as much.
 
-The mechanism is visible in the coefficients. With γ free, the policy reaches
-a wide spread by *raising γ*, which lifts `c1` and `c2` together and keeps the
-half spread and the skew in the ratio the model intends. With γ pinned, the
-only route to a wide spread is `c1_scale`, and the only route to inventory
-control is `skew_scale` — two knobs that move the half spread and the skew
-independently, and that the policy pushes to opposite corners (seed 0 ended at
-`c1_scale` 3.74 with `skew_scale` 1.82; seed 2 at 3.74 and 0.011). Removing
-the coefficient that *couples* the others did not shrink the hypothesis class
-in a useful direction; it removed the parameterisation's own coordination and
-left two unconstrained knobs.
+γ is the coefficient the other two are defined in terms of. Removing it does
+not shrink the hypothesis class in a useful direction; it removes the
+parameterisation's own coordination, and the resulting policies agree with
+each other because they have been left with fewer ways to disagree.
 
-That is a real answer to "which coefficients are worth learning at all", and
-it is not the one the item anticipated: γ is the one worth keeping learnable,
-because it is the coefficient the others are defined in terms of.
+### A constraint that is leaky in principle, though nothing exploited it
 
-### A constraint that leaked
+`forced` participation caps the half-spread *scale* at 2×, but the half
+spread is $(s_{c_1} c_1 + \tfrac{1}{2}\sigma c_2) s_{\text{half}}$ — so
+pushing $s_{c_1}$ to its ceiling of 4 reaches the same "quote two hundred
+ticks out" corner by another route. The constraint raises the cost of leaving
+the market rather than forbidding it.
 
-`forced` participation caps the half-spread *scale* at 2×, but the half spread
-is $(s_{c_1} c_1 + \tfrac{1}{2}\sigma c_2) s_{\text{half}}$ — so pushing
-$s_{c_1}$ to its ceiling of 4 reaches the same "quote two hundred ticks out"
-corner by another route. Twelve of the fourteen forced runs still traded
-normally, but the two γ-pinned seeds found the leak and used it, which is
-exactly how they reached zero fills.
+I first reported that the γ-pinned seeds had found this leak and used it to
+reach zero fills. That was the confounded run; with the action space fixed,
+**no configuration exploits it** — the lowest fill count among the corrected
+forced runs is 2,331 over five sessions, and the γ-pinned seeds trade 24,000
+to 27,000. So the leak is a property of how the constraint is written rather
+than something the experiment observed.
 
-So "forced participation" does not mean what its name claims. It raises the
-cost of leaving the market rather than forbidding it. A constraint that
-actually bound would have to cap the *computed half spread*, not one of its
-factors — which is the version C4 should use, and a reminder that a constraint
-expressed in the parameterisation rather than in the quantity it is meant to
-bound is usually leaky.
+It is still worth fixing before C4 relies on it: a constraint expressed in
+the parameterisation rather than in the quantity it is meant to bound will
+eventually be found. The version that binds caps the *computed half spread*.
 
 ## 6. What this sets up
 
@@ -371,13 +344,14 @@ should not expect its diagnostics to fire on C3's outputs.
 **Three concrete things C4 should change.**
 
 - *Cap the computed half spread, not one of its factors.* C3's forced
-  participation capped `half_spread_scale` and the γ-pinned seeds simply
-  widened through `c1_scale` instead. A constraint expressed in the
+  participation caps `half_spread_scale`, which `c1_scale` can route around.
+  No corrected run exploited it, but a constraint expressed in the
   parameterisation rather than in the quantity it is meant to bound is
-  usually leaky, and this one was.
+  usually leaky, and this one is.
 - *Report fills before Sharpe, and treat a zero-fill policy as a failed run
-  rather than an undefined one.* Two seeds here score approximately the best
-  return in the table by never quoting.
+  rather than an undefined one.* No corrected C3 run stopped quoting, but the
+  confounded ones did, and they scored near the top of the table while doing
+  it.
 - *Give the comparison more than five training sessions.* Every result in
   this phase is a policy fitted to five days, and the generalisation gap is
   consistent with that being simply too few. C3 cannot separate "RL does not

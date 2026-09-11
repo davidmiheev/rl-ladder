@@ -39,99 +39,89 @@ calibrated 0.05 and removes it from the action space for item 3.
 
 ## Results
 
-> **Correction.** The first version of this README reported that no learned
-> configuration beat the fixed baseline, and that four runs beat it on
-> training days and none on held-out days. Both statements came from
-> summarising with the median of per-session Sharpes, which is the wrong
-> statistic for a strategy whose losses sit in the tail, and both reverse
-> under the period metric. The analysis below is the corrected one and the
-> mistake is dissected in the writeup.
+> **Corrected twice.** This README first reported the median of per-session
+> Sharpes — blind to the tail, and it inverted the conclusion. It then
+> reported a profitable policy that was an artefact: every
+> forced-participation run had been replayed with the *free* action ranges,
+> because the `participation` flag was added to the checkpoint in an edit
+> that silently failed to apply. Both are dissected in the writeup; the
+> tables below are the corrected ones.
 
 ![held out](../../docs/assets/c3/held-out.png)
 
 The five held-out sessions as one track record, ranked by cumulative return.
-The baseline row is C1's `glft-grid` re-scored through this code path.
+The baseline is C1's `glft-grid` re-scored through this code path.
 
 | configuration | seed | cumulative % | Sharpe (ann.) | worst session % | fills | up |
 | --- | --- | --- | --- | --- | --- | --- |
-| `td3-forced` | 2 | **+0.60** | **+4.97** | −0.20 | 33,859 | 2/5 |
-| `td3-forced`, γ pinned | 0, 2 | +0.01 | — | 0.00 | **1** | 1/5 |
-| `ddpg-forced` | 2 | −0.23 | −1.01 | −0.92 | 4,439 | 2/5 |
+| `td3-forced` | 2 | **−0.63** | −13.65 | **−0.30** | 5,689 | 1/5 |
+| `ddpg-forced` | 2 | −1.74 | −5.98 | −1.70 | 18,234 | 1/5 |
+| `td3-forced` | 1 | −2.19 | −11.34 | −1.38 | 8,182 | 1/5 |
 | `td3-free` | 0, 1 | −2.96, −3.16 | −12.6, −7.5 | −1.66, −2.99 | 12,702, 7,003 | 1/5 |
-| `td3-forced` | 0, 1 | −3.19, −4.00 | −6.6, −9.7 | −2.88, −3.14 | 8,444, 17,607 | 2/5, 0/5 |
-| `ddpg-free` | 0, 1 | −5.19, −3.88 | −11.3, −11.4 | −3.22, −2.41 | 58,109, 29,921 | 1/5 |
+| `ddpg-free` | 1 | −3.88 | −11.40 | −2.41 | 29,921 | 1/5 |
+| `td3-forced` | 0 | −4.37 | −11.71 | −2.58 | 2,331 | 1/5 |
+| `ddpg-forced` | 0 | −4.71 | −10.11 | −2.70 | 13,667 | 2/5 |
 | `sac-free` | 0, 1 | −4.93, −4.76 | −15.3, −15.1 | −2.37, −2.43 | 17,189, 14,758 | 0/5 |
-| `ddpg-forced` | 0 | −4.82 | −17.46 | −1.93 | 14,438 | 0/5 |
-| `sac-forced` | 0, 1, 2 | −5.32, −6.60, −6.37 | −16.0, −15.1, −14.4 | −2.35, −3.17, −3.27 | 21–26k | 0/5 |
-| **C1 baseline** | — | **−8.44** | **−11.19** | **−4.96** | 23,897 | 3/5 |
-| `ddpg-forced` | 1 | −18.19 | −19.67 | −7.26 | 402,209 | 0/5 |
-| `td3-forced`, γ pinned | 1 | −20.88 | −20.84 | −8.38 | 418,116 | 0/5 |
+| `ddpg-free` | 0 | −5.19 | −11.31 | −3.22 | 58,109 | 1/5 |
+| `sac-forced` | 0, 1, 2 | −5.56, −6.34, −6.95 | −15.3, −15.5, −13.9 | −2.64, −2.91, −3.67 | 23–25k | 0/5 |
+| `td3-forced`, γ pinned | 1, 0, 2 | −6.48, −6.77, −6.95 | −10.1, −13.6, −8.6 | −4.86, −3.68, −5.93 | 24–27k | 1/5, 0/5, 2/5 |
+| **C1 baseline** | — | **−8.44** | −11.19 | **−4.96** | 23,897 | 3/5 |
+| `ddpg-forced` | 1 | −11.58 | −13.34 | −6.55 | 163,418 | 1/5 |
 
-Per family, median seed: `td3-free` −3.06, `td3-forced` −3.19, `ddpg-free`
-−4.54, `ddpg-forced` −4.82, `sac-free` −4.85, `sac-forced` −6.37, **baseline
-−8.44**.
+Per family, median seed: `td3-forced` **−2.19**, `td3-free` −3.06,
+`ddpg-free` −4.54, `ddpg-forced` −4.71, `sac-free` −4.85, `sac-forced`
+−6.34, `td3-forced` γ-pinned −6.77, **baseline −8.44**.
 
 ## Findings
 
-**The fixed baseline finishes seventeenth of nineteen.** Fifteen of eighteen
-learned configurations beat it over the held-out period, and every family
-beats it on its median seed. That is item 2's answer, and it is the opposite
-of what the per-session medians said.
+**Nothing learned is profitable, and the fixed formula is still
+second-worst.** Seventeen of eighteen configurations beat the baseline — the
+exception takes 163,418 fills and loses 11.58% — but the best of them ends
+the period at −0.63%. Item 2's answer is *no*: learned coefficients do not
+beat the formula in the sense that matters, they reliably lose less.
 
-**One configuration is genuinely good, and not by declining to play.** TD3
-forced seed 2 returns +0.60% against the baseline's −8.44%, with an
-annualised Sharpe of +4.97 against −11.19 and a worst session of −0.20%
-against −4.96% — while taking **42% more fills** than the baseline. The two
-γ-pinned seeds just below it, on a combined total of one fill, are the
-degeneracy C2 warned about; the fills column is what separates them.
+**What RL bought is a smaller left tail, not an edge.** The baseline's worst
+session is −4.96%; every configuration above it caps its worst session
+between −0.30% and −3.7%. The baseline's five held-out sessions are +0.01,
++0.02, +0.04, **−4.96**, **−3.55** percent — it wins three by hundredths and
+loses two by whole percents, on the two sessions where σ was 47.0 and 49.4
+bp/√s against 12.8–31.2 elsewhere. C1 had already measured that the gross
+value of a fill is `-0.72·σ - 16.2` ticks.
 
-**But the win is risk management, not profit.** Exactly one of eighteen
-configurations ends the period positive while actually trading; the median
-TD3-forced seed is −3.19%. Learned coefficients lose *less* than the
-calibrated formula, mostly by not blowing up in the volatile regime.
+**That is also why the per-session median inverted the answer.** It made the
+baseline look like the best row in the table, because its median session is
+the best; a median over five sessions removes exactly the tail a market
+maker's risk consists of.
 
-**Why the medians said the opposite.** The baseline's five held-out sessions
-are +0.01, +0.02, +0.04, **−4.96**, **−3.55** percent — it wins three by
-hundredths and loses two by whole percents, so its median session is the best
-in the table and its period is second-worst. σ on those two sessions was 47.0
-and 49.4 bp/√s against 12.8–31.2 on the other three. C1 had already measured
-that the gross value of a fill is `-0.72·σ - 16.2` ticks; the volatile days
-are where the money goes, and a median over five sessions averages exactly
-that away.
+**No generalisation gap.** Every configuration beats the baseline on both day
+sets, and nine of twelve beat it by more out of sample than in. The edge is
+tail-avoidance and the held-out set has more tail. C4 gets no positive
+control for its reward-hacking item from here.
 
-**There is no generalisation gap.** Every configuration that beats the
-baseline beats it by *more* out of sample than in (panel b). TD3 seed 2 is
-4.08 points worse than the baseline on training sessions and 9.04 better on
-held-out ones. The edge is tail-avoidance and the held-out set has more tail —
-two sessions above σ 47 against one in training. C4 gets no positive control
-for its reward-hacking item from this phase.
+**Item 3: the ladder's prior is right about stability and wrong about what it
+buys.** Pinning γ shrinks the seed-to-seed spread eightfold (0.47 points
+against 3.74) — exactly what a smaller hypothesis class should do — and costs
+4.6 points of cumulative return, with every γ-pinned seed worse than every
+γ-free one. With γ free a policy widens by raising γ, which lifts `c1` and
+`c2` together and keeps the spread-to-skew ratio the model intends; those
+seeds end up quoting far less (2,331–8,182 fills against 24,160–27,136). With
+γ pinned the widening must come from `c1_scale` alone, and all three seeds
+converge tightly on trading three times as much and losing three times as
+much. γ is the coefficient the other two are defined in terms of.
 
-**Pinning γ destabilises — withdrawn pending a re-run.** The γ-pinned runs
-were trained with a confound I had claimed to remove: commit `c15a515` says
-pinned coefficients left the agent's action space, but the edit silently
-failed to apply, so every one of them used a four-output actor with a column
-the critic never saw vary. The re-run is in progress. What was observed, and
-may or may not survive it: Two of three seeds take a combined
-*one fill* across five sessions; the third takes 418,116 and loses 20.88%.
-With γ free all three seeds trade 8,000–34,000 fills and land within four
-points of each other. With γ free a policy widens by raising γ, lifting c1
-and c2 together and holding the spread-to-skew ratio the model intends;
-pinned, the only routes are `c1_scale` and `skew_scale` moving independently,
-and seeds drove them to opposite corners (3.74/1.82 and 3.74/0.011). γ is the
-coefficient the others are defined in terms of.
+*(An earlier version of this item reported wild instability — zero-fill seeds
+and a 79,332-fill seed. That was the confounded run and none of it
+reproduces.)*
 
-**SAC is the most stable and the worst.** Three seeds agreeing to two
-decimals on every coefficient, and the three worst non-degenerate rows in the
-table. The entropy term rewards keeping the action distribution wide, which
-here means continuing to quote into the volatile sessions.
+**SAC is the most stable and among the worst.** Three seeds within 1.4 points
+of each other, all below every TD3 and DDPG seed except the blow-ups. The
+entropy term rewards keeping the action distribution wide, which here means
+continuing to quote into the volatile sessions.
 
-**My "forced participation" constraint leaked, and the ablation found it.**
-The half spread is `(c1_scale·c1 + ½σc2)·half_scale`; capping `half_scale` at
-2× leaves `c1_scale` (ceiling 4) as another route to the same corner. Twelve
-of fourteen forced runs traded normally; the two γ-pinned seeds used the leak
-to reach one fill. A constraint written in the parameterisation rather than
-in the quantity it bounds is usually leaky. C4 should cap the computed half
-spread.
+**The forced-participation constraint is leaky in principle.** `c1_scale`
+can route around the cap on `half_spread_scale`. No corrected run exploited
+it — the lowest fill count is 2,331 — but C4 should cap the computed half
+spread rather than one of its factors.
 
 **What I would do differently.** Two things, and the second is the real one.
 
@@ -140,8 +130,8 @@ A5's (256, 256) network and took 429 s per session — 4× what a 10-dimensional
 observation needs. Ten minutes of benchmarking up front would have bought two
 more seeds, which is what this phase is short of.
 
-More importantly: I chose the summary statistic before looking at the
-distribution it would summarise. The median was chosen for a good reason — to
+Two process failures, and the second is the one that cost real time. I chose
+the summary statistic before looking at the distribution it would summarise. The median was chosen for a good reason — to
 stop one session dominating a mean — and it was the wrong tool for a
 distribution whose whole character is two bad sessions out of five. C1 had
 already measured that the loss scales with σ and that σ varies three-fold
@@ -149,3 +139,11 @@ across these days, so the shape was known before the first policy was
 trained. The rule that survives: decide what a strategy's risk looks like
 *before* choosing how to average it, and when the answer is "the tail",
 report the tail.
+
+And I edited three files with `str.replace` while asserting on only some of
+the replacements, then described the result in a commit message without
+checking it had taken effect. Three separate bugs came from that one habit:
+the γ-pinned confound, the wrong evaluation ranges, and a plotting crash that
+is the only reason any of it was noticed. Every multi-file edit in this phase
+now asserts on every replacement, and a claim about what code does gets a
+check that it does it.
