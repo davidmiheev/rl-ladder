@@ -183,6 +183,40 @@ return is exactly 0.0000 — which, on a held-out set where the baseline returns
 predicted, and it is why the fills column is printed before the Sharpe column
 and why the summariser prints "no trades" rather than `nan`.
 
+### The same policies on the days they trained on
+
+Running the identical deterministic policies over the five *training*
+sessions, scored the same way:
+
+| configuration | seed | SR (train) | SR (held out) | vs baseline, train | vs baseline, held out |
+| --- | --- | --- | --- | --- | --- |
+| **C1 baseline** | — | **−32.34** | **+0.37** | — | — |
+| `ddpg-forced` | 2 | **+6.88** (4/5 days +) | −3.61 | **+39.2** | −4.0 |
+| `ddpg-forced` | 0 | −1.75 | −20.79 | **+30.6** | −21.2 |
+| `td3-forced` | 0 | −9.72 | −4.21 | **+22.6** | −4.6 |
+| `td3-forced` | 2 | −30.06 | −0.80 | **+2.3** | −1.2 |
+| `td3-forced` | 1 | −38.58 | −16.95 | −6.2 | −17.3 |
+| `sac-forced` | 0, 1, 2 | −48.6, −56.9, −59.5 | −27.2 to −30.4 | −16 to −27 | −28 to −31 |
+| `ddpg-forced` | 1 | −58.58 | −25.65 | −26.2 | −26.0 |
+| `td3-forced`, γ pinned | 1 | −72.86 | −27.03 | −40.5 | −27.4 |
+| `td3-forced`, γ pinned | 0, 2 | *no trades* | *no trades* | — | — |
+
+**Four of the fourteen forced runs beat the calibrated baseline on the days
+they trained on. None of them beats it on the days they did not.** DDPG seed 2
+is the sharpest case: +6.88 Sharpe on training sessions with four of five
+profitable — a 39-point improvement on the baseline — and −3.61 on held-out
+sessions, four points *below* it.
+
+A caution about how this is measured. Raw returns are higher for everything on
+held-out days, because those days were quieter: C1 measured their median σ at
+31.2 bp/√s against the training set's 35.2. Comparing a policy's held-out
+return against its training return would therefore conflate overfitting with
+an easier regime, and would make several of these policies look like they
+generalise. The comparison that survives is against **the baseline on the same
+days**, which is what the table's last two columns and panel (b) show: the
+regime cancels, and what is left is that the edge exists only where it was
+fitted.
+
 ### Item 3 — the ablation
 
 The ladder's prior is that learning fewer coefficients should be more stable:
@@ -232,7 +266,58 @@ bound is usually leaky.
 
 ## 6. What this sets up
 
-_(pending)_
+**C4 inherits a sharper question than "does PPO beat TD3".** The phase it
+bridges to asks whether GRPO's group-relative baseline survives outside
+language modelling, and whether RL-tuned coefficients overfit to the training
+days' microstructure. C3 has already answered the second in the affirmative
+for three off-policy algorithms, with the specific signature to look for:
+an edge of 20–40 Sharpe points on training sessions and none at all on
+held-out ones. C4's reward-hacking item should therefore be run as a
+*confirmation with a known positive*, not as an open search — if its
+diagnostics do not flag DDPG seed 2, they are not working.
+
+**Three concrete things C4 should change.**
+
+- *Cap the computed half spread, not one of its factors.* C3's forced
+  participation capped `half_spread_scale` and the γ-pinned seeds simply
+  widened through `c1_scale` instead. A constraint expressed in the
+  parameterisation rather than in the quantity it is meant to bound is
+  usually leaky, and this one was.
+- *Report fills before Sharpe, and treat a zero-fill policy as a failed run
+  rather than an undefined one.* Two seeds here score approximately the best
+  return in the table by never quoting.
+- *Give the comparison more than five training sessions.* Every result in
+  this phase is a policy fitted to five days, and the generalisation gap is
+  consistent with that being simply too few. C3 cannot separate "RL does not
+  help on this problem" from "RL cannot be fitted on five sessions", and
+  saying which would need more data rather than more algorithms.
+
+**C5's premise gets some support.** The one thing every policy here lacked is
+a directional signal: the state carries volatility, imbalance and flow, and
+C1 measured that flow predicts the next 100 ms with a 1.9σ mean, but nothing
+in the state predicts *direction over the horizon the inventory is held*. If
+learned coefficients are ever going to beat the formula, the alpha signals C5
+adds are the most likely reason — which makes C5 a test of the state rather
+than of the algorithm.
+
+### Limits worth stating
+
+- **Five training sessions, ten episodes, three seeds.** That is a small
+  experiment by RL standards, and the honest reading of "no configuration
+  beat the baseline" is "not with this much data and this much tuning".
+  Nothing here licenses "RL does not work for market making".
+- **No hyperparameter search.** Learning rates, γ_RL, τ, batch size and the
+  exploration noise are A5's defaults throughout. A negative result under
+  default hyperparameters is weaker than one under tuned ones, and tuning
+  them on five days would have been its own overfitting problem.
+- **The reward's risk penalty η = 0.015 was calibrated once, in C2, against
+  the baseline's own numbers.** No sensitivity was run, so "the policy
+  carries more inventory than the baseline" is partly a statement about η.
+- **The episode is a whole session and the discount is 0.99**, i.e. an
+  effective horizon of about one hundred seconds against an episode of
+  85,800 steps. Whether that is the right horizon for an inventory problem
+  was not tested, and it is the first hyperparameter I would question.
+- **The forced/free distinction is weaker than its name**, as above.
 
 ## 7. Where these items come from
 

@@ -896,23 +896,26 @@ well-calibrated fixed formula, and which coefficients are worth learning at all.
 
 **Reading.** Reuse your A5 DDPG/TD3/SAC implementations.
 
+**Writeup.** [`writeups/c3-continuous-control.md`](writeups/c3-continuous-control.md) ·
+lab notebook [`experiments/c3_continuous_control/README.md`](../experiments/c3_continuous_control/README.md)
+
 **Practical lab.** [Stable-Baselines3 TD3](https://stable-baselines3.readthedocs.io/en/master/modules/td3.html)
 and [SAC docs](https://stable-baselines3.readthedocs.io/en/master/modules/sac.html)
 — battle-tested reference implementations to validate your own against
 
-- [ ] Apply DDPG/TD3/SAC to the C2 environment: policy outputs (γ, c1, half-spread-scale) per step, conditioned on state
+- [x] Apply DDPG/TD3/SAC to the C2 environment: policy outputs (γ, c1, half-spread-scale) per step, conditioned on state
 
   Reuse the A5 implementations directly. The action is a low-dimensional
   continuous vector, which is the setting those algorithms were designed for —
   the novelty is entirely in the environment.
 
-- [ ] Compare against the C1 fixed-calibration baseline on held-out days: Sharpe, Sortino, MaxPositionValue, ReturnOverMDD
+- [x] Compare against the C1 fixed-calibration baseline on held-out days: Sharpe, Sortino, MaxPositionValue, ReturnOverMDD
 
   On days never used for calibration or training. Report the risk-adjusted
   measures, not just PnL: a strategy that earns more by carrying more inventory
   has not improved anything.
 
-- [ ] Ablate: fix γ at its calibrated value and let RL learn only c1/skew, vs. letting RL learn all three jointly — compare sample efficiency and stability
+- [x] Ablate: fix γ at its calibrated value and let RL learn only c1/skew, vs. letting RL learn all three jointly — compare sample efficiency and stability
 
   Learning fewer coefficients is a smaller hypothesis class and therefore
   harder to overfit. Comparing "learn one" against "learn all three" tells you

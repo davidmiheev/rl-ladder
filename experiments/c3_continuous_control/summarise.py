@@ -66,33 +66,38 @@ def plot(test: dict[str, list[dict]], train: dict[str, list[dict]], out: Path) -
     ax1.set_xlabel("fills per held-out session (log; x at zero = stopped quoting)")
     ax1.set_ylabel("Sharpe, median over held-out sessions")
     ax1.set_title("(a) held out: nothing learned clears the fixed formula")
-    ax1.legend(fontsize=7, loc="lower right")
+    ax1.legend(fontsize=7, loc="lower left", framealpha=0.9)
 
-    # (b) training days against held-out days, per seed.
+    # (b) The same comparison on both sets, but measured against the baseline
+    # *on those same days*.  Comparing raw returns train-to-held-out would
+    # conflate a policy overfitting with the held-out days simply being
+    # quieter, which C1 measured them to be (median sigma 31.2 against 35.2).
+    # The difference from the baseline removes the regime.
+    base_train = train.get("baseline", [{}])[0].get("SR_median", np.nan)
+    base_test = base.get("SR_median", np.nan)
     for family, colour in zip(families, colours, strict=True):
         for blob in test[family]:
             label = blob.get("label", "")
             match = next((b for b in train.get(family, []) if b.get("label") == label), None)
             if match is None:
                 continue
-            x, y = match["Return_median"] * 100, blob["Return_median"] * 100
+            x = match["SR_median"] - base_train
+            y = blob["SR_median"] - base_test
             if not (np.isfinite(x) and np.isfinite(y)):
                 continue
             ax2.scatter(x, y, s=55, color=colour, alpha=0.85)
         ax2.scatter([], [], color=colour, label=family)
-    if base and train.get("baseline"):
-        ax2.scatter(train["baseline"][0]["Return_median"] * 100,
-                    base["Return_median"] * 100, marker="*", s=320, color="black",
-                    zorder=5, label="C1 baseline")
+    ax2.axhline(0, color="black", lw=1.1)
+    ax2.axvline(0, color="black", lw=1.1)
     lo = min(ax2.get_xlim()[0], ax2.get_ylim()[0])
     hi = max(ax2.get_xlim()[1], ax2.get_ylim()[1])
-    ax2.plot([lo, hi], [lo, hi], "k:", lw=1, label="no generalisation gap")
-    ax2.axhline(0, color="0.7", lw=0.8)
-    ax2.axvline(0, color="0.7", lw=0.8)
-    ax2.set_xlabel("return per training session (% of book)")
-    ax2.set_ylabel("return per held-out session (% of book)")
-    ax2.set_title("(b) the training days were not the hard part")
-    ax2.legend(fontsize=7, loc="lower right")
+    ax2.plot([lo, hi], [lo, hi], "k:", lw=1, label="same edge on both")
+    ax2.annotate("beats the baseline\non training days only", (0.62, 0.06), xycoords="axes fraction",
+                 fontsize=8, color="0.3")
+    ax2.set_xlabel("Sharpe minus baseline, training sessions")
+    ax2.set_ylabel("Sharpe minus baseline, held-out sessions")
+    ax2.set_title("(b) the edge is on the days it was fitted to")
+    ax2.legend(fontsize=7, loc="upper left")
 
     fig.tight_layout()
     fig.savefig(out, dpi=130)
