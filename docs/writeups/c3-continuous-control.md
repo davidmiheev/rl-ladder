@@ -297,6 +297,17 @@ It also means C3 supplies no positive control for C4's reward-hacking item.
 
 ### Item 3 — the ablation
 
+> **Item 3's result is currently withdrawn.** The ablation below was run with
+> a confound I had claimed to remove. Commit `c15a515` says pinned
+> coefficients were taken out of the agent's action space; they were not —
+> three `str.replace` calls silently failed to match and I asserted on none of
+> them, so every γ-pinned run used a four-output actor whose fourth column the
+> critic never saw vary. That is exactly the unidentified-gradient confound
+> §3 describes, and it is a live candidate for the instability reported here.
+> The arm is being re-run with the fix verified rather than assumed (the
+> checkpoint's actor now has three outputs); items 1 and 2 are unaffected,
+> because with all four coefficients learnable the overwrite is the identity.
+
 The ladder's prior is that learning fewer coefficients should be more stable:
 a smaller hypothesis class is harder to overfit. **The measurement says the
 opposite.**

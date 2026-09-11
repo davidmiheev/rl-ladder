@@ -106,8 +106,12 @@ held-out ones. The edge is tail-avoidance and the held-out set has more tail —
 two sessions above σ 47 against one in training. C4 gets no positive control
 for its reward-hacking item from this phase.
 
-**Pinning γ destabilises — the opposite of item 3's prior, and the one
-conclusion unchanged by the correction.** Two of three seeds take a combined
+**Pinning γ destabilises — withdrawn pending a re-run.** The γ-pinned runs
+were trained with a confound I had claimed to remove: commit `c15a515` says
+pinned coefficients left the agent's action space, but the edit silently
+failed to apply, so every one of them used a four-output actor with a column
+the critic never saw vary. The re-run is in progress. What was observed, and
+may or may not survive it: Two of three seeds take a combined
 *one fill* across five sessions; the third takes 418,116 and loses 20.88%.
 With γ free all three seeds trade 8,000–34,000 fills and land within four
 points of each other. With γ free a policy widens by raising γ, lifting c1

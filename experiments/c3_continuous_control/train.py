@@ -74,14 +74,19 @@ def episode(env, agent, config, buffer, rng, act_dim, baseline, mask, explore,
     while not truncated:
         step += 1
         if explore:
-            free = rng.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
+            learned = rng.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
         else:
-            free = select_action(agent, obs, config, rng, act_dim).astype(np.float32)
+            learned = select_action(agent, obs, config, rng, act_dim).astype(np.float32)
+        learned = np.clip(learned, -1.0, 1.0)
         action = baseline.copy()
-        action[mask] = np.clip(free[mask], -1.0, 1.0)
+        action[mask] = learned
 
         next_obs, reward, terminated, truncated, info = env.step(action)
-        buffer.add(obs, action, reward, next_obs, terminated)
+        # The buffer stores the *learnable* action, which is the agent's whole
+        # action space; the pinned coefficients are constants of the
+        # environment, not a column of zeros variance for the critic to have
+        # an unidentified gradient in.
+        buffer.add(obs, learned, reward, next_obs, terminated)
         obs = next_obs
 
         total_reward += reward
@@ -154,9 +159,9 @@ def main() -> None:
     env = MarketMakingEnv(date=market_config.TRAIN_DAYS[0], symbol=args.symbol,
                           max_steps=args.max_steps, action_ranges=ranges)
     obs_dim = int(np.prod(env.observation_space.shape))
-    act_dim = int(np.prod(env.action_space.shape))
     baseline = env.baseline_action()
     mask = list(LEARNABLE[args.learnable])
+    act_dim = len(mask)
     env.close()
 
     agent = build_agent(config, obs_dim, act_dim, 1.0)
@@ -202,7 +207,8 @@ def main() -> None:
             index += 1
 
     torch.save({"actor": agent.actor.state_dict(), "config": vars(args),
-                "baseline": baseline, "mask": mask, "algo": args.algo},
+                "baseline": baseline, "mask": mask, "algo": args.algo,
+                "act_dim": act_dim, "participation": args.participation},
                run.path("policy.pt"))
     run.finish({"history": history, "final": history[-1]})
     print(f"\nrun dir: {run.dir}")
