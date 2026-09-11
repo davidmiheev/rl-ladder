@@ -18,6 +18,7 @@ risk-adjusted measure.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -51,13 +52,23 @@ def load_policy(path: Path):
     config = Config(hidden=(width, width), **ALGOS[blob["algo"]])
     env = MarketMakingEnv(date=market_config.TRAIN_DAYS[0], symbol=blob["config"]["symbol"])
     obs_dim = int(np.prod(env.observation_space.shape))
-    act_dim = int(np.prod(env.action_space.shape))
+    # The actor's action space is the learnable coefficients only; pinned
+    # ones are constants of the environment, not columns of the action.
+    act_dim = int(blob.get("act_dim", len(blob["mask"])))
     env.close()
     agent = build_agent(config, obs_dim, act_dim, 1.0)
     agent.actor.load_state_dict(blob["actor"])
     agent.actor.eval()
+    # Checkpoints written before the action ranges became configurable do not
+    # carry `participation`, and defaulting it to "free" silently evaluates a
+    # forced-participation policy under a different coefficient mapping than
+    # it was trained with.  The run directory's config.json always has it.
+    participation = blob.get("participation")
+    if participation is None:
+        run_config = json.loads((path.parent / "config.json").read_text())
+        participation = run_config["participation"]
     return (agent, np.asarray(blob["baseline"], dtype=np.float32), list(blob["mask"]),
-            config, blob.get("participation", "free"))
+            config, participation)
 
 
 @torch.no_grad()
@@ -80,7 +91,7 @@ def run_day(date: str, symbol: str, agent, baseline, mask, is_sac: bool,
     while not truncated:
         action = baseline.copy()
         if agent is not None:
-            action[mask] = np.clip(act(agent, obs, is_sac)[mask], -1.0, 1.0)
+            action[mask] = np.clip(act(agent, obs, is_sac), -1.0, 1.0)
         obs, _, _, truncated, info = env.step(action)
         coefficients.append(env.to_coefficients(action))
     record = env.equity_record()
