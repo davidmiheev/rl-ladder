@@ -105,7 +105,130 @@ mean, which is the mistake Part A kept making.
 
 ## 5. Results
 
-_(pending: the grid is 18 runs of 10 sessions each)_
+### Item 1 — the three algorithms
+
+Eighteen runs: three algorithms × three seeds under forced participation,
+three × two under free, and TD3 with γ pinned × three seeds. Ten sessions
+each, cycling twice over the five training days.
+
+On **training** sessions the three algorithms behave quite differently.
+
+| configuration | fills (final session) | PnL (% of book) | γ | half scale | skew scale |
+| --- | --- | --- | --- | --- | --- |
+| `sac-forced` (3 seeds) | ~10,000 | −1.82 to −2.07 | 0.19 | 1.09 | 0.39 |
+| `sac-free` (2 seeds) | ~23,000 | −4.38 to −4.55 | 0.20 | 1.97 | 0.39 |
+| `ddpg-forced` (3 seeds) | 2,508–3,740 | −0.67 to +0.26 | 0.35–0.53 | 1.14–1.30 | 0.43–0.55 |
+| `td3-forced` (3 seeds) | 904–1,792 | −0.35 to +0.25 | 0.29–0.56 | 1.11–1.18 | 0.18–0.48 |
+| `td3-forced`, γ pinned (3 seeds) | **42 / 71 / 6,793** | +0.38 / +0.04 / −0.67 | pinned | 0.73–1.95 | 0.01–1.82 |
+
+SAC is by far the most *stable* — its three seeds agree to two decimal places
+on every coefficient — and by far the worst: it quotes tight, trades four
+times the baseline's volume and loses twice as much. Its entropy term rewards
+keeping the action distribution wide, which in this action space means
+continuing to quote. TD3 and DDPG both drift towards higher γ and a wider
+spread floor, and several seeds reach a positive training session.
+
+None of that survives contact with held-out data.
+
+### Item 2 — held-out days
+
+Every policy replayed over the five held-out sessions and scored with the same
+`LinearAssetRecord` call C1 used. The baseline row is C1's `glft-grid`,
+re-scored through C3's code path — it reproduces C1's published +0.37 exactly,
+which is the check that the two tables are comparable.
+
+| configuration | seed | SR | Sortino | Return | RoMDD | MaxPos | fills/day | days + |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **C1 baseline** | — | **+0.37** | **+0.43** | **+0.0001** | **+0.018** | 89,816 | 3,868 | **3/5** |
+| `td3-forced` | 2 | −0.80 | −1.01 | −0.0010 | −0.055 | 144,523 | 8,016 | 2/5 |
+| `ddpg-forced` | 2 | −3.61 | −4.90 | −0.0019 | −0.165 | 125,656 | 945 | 2/5 |
+| `ddpg-free` | 0 | −3.44 | −4.73 | −0.0018 | −0.147 | 169,932 | 11,806 | 1/5 |
+| `td3-forced` | 0 | −4.21 | −6.01 | −0.0007 | −0.302 | 109,719 | 1,526 | 2/5 |
+| `td3-free` | 0 | −14.10 | −19.68 | −0.0032 | −0.628 | 76,652 | 2,556 | 1/5 |
+| `td3-forced` | 1 | −16.95 | −19.51 | −0.0026 | −0.667 | 87,873 | 3,670 | 0/5 |
+| `ddpg-forced` | 0 | −20.79 | −23.90 | −0.0054 | −0.659 | 147,500 | 3,150 | 0/5 |
+| `ddpg-free` | 1 | −21.25 | −27.30 | −0.0036 | −0.772 | 103,500 | 5,419 | 1/5 |
+| `sac-free` | 0, 1 | −23.16, −24.41 | −25.6, −27.3 | −0.0026 | −0.83, −0.90 | 71–83k | 2,566–3,052 | 0/5 |
+| `ddpg-forced` | 1 | −25.65 | −32.70 | −0.0359 | −0.802 | 185,156 | **90,515** | 0/5 |
+| `td3-forced`, γ pinned | 1 | −27.03 | −34.03 | −0.0236 | −0.923 | 168,374 | **79,332** | 0/5 |
+| `sac-forced` | 0, 1, 2 | −27.2 to −30.4 | −29.5 to −34.1 | −0.004 | −0.89 to −0.91 | 61–83k | 3,690–4,115 | 0/5 |
+| `td3-forced`, γ pinned | 0, 2 | *no trades* | — | 0.0000 | — | 0 | **0** | 1/5 |
+
+**Not one of the eighteen beats the fixed formula.** The best single seed is
+TD3 at −0.80 against the baseline's +0.37; the best median over seeds is TD3
+forced at −4.21. The answer to the item's question, on this asset and this
+split, is no.
+
+![held out](../assets/c3/held-out.png)
+
+Three details matter more than the headline.
+
+**They lose *and* carry more risk.** The item asks for MaxPositionValue for a
+reason — a policy that earns more by holding more inventory has not improved
+anything. Here it runs the other way: most configurations hold *more*
+inventory than the baseline (110k–185k against 89.8k) while earning less.
+There is no risk-return trade being made, just a worse point.
+
+**Two seeds behave completely differently out of sample.** `ddpg-forced` seed
+1 takes 90,515 fills per held-out session against roughly 3,600 per training
+session, and `td3-forced` with γ pinned seed 1 takes 79,332. A twenty-five-fold
+change in trading volume between training and held-out days is not a policy
+generalising badly; it is a policy whose behaviour is not defined by anything
+stable in the state.
+
+**Two seeds stop trading entirely.** The γ-pinned seeds 0 and 2 take *zero*
+fills across all five held-out sessions. Their Sharpe is undefined and their
+return is exactly 0.0000 — which, on a held-out set where the baseline returns
++0.0001, is very nearly the best score in the table. This is the degeneracy C2
+predicted, and it is why the fills column is printed before the Sharpe column
+and why the summariser prints "no trades" rather than `nan`.
+
+### Item 3 — the ablation
+
+The ladder's prior is that learning fewer coefficients should be more stable:
+a smaller hypothesis class is harder to overfit. **The measurement says the
+opposite.**
+
+| configuration | held-out SR by seed | fills/day by seed |
+| --- | --- | --- |
+| `td3-forced`, all four | −4.21, −16.95, −0.80 | 1,526 / 3,670 / 8,016 |
+| `td3-forced`, γ pinned | *no trades*, −27.03, *no trades* | 0 / 79,332 / 0 |
+
+Pinning γ at its calibrated 0.05 produced the two most extreme outcomes in the
+whole phase — two seeds that never quote and one that quotes 79,332 times a
+session — where the same algorithm with γ free stayed within a factor of five
+on fills and a factor of twenty on Sharpe.
+
+The mechanism is visible in the coefficients. With γ free, the policy reaches
+a wide spread by *raising γ*, which lifts `c1` and `c2` together and keeps the
+half spread and the skew in the ratio the model intends. With γ pinned, the
+only route to a wide spread is `c1_scale`, and the only route to inventory
+control is `skew_scale` — two knobs that move the half spread and the skew
+independently, and that the policy pushes to opposite corners (seed 0 ended at
+`c1_scale` 3.74 with `skew_scale` 1.82; seed 2 at 3.74 and 0.011). Removing
+the coefficient that *couples* the others did not shrink the hypothesis class
+in a useful direction; it removed the parameterisation's own coordination and
+left two unconstrained knobs.
+
+That is a real answer to "which coefficients are worth learning at all", and
+it is not the one the item anticipated: γ is the one worth keeping learnable,
+because it is the coefficient the others are defined in terms of.
+
+### A constraint that leaked
+
+`forced` participation caps the half-spread *scale* at 2×, but the half spread
+is $(s_{c_1} c_1 + \tfrac{1}{2}\sigma c_2) s_{\text{half}}$ — so pushing
+$s_{c_1}$ to its ceiling of 4 reaches the same "quote two hundred ticks out"
+corner by another route. Twelve of the fourteen forced runs still traded
+normally, but the two γ-pinned seeds found the leak and used it, which is
+exactly how they reached zero fills.
+
+So "forced participation" does not mean what its name claims. It raises the
+cost of leaving the market rather than forbidding it. A constraint that
+actually bound would have to cap the *computed half spread*, not one of its
+factors — which is the version C4 should use, and a reminder that a constraint
+expressed in the parameterisation rather than in the quantity it is meant to
+bound is usually leaky.
 
 ## 6. What this sets up
 
