@@ -1,0 +1,28 @@
+### xrp half-spread floor 10:37:12
+sweeping half_spread_bp for glft on xrpusdc over 4 training days: ['2025-08-26', '2025-08-29', '2025-09-03', '2025-09-08']
+  half_spread_bp  cumulative  worst day  SR median     fills   half bp     |q|
+               0    -10.056%    -3.596%    -207.82     51925      1.28  862.00
+               1     -9.545%    -3.541%    -222.29     50024      1.28  861.85
+               2     -5.993%    -2.229%    -256.98     31961      2.00  677.15
+               4     -3.607%    -1.287%    -202.32     18873      4.00  169.30
+               8     -0.053%    -0.038%      -4.99       376      8.00    8.00
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:102: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(pnl.drop_nans().mean(), pnl.drop_nans().std()) * np.sqrt(c)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:130: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(pnl.drop_nans().mean(), dr) * np.sqrt(c)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:149: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(ret, mdd)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:167: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(ret, trade_volume)}
+              16      0.017%     0.000%        nan         2     16.00    0.00
+              32      0.000%     0.000%        nan         0     32.00    0.00
+
+best half_spread_bp = 16  (+0.017% over the sweep days, 2 fills)
+wrote /home/user/rl-ladder/experiments/c6_strategy_zoo/spread_floor.json: xrpusdc -> 16 bp
+run dir: /home/user/rl-ladder/runs/c6-sweep/half_spread_bp-glft-xrpusdc__20260912-103714
+### xrp grid depth 10:41:08
+sweeping grid_num for glft on xrpusdc over 4 training days: ['2025-08-26', '2025-08-29', '2025-09-03', '2025-09-08']
+        grid_num  cumulative  worst day  SR median     fills   half bp     |q|
+               1     -8.853%    -3.172%    -428.65     46753      1.28  816.40
+               5     -9.908%    -3.642%    -332.03     51859      1.28  887.10
+              20    -10.056%    -3.596%    -207.82     51925      1.28  862.00

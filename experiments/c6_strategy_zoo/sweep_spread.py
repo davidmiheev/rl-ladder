@@ -61,6 +61,22 @@ HALF_SPREAD_BP = (0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0)
 #: grid notebooks', 40 and 60 go past all of them.
 GRID_NUM = (1, 5, 20, 40, 60)
 
+#: Fills per day, below which a sweep value is disqualified from being chosen.
+#: Without this the sweep walks into the trap C2 found and C3 had to work
+#: around: quoting far enough out to take no fills returns exactly zero, which
+#: beats every losing width, so the search's optimum is "stop making a
+#: market".  The first XRPUSDC sweep, run before this guard existed, duly
+#: chose 16 bp on **two fills in four days**.
+#:
+#: The bar is set below every published configuration's own fill rate: the
+#: thinnest of the five on these days is `hfgrid` on ETHUSDC at 119 fills a
+#: day, so 50 excludes only what trades less than anything published.  It is
+#: a judgement, so the sensitivity is reported rather than buried -- at a
+#: 100/day bar the XRPUSDC floor would be 4 bp instead of 8.  Disqualified
+#: rows are still printed: the shape of the curve past the turning point is
+#: the evidence that the turning point is real.
+MIN_FILLS_PER_DAY = 50
+
 VALUES = {"half_spread_bp": HALF_SPREAD_BP, "grid_num": GRID_NUM}
 
 #: Sweep days: the first four training days, which is the least data the
@@ -83,7 +99,13 @@ def main() -> None:
     parser.add_argument("--beta", type=float, default=1.0)
     parser.add_argument("--write", action="store_true",
                         help="record the chosen half spread in spread_floor.json")
+    parser.add_argument("--recompute", default=None,
+                        help="re-score a finished sweep run directory instead of sweeping")
     args = parser.parse_args()
+
+    if args.recompute:
+        recompute(Path(args.recompute), args.write)
+        return
 
     days = sweep_days(args.symbol, args.days)
     values = VALUES[args.param]
@@ -124,22 +146,61 @@ def main() -> None:
               f"{row['total_fills']:9d} {row['median_half_spread_bp']:9.2f} "
               f"{row['median_abs_position']:7.2f}", flush=True)
 
-    best = max(rows, key=lambda r: r["cumulative_return"])
-    print(f"\nbest {args.param} = {best[args.param]:g}  "
-          f"({best['cumulative_return'] * 100:+.3f}% over the sweep days, "
-          f"{best['total_fills']} fills)")
-    interior = 0 < values.index(type(values[0])(best[args.param])) < len(values) - 1
-    if not interior:
-        print("  WARNING: the best value is at an end of the grid, so the sweep has not\n"
-              "  found a turning point -- the number to report is 'at least this', not 'this'.")
-
+    best, interior = choose(rows, args.param, values, len(days))
     run.finish({"rows": rows, "best": best, "interior": interior})
     if args.write and args.param == "half_spread_bp":
-        existing = json.loads(OUT.read_text()) if OUT.exists() else {}
-        existing[args.symbol] = float(best["half_spread_bp"])
-        OUT.write_text(json.dumps(dict(sorted(existing.items())), indent=2) + "\n")
-        print(f"wrote {OUT}: {args.symbol} -> {best['half_spread_bp']:g} bp")
+        write_floor(args.symbol, best["half_spread_bp"])
     print(f"run dir: {run.dir}")
+
+
+def choose(rows: list[dict], param: str, values, n_days: int) -> tuple[dict, bool]:
+    """Pick the best swept value among those that actually make a market."""
+    floor = MIN_FILLS_PER_DAY * n_days
+    trading = [r for r in rows if r["total_fills"] >= floor]
+    skipped = [r for r in rows if r["total_fills"] < floor]
+    if not trading:
+        raise SystemExit(
+            f"no swept value takes {MIN_FILLS_PER_DAY} fills a day; nothing here makes a market"
+        )
+    best = max(trading, key=lambda r: r["cumulative_return"])
+    if skipped:
+        print(f"\ndisqualified for taking under {MIN_FILLS_PER_DAY} fills a day: "
+              + ", ".join(f"{r[param]:g} ({r['total_fills']} fills)" for r in skipped))
+    print(f"best {param} = {best[param]:g}  "
+          f"({best['cumulative_return'] * 100:+.3f}% over the sweep days, "
+          f"{best['total_fills']} fills)")
+    index = list(values).index(type(values[0])(best[param]))
+    bracketed = index + 1 < len(values) and any(
+        type(values[0])(r[param]) == values[index + 1] for r in trading
+    )
+    interior = index > 0 and bracketed
+    if not interior:
+        print("  WARNING: the best value is at an edge of the *trading* range, so the sweep\n"
+              "  has not bracketed a turning point -- the number to report is 'at least\n"
+              "  this', not 'this'.")
+    return best, interior
+
+
+def write_floor(symbol: str, value: float) -> None:
+    existing = json.loads(OUT.read_text()) if OUT.exists() else {}
+    existing[symbol] = float(value)
+    OUT.write_text(json.dumps(dict(sorted(existing.items())), indent=2) + "\n")
+    print(f"wrote {OUT}: {symbol} -> {value:g} bp")
+
+
+def recompute(run_dir: Path, write: bool) -> None:
+    """Re-score a finished sweep without re-running it.
+
+    The participation guard was added after the first sweeps had already been
+    launched, so their stored rows are re-scored under the current rule rather
+    than spending another half hour of replays to reproduce them.
+    """
+    summary = json.loads((run_dir / "summary.json").read_text())
+    config = json.loads((run_dir / "config.json").read_text())
+    best, _ = choose(summary["rows"], config["param"], VALUES[config["param"]],
+                     len(config["days"]))
+    if write and config["param"] == "half_spread_bp":
+        write_floor(config["symbol"], best["half_spread_bp"])
 
 
 if __name__ == "__main__":

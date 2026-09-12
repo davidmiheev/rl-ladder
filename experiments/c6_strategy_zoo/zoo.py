@@ -411,6 +411,12 @@ def advance(
 ):
     """`n_inner` quoting iterations under one set of multipliers."""
     for _ in range(n_inner):
+        # numba does not bounds-check, so running off the end of `out` would
+        # corrupt the heap rather than raise.  `buffer_steps` sizes it for a
+        # 25-hour day against a 24-hour session, so this should never fire;
+        # it exists because the failure mode if it ever did is silent.
+        if int(state[Z_T]) >= len(out):
+            return 1
         if quote_once(
             hbt, recorder, state, out, params, precomp, buf_arrival, buf_midchg,
             buf_flow, buf_obi, tmp, ticks, spread_mult, skew_mult, alpha_mult,

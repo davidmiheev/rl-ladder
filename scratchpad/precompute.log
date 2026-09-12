@@ -1,0 +1,10 @@
+2025-08-26    863995 rows  reference return finite  99.5%  median basis  +4.331 bp
+2025-08-29    863995 rows  reference return finite  99.5%  median basis  +2.266 bp
+2025-09-03    863996 rows  reference return finite  99.5%  median basis  +5.057 bp
+2025-09-08    863993 rows  reference return finite  99.5%  median basis  +0.560 bp
+2025-09-15    863995 rows  reference return finite  99.5%  median basis  +5.993 bp
+2025-09-18    863998 rows  reference return finite  99.5%  median basis  +4.357 bp
+2025-09-22    863992 rows  reference return finite  99.5%  median basis  +8.675 bp
+2025-09-25    863998 rows  reference return finite  99.5%  median basis  +4.312 bp
+
+beta fitted on training days: 0.9913   R^2 0.9985

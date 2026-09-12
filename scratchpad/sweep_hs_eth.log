@@ -1,0 +1,21 @@
+sweeping half_spread_bp for glft on ethusdc over 4 training days: ['2025-08-26', '2025-08-27', '2025-08-28', '2025-08-29']
+  half_spread_bp  cumulative  worst day  SR median     fills   half bp     |q|
+               0     -4.287%    -1.844%     -35.11     11767      1.53    2.05
+               1     -4.284%    -1.891%     -35.11     11717      1.53    2.06
+               2     -2.752%    -1.146%     -24.20      6016      2.00    2.33
+               4      0.957%    -0.100%       5.62       953      4.00    1.90
+               8      0.151%    -0.271%       4.99        70      8.00    0.51
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:102: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(pnl.drop_nans().mean(), pnl.drop_nans().std()) * np.sqrt(c)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:130: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(pnl.drop_nans().mean(), dr) * np.sqrt(c)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:149: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(ret, mdd)}
+/home/user/rl-ladder/.venv/lib/python3.11/site-packages/hftbacktest/stats/metrics.py:167: RuntimeWarning: invalid value encountered in divide
+  return {self.name: np.divide(ret, trade_volume)}
+              16     -0.127%    -0.127%        nan         1     16.00    0.00
+              32      0.000%     0.000%        nan         0     32.00    0.00
+
+best half_spread_bp = 4  (+0.957% over the sweep days, 953 fills)
+wrote /home/user/rl-ladder/experiments/c6_strategy_zoo/spread_floor.json: ethusdc -> 4 bp
+run dir: /home/user/rl-ladder/runs/c6-sweep/half_spread_bp-glft-ethusdc__20260912-103250

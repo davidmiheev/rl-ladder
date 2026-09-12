@@ -1,0 +1,55 @@
+### glft ethusdc all  10:32:56
+2025-08-26  SR   -39.75  Return   -0.0119  MaxDD   0.0149  trades     2694  half-spread    1.69 bp  |q|     1.74
+2025-08-27  SR   -30.46  Return   -0.0104  MaxDD   0.0124  trades     2888  half-spread    1.60 bp  |q|     2.18
+2025-08-28  SR    -9.61  Return   -0.0028  MaxDD   0.0054  trades     2719  half-spread    1.34 bp  |q|     2.09
+2025-08-29  SR   -41.75  Return   -0.0184  MaxDD   0.0200  trades     3465  half-spread    1.46 bp  |q|     2.02
+2025-09-01  SR   -43.09  Return   -0.0203  MaxDD   0.0211  trades     3485  half-spread    1.34 bp  |q|     2.34
+2025-09-03  SR    -4.49  Return   -0.0013  MaxDD   0.0068  trades     3267  half-spread    1.21 bp  |q|     2.34
+2025-09-05  SR   -14.19  Return   -0.0061  MaxDD   0.0097  trades     4068  half-spread    1.20 bp  |q|     2.26
+2025-09-08  SR    -9.76  Return   -0.0028  MaxDD   0.0058  trades     3481  half-spread    0.99 bp  |q|     3.27
+2025-09-10  SR   -21.11  Return   -0.0074  MaxDD   0.0092  trades     3395  half-spread    1.09 bp  |q|     2.72
+2025-09-12  SR   -31.75  Return   -0.0159  MaxDD   0.0165  trades     3317  half-spread    1.20 bp  |q|     2.04
+2025-09-15  SR     0.35  Return    0.0001  MaxDD   0.0068  trades     3853  half-spread    1.07 bp  |q|     2.15
+2025-09-16  SR   -20.80  Return   -0.0055  MaxDD   0.0080  trades     3617  half-spread    0.95 bp  |q|     2.23
+2025-09-17  SR   -37.58  Return   -0.0343  MaxDD   0.0366  trades     4939  half-spread    0.98 bp  |q|     2.52
+2025-09-18  SR     1.48  Return    0.0004  MaxDD   0.0031  trades     3644  half-spread    0.97 bp  |q|     2.39
+2025-09-19  SR   -27.69  Return   -0.0086  MaxDD   0.0094  trades     3834  half-spread    0.91 bp  |q|     2.82
+2025-09-20  SR     0.13  Return    0.0000  MaxDD   0.0042  trades     1969  half-spread    0.74 bp  |q|     2.42
+2025-09-21  SR   -11.69  Return   -0.0027  MaxDD   0.0042  trades     2042  half-spread    0.81 bp  |q|     2.58
+2025-09-22  SR   -40.87  Return   -0.0615  MaxDD   0.0637  trades     6856  half-spread    1.11 bp  |q|     2.43
+2025-09-23  SR    -8.81  Return   -0.0022  MaxDD   0.0038  trades     4979  half-spread    0.99 bp  |q|     2.15
+2025-09-24  SR    -9.18  Return   -0.0032  MaxDD   0.0118  trades     3730  half-spread    0.98 bp  |q|     2.19
+2025-09-25  SR   -64.00  Return   -0.0430  MaxDD   0.0444  trades     7526  half-spread    1.48 bp  |q|     2.32
+{
+  "SR_median": -20.79548318739491,
+  "Sortino_median": -24.847307137725217,
+  "Return_median": -0.006074583451849601,
+  "MaxDrawdown_median": 0.009407585204194407,
+  "ReturnOverMDD_median": -0.6843630121011686,
+  "ReturnOverTrade_median": -3.0395305125265735e-05,
+  "MaxPositionValue_median": 99282.00906000004,
+  "DailyNumberOfTrades_median": 3485.4034031716633,
+  "DailyTurnover_median": 174.2689714559446,
+  "median_half_spread_bp_median": 1.0853449346768858,
+  "median_skew_bp_median": 1.434658211605163,
+  "median_abs_signal_bp_median": 0.0,
+  "median_volatility_tick_median": 24.420190871945337,
+  "median_A_median": 0.7625656393151697,
+  "median_k_median": 0.029626995124318663,
+  "spread_floor_tick_median": 33.753001133050184,
+  "median_abs_position_median": 2.3170000000000206,
+  "max_abs_position_median": 26.312,
+  "steps_median": 863995.0,
+  "hours_median": 23.999861111111112,
+  "fills_per_hour_median": 145.22564605453476
+}
+### hfgrid ethusdc all  10:40:30
+2025-08-26  SR     6.50  Return    0.0015  MaxDD   0.0040  trades      119  half-spread    4.25 bp  |q|     1.17
+2025-08-27  SR    16.98  Return    0.0041  MaxDD   0.0023  trades      155  half-spread    3.83 bp  |q|     2.16
+2025-08-28  SR    -1.78  Return   -0.0005  MaxDD   0.0048  trades      199  half-spread    3.06 bp  |q|     2.16
+2025-08-29  SR   -13.00  Return   -0.0066  MaxDD   0.0138  trades      494  half-spread    3.80 bp  |q|     3.06
+2025-09-01  SR   -26.49  Return   -0.0151  MaxDD   0.0199  trades      190  half-spread    3.39 bp  |q|     2.27
+2025-09-03  SR     9.67  Return    0.0032  MaxDD   0.0049  trades      290  half-spread    2.81 bp  |q|     2.31
+2025-09-05  SR    10.65  Return    0.0040  MaxDD   0.0039  trades      309  half-spread    2.77 bp  |q|     3.44
+2025-09-08  SR    25.63  Return    0.0067  MaxDD   0.0038  trades      396  half-spread    2.15 bp  |q|     2.37
+2025-09-10  SR    -2.88  Return   -0.0009  MaxDD   0.0052  trades      408  half-spread    2.14 bp  |q|     3.24
