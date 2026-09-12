@@ -142,7 +142,9 @@ def main() -> None:
         returns, stats = [], []
         for date in days:
             day_stats, _, out = run_baseline.run_day(args.strategy, args.symbol, date, overrides)
-            day_stats |= run_baseline.quoter_stats(out, strategies.INTERVAL_NS)
+            day_stats |= run_baseline.quoter_stats(
+                out, strategies.INTERVAL_NS, strategies.MAX_POSITION_DOLLAR
+            )
             returns.append(day_stats["Return"])
             stats.append(day_stats)
         returns = np.array(returns)

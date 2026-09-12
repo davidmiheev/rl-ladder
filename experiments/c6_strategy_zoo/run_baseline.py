@@ -112,7 +112,7 @@ def run_day(
     return stats, record, out
 
 
-def quoter_stats(out: np.ndarray, interval_ns: int) -> dict[str, float]:
+def quoter_stats(out: np.ndarray, interval_ns: int, max_position_dollar: float) -> dict[str, float]:
     """What the quoter itself did, as opposed to what it earned.
 
     `A` and `k` are the order-arrival intensity `lambda(d) = A exp(-k d)` that
@@ -134,6 +134,15 @@ def quoter_stats(out: np.ndarray, interval_ns: int) -> dict[str, float]:
         "spread_floor_tick": float(np.median(1.0 / k)) if finite.any() else float("nan"),
         "median_abs_position": float(np.nanmedian(np.abs(out["position"]))),
         "max_abs_position": float(np.nanmax(np.abs(out["position"]))),
+        # Normalised by the notional cap, which is the only inventory number
+        # comparable across assets -- and the one the environment reports, so
+        # a baseline row and a learned row mean the same thing.
+        "median_abs_norm_pos": float(
+            np.nanmedian(np.abs(out["position"] * out["mid"])) / max_position_dollar
+        ),
+        "max_abs_norm_pos": float(
+            np.nanmax(np.abs(out["position"] * out["mid"])) / max_position_dollar
+        ),
         "steps": int(len(out)),
         "hours": float(len(out) * interval_ns / 3.6e12),
     }
@@ -154,7 +163,7 @@ def evaluate(
     per_day = []
     for i, date in enumerate(days):
         stats, record, out = run_day(strategy, symbol, date, overrides)
-        stats.update(quoter_stats(out, interval_ns))
+        stats.update(quoter_stats(out, interval_ns, strategies.MAX_POSITION_DOLLAR))
         stats["fills_per_hour"] = stats["DailyNumberOfTrades"] / max(stats["hours"], 1e-9)
         stats["date"] = date
         per_day.append(stats)

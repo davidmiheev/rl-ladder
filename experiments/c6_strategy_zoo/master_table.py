@@ -48,6 +48,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import assets  # noqa: E402
+
 RUNS = HERE.parents[1] / "runs"
 
 COLUMNS = [
@@ -144,9 +146,29 @@ BASELINE_FIELDS = {
     "k": "median_k",
     "inv_k": "spread_floor_tick",
     "fills_h": "fills_per_hour",
-    "abs_q": "median_abs_position",
+    "abs_q": "median_abs_norm_pos",
     "signal_bp": "median_abs_signal_bp",
 }
+
+
+def _backfill_inventory(per_day: list[dict], symbol: str) -> None:
+    """Give older runs the normalised inventory they were written without.
+
+    The baseline runner used to report inventory in units of the asset while
+    the evaluator reported it normalised by the notional cap, so the two
+    could not go in one column. Runs made since record the normalised figure
+    directly; these few are converted with the asset's median price, which is
+    exact to within the session's own price range.
+    """
+    if not per_day or "median_abs_norm_pos" in per_day[0]:
+        return
+    price = assets.ensure_registered(symbol)["price"]
+    for day in per_day:
+        day["median_abs_norm_pos"] = day["median_abs_position"] * price / MAX_POSITION_DOLLAR
+
+
+#: Matches `strategies.MAX_POSITION_DOLLAR`.
+MAX_POSITION_DOLLAR = 100_000.0
 
 
 def baseline_rows() -> list[dict]:
@@ -158,6 +180,7 @@ def baseline_rows() -> list[dict]:
         del config
         name = summary["strategy"]
         base, _, suffix = name.partition("-")
+        _backfill_inventory(summary["per_day"], summary["symbol"])
         for day_set, block in _split(summary["per_day"]):
             rows.append({
                 "strategy": base,
@@ -216,21 +239,117 @@ def fmt(row: dict, key: str, spec: str) -> str:
             text = "-"
         elif key in ("k",):
             text = f"{value:.4f}"
-        elif key in ("A", "inv_k", "fills_h", "abs_q", "half_spread_bp", "signal_bp"):
+        elif key in ("A", "inv_k", "fills_h", "abs_q", "half_spread_bp", "signal_bp",
+                     "half_bp", "fills_pub", "fills_wide", "fills_rl", "q_wide", "q_rl"):
             text = f"{value:.2f}"
+        elif key in ("cumulative", "worst", "median_return", "published", "wide", "rl",
+                     "spread_gain", "rl_gain"):
+            text = f"{value:+.2f}"
         else:
-            text = f"{value:+.2f}" if key in ("cumulative", "worst", "median_return") else f"{value:.2f}"
+            text = f"{value:.2f}"
     else:
         text = str(value)
     return spec.format(text)
 
 
+#: The comparison view's columns: one row per (asset, strategy), with the
+#: three configurations side by side and the thing the phase is actually
+#: asking about -- what RL added on top of an already-widened spread -- as
+#: its own column rather than a subtraction the reader has to do.
+COMPARE = [
+    ("symbol", "{:<9}", "symbol"),
+    ("strategy", "{:<8}", "strategy"),
+    ("n", "{:>3}", "n"),
+    ("published", "{:>10}", "published"),
+    ("wide", "{:>9}", "wide"),
+    ("rl", "{:>9}", "RL"),
+    ("seeds", "{:>6}", "seeds"),
+    ("spread_gain", "{:>9}", "d wide"),
+    ("rl_gain", "{:>9}", "d RL"),
+    ("half_bp", "{:>8}", "half bp"),
+    ("fills_pub", "{:>9}", "f/h pub"),
+    ("fills_wide", "{:>9}", "f/h wide"),
+    ("fills_rl", "{:>9}", "f/h RL"),
+    ("q_wide", "{:>8}", "|q| wide"),
+    ("q_rl", "{:>8}", "|q| RL"),
+]
+
+
+def compare_rows(rows: list[dict]) -> list[dict]:
+    """Collapse the long table to one row per (asset, strategy).
+
+    Learned policies are summarised by the **median over seeds**, and the
+    seed count is printed next to it: C3 measured a 3.74-point spread between
+    the best and worst seed on this problem, so a single-seed number is not a
+    number, and a reader has to be able to see how many went into it.
+    """
+    groups: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = (row["symbol"], row["strategy"])
+        entry = groups.setdefault(key, {"symbol": row["symbol"], "strategy": row["strategy"],
+                                        "n": row["n"], "rl_values": [], "rl_fills": [],
+                                        "rl_q": []})
+        if row["policy"] == "baseline":
+            slot = "published" if row["spread"] == "published" else "wide"
+            entry[slot] = row["cumulative"]
+            entry[f"fills_{'pub' if slot == 'published' else 'wide'}"] = row["fills_h"]
+            if slot == "wide":
+                entry["half_bp"] = row["half_spread_bp"]
+                entry["q_wide"] = row["abs_q"]
+            entry.setdefault("half_bp", row["half_spread_bp"])
+        else:
+            entry["rl_values"].append(row["cumulative"])
+            entry["rl_fills"].append(row["fills_h"])
+            entry["rl_q"].append(row["abs_q"])
+
+    out = []
+    for entry in groups.values():
+        rl = entry.pop("rl_values")
+        entry["seeds"] = len(rl)
+        entry["rl"] = float(np.median(rl)) if rl else float("nan")
+        entry["fills_rl"] = float(np.median(entry.pop("rl_fills"))) if rl else float("nan")
+        entry["q_rl"] = float(np.median(entry.pop("rl_q"))) if rl else float("nan")
+        published, wide = entry.get("published"), entry.get("wide")
+        entry["spread_gain"] = (wide - published) if published is not None and wide is not None \
+            else float("nan")
+        entry["rl_gain"] = (entry["rl"] - wide) if wide is not None and rl else float("nan")
+        out.append(entry)
+    order = {"glft": 0, "hfgrid": 1, "apt": 2, "basis": 3, "obi": 4}
+    out.sort(key=lambda r: (r["symbol"], order.get(r["strategy"], 9)))
+    return out
+
+
+def render(rows: list[dict], columns, markdown: bool, group_by=None) -> str:
+    if markdown:
+        head = "| " + " | ".join(label for _, _, label in columns) + " |"
+        rule = "| " + " | ".join("---" for _ in columns) + " |"
+        lines = [head, rule]
+        for row in rows:
+            lines.append("| " + " | ".join(fmt(row, key, "{}").strip()
+                                           for key, _, _ in columns) + " |")
+        return "\n".join(lines)
+    header = " ".join(spec.format(label) for _, spec, label in columns)
+    lines = [header, "-" * len(header)]
+    previous = None
+    for row in rows:
+        group = group_by(row) if group_by else None
+        if group_by and previous is not None and group != previous:
+            lines.append("")
+        previous = group
+        lines.append(" ".join(fmt(row, key, spec) for key, spec, _ in columns))
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--markdown", action="store_true")
+    parser.add_argument("--compare", action="store_true",
+                        help="one row per asset and strategy, baseline against RL")
     parser.add_argument("--out", default=None)
-    parser.add_argument("--days", default=None, choices=["train", "test"])
+    parser.add_argument("--days", default="test", choices=["train", "test", "both"])
     args = parser.parse_args()
+    if args.days == "both":
+        args.days = None
 
     rows = baseline_rows() + eval_rows()
     if args.days:
@@ -247,25 +366,12 @@ def main() -> None:
                              spread_order.get(r["spread"], 2),
                              r["policy"] != "baseline", r["policy"]))
 
-    if args.markdown:
-        head = "| " + " | ".join(label for _, _, label in COLUMNS) + " |"
-        rule = "| " + " | ".join("---" for _ in COLUMNS) + " |"
-        lines = [head, rule]
-        for row in rows:
-            lines.append("| " + " | ".join(fmt(row, key, "{}").strip()
-                                           for key, _, _ in COLUMNS) + " |")
-        text = "\n".join(lines)
+    if args.compare:
+        text = render(compare_rows(rows), COMPARE, args.markdown,
+                      group_by=lambda r: r["symbol"])
     else:
-        header = " ".join(spec.format(label) for _, spec, label in COLUMNS)
-        lines = [header, "-" * len(header)]
-        previous = None
-        for row in rows:
-            group = (row["days"], row["symbol"], row["strategy"])
-            if previous is not None and group != previous:
-                lines.append("")
-            previous = group
-            lines.append(" ".join(fmt(row, key, spec) for key, spec, _ in COLUMNS))
-        text = "\n".join(lines)
+        text = render(rows, COLUMNS, args.markdown,
+                      group_by=lambda r: (r["days"], r["symbol"], r["strategy"]))
 
     print(text)
     if args.out:
