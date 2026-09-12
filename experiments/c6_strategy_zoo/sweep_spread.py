@@ -22,6 +22,13 @@ machinery:
   levels, and what it costs is cancel-replace traffic and fills further from
   the fair price.
 
+- **`grid_interval_bp`** -- how far apart?  This turns out to be the knob
+  `grid_num` is usually mistaken for.  With the notebooks' default step (the
+  half spread itself) the sweep finds 20, 40 and 60 orders give *identical*
+  results down to the fill count, because the 21st order sits twenty half
+  spreads out and nothing reaches it.  Adding orders only does something if
+  they land somewhere that trades, which means shrinking the step.
+
 Training days only, and a subset of them: the sweep is a search, so it is the
 part of C6 most able to overfit, and it is deliberately given the least data
 it can be run on rather than the most.  The chosen value is then applied
@@ -77,7 +84,18 @@ GRID_NUM = (1, 5, 20, 40, 60)
 #: the evidence that the turning point is real.
 MIN_FILLS_PER_DAY = 50
 
-VALUES = {"half_spread_bp": HALF_SPREAD_BP, "grid_num": GRID_NUM}
+#: Grid steps to try, in bp.  0 means "follow the half spread", which is what
+#: every grid notebook does and what makes `grid_num` inert past about 20: at
+#: a step equal to the half spread, the 21st order sits 20 half spreads from
+#: the fair price and nothing ever reaches it.  The smaller values pack the
+#: same number of orders into a span that trades.
+GRID_INTERVAL_BP = (0.0, 0.25, 0.5, 1.0, 2.0, 4.0)
+
+VALUES = {
+    "half_spread_bp": HALF_SPREAD_BP,
+    "grid_num": GRID_NUM,
+    "grid_interval_bp": GRID_INTERVAL_BP,
+}
 
 #: Sweep days: the first four training days, which is the least data the
 #: search can run on.  Named here rather than inline so the writeup can say
