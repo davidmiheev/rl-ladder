@@ -16,6 +16,7 @@ median session.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 from pathlib import Path
@@ -166,6 +167,12 @@ def evaluate(
                 mid=out["mid"][:: max(1, len(out) // 20_000)],
                 half_spread_bp=out["half_spread_bp"][:: max(1, len(out) // 20_000)],
             )
+        # A session's record is ~55 MB and its quoter log ~50 MB, and a run
+        # over twenty-one of them is a single process.  Without this the
+        # process grows until the memory cap kills it -- which it did, on day
+        # twenty of twenty-one, losing the whole run.
+        del record, out
+        gc.collect()
         print(
             f"{date}  SR {stats['SR']:8.2f}  Return {stats['Return']:9.4f}  "
             f"MaxDD {stats['MaxDrawdown']:8.4f}  trades {stats['DailyNumberOfTrades']:8.0f}  "
