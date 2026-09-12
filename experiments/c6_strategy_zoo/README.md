@@ -150,6 +150,39 @@ position and latency, on four training days only.
     plot_zoo.py                   equity and inventory figures
     run_checks.py                 the known-answer checks
 
+## Reproducing
+
+Everything is driven by one idempotent queue, because this machine kills long
+jobs without warning and several hours of replays were lost before it
+existed. `run_queue.py` enumerates every job the phase needs, asks `runs/`
+which already have a `summary.json`, and runs the rest, so re-running after a
+kill resumes rather than restarts.
+
+```sh
+python experiments/c6_strategy_zoo/run_checks.py          # known-answer checks first
+python experiments/c6_strategy_zoo/assets.py              # measure and register the assets
+python experiments/c6_strategy_zoo/run_queue.py --list    # what is left
+python experiments/c6_strategy_zoo/run_queue.py --kind sweep      # spread floors
+python experiments/c6_strategy_zoo/run_queue.py --kind baseline   # fixed parameters
+python experiments/c6_strategy_zoo/run_queue.py --kind train      # TD3
+python experiments/c6_strategy_zoo/run_queue.py --kind eval       # held-out scoring
+python experiments/c6_strategy_zoo/master_table.py --compare
+python experiments/c6_strategy_zoo/plot_zoo.py --days test --out docs/assets/c6
+```
+
+Shard across cores with `--shard i/n`. The queue refuses to start a widened
+variant before its asset has a calibrated floor, so the sweeps can be run
+first and a later pass picks up what they unblocked.
+
 ## Results
 
-Filled in as the runs land; see `docs/writeups/c6-strategy-zoo.md`.
+See `docs/writeups/c6-strategy-zoo.md`. The two tables are
+
+```sh
+python experiments/c6_strategy_zoo/master_table.py             # every row
+python experiments/c6_strategy_zoo/master_table.py --compare   # baseline vs RL, paired
+```
+
+and the figures are `docs/assets/c6/{pnl,inventory}-<asset>.png`, with colour
+carrying the strategy and line style the variant: dotted for the published
+parameters, solid for the widened spread, dashed for TD3 on top of it.
