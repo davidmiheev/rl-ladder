@@ -34,3 +34,6 @@ companions/
 
 # OS
 .DS_Store
+
+# Ad-hoc job scripts and logs for the current session; nothing here is a result.
+scratchpad/
