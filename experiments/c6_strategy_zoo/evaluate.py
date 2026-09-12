@@ -135,10 +135,14 @@ def run_session(date: str, policy: dict | None, strategy: str, symbol: str,
     stats["fills_per_hour"] = stats["fills"] / max(stats["hours"], 1e-9)
     mean_mult = np.mean(multipliers, axis=0)
     stats |= {name: float(value) for name, value in zip(ACTION_NAMES, mean_mult, strict=True)}
+    # The record carries balance, position, price and fee, not equity: mark
+    # it to market here the same way the environment and the baseline plots
+    # do, so all three equity curves are the same quantity.
+    marked = record["balance"] + record["position"] * record["price"] - record["fee"]
     # Inventory is stored normalised by the notional cap, not in units of the
     # asset, so that an ETH panel and an XRP panel mean the same thing.
     norm = log["position"] * log["mid"] / env.max_position_dollar
-    stats["equity_path"] = record["equity"][:: max(1, len(record) // 4000)].tolist()
+    stats["equity_path"] = marked[:: max(1, len(marked) // 4000)].tolist()
     stats["position_path"] = norm[:: max(1, len(norm) // 4000)].tolist()
     env.close()
     return stats
