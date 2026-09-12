@@ -362,6 +362,70 @@ and `suiusdt` also agree at 8 bp despite their ticks differing by a factor of
 ten, which is the cleanest single piece of evidence that the floor is a
 property of the asset's flow and not of its tick.
 
+### 8.2 Widening the spread is worth a lot
+
+Across 33 (asset, strategy) pairs on held-out sessions, replacing each
+strategy's published half spread with its asset's calibrated floor is worth a
+**median +2.01 points** of cumulative return, mean +4.05, and helps in
+**25 of 33** cases. The range is -1.70 to +18.36.
+
+|  | published | widened |
+| --- | --- | --- |
+| pairs profitable, held out | 3 / 33 | 8 / 33 |
+| median cumulative return | -4.55% | -1.65% |
+
+That is the single largest effect in Part C. It is also, bluntly, a
+correction to C1 rather than a discovery: C1 established that the calibrated
+GLFT spread does not cover adverse selection on ETHUSDC, and the only thing
+C6 adds is that the same holds on eight more assets and for four more
+strategies, and that a per-asset floor recovers most of the loss.
+
+Where widening *doesn't* help is as informative. The eight negative cases are
+concentrated in `hfgrid` (five of them) and in SUIUSDT. `hfgrid` already sets
+its half spread to five times realised volatility, which on these assets is
+usually wider than the floor -- so the floor rarely binds, and when it does it
+is removing fills the strategy was profiting from rather than protecting it.
+`bnbusdc obi` is the clean control: its floor is 2 bp, the strategy already
+quotes 3.7 bp, the floor never binds, and the published and widened rows are
+**identical to the digit** (-1.62%, 296.70 fills/h both). A pipeline that can
+produce that row is at least wired correctly.
+
+### 8.3 What RL adds on top: mostly nothing
+
+This is the question C6 exists to answer, because C3's version of it was open
+to the objection that GLFT was a losing baseline. It is no longer: the widened
+baselines are a genuinely better starting point, and the answer does not
+change.
+
+Over 14 (asset, strategy) pairs with at least one trained seed, TD3 on the
+four multipliers is worth a **median -2.13 points** against its own widened
+baseline, mean -2.87, positive in **4 of 14**, range -12.90 to +1.24. No
+learned policy is profitable over its held-out period; the widened baselines
+manage it eight times.
+
+So the C3 result survives the obvious objection. Learned, state-conditioned
+parameters do not beat well-chosen fixed ones here, and that is now a
+statement about five strategies and nine assets rather than one of each.
+
+**The seed spread is not a footnote.** C3 measured 3.74 points between the
+best and worst seed, and C6 reproduced the hazard exactly once it had two
+seeds anywhere. On `glft-wide` over XRPUSDC:
+
+| seed | held out | spread_mult | fills |
+| --- | --- | --- | --- |
+| 0 | -0.75% | 1.73 | 1,682 |
+| 1 | -3.25% | 1.27 | 5,984 |
+
+Read from seed 0 alone the policy looks worth +0.91 points over the -1.65%
+baseline; with both seeds the median is -2.00% and it is 0.35 points *worse*.
+Every single-seed row in the table above is exposed to that, which is why the
+seed count is a column and why the median over seeds is what is reported.
+
+The mechanism is the one thing here that generalises: seed 0 chose to widen
+further (8 bp to 15.5 bp) and lost less; seed 1 stayed near the floor and lost
+more. The policies that do well are the ones that rediscover the finding of
+§8.2, and the variance between seeds is mostly variance in whether they do.
+
 ## 9. Where these items come from
 
 | what | source | why this one |

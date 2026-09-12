@@ -330,7 +330,9 @@ def compare_rows(rows: list[dict]) -> list[dict]:
 
 def render(rows: list[dict], columns, markdown: bool, group_by=None) -> str:
     if markdown:
-        head = "| " + " | ".join(label for _, _, label in columns) + " |"
+        # A pipe inside a cell ends the cell, and two of these columns are
+        # named |q|.  Escaping is the header's problem, not the reader's.
+        head = "| " + " | ".join(label.replace("|", "\\|") for _, _, label in columns) + " |"
         rule = "| " + " | ".join("---" for _ in columns) + " |"
         lines = [head, rule]
         for row in rows:
