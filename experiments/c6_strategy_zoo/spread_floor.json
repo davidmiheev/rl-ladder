@@ -1,6 +1,11 @@
 {
   "avaxusdc": 16.0,
+  "bnbusdc": 2.0,
   "enausdc": 32.0,
+  "enausdt": 32.0,
   "ethusdc": 4.0,
-  "xrpusdc": 8.0
+  "suiusdc": 8.0,
+  "suiusdt": 8.0,
+  "xrpusdc": 8.0,
+  "xrpusdt": 8.0
 }

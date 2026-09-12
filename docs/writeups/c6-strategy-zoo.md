@@ -320,7 +320,47 @@ which is why §5.2 exists and why it does not set the spread.
 
 ## 8. Results
 
-*In progress; this section is filled in as each job lands.*
+*In progress. Each subsection appears once its runs have landed; nothing here
+carries a placeholder number.*
+
+### 8.1 How wide each asset has to be quoted
+
+The floor is chosen per asset by `sweep_spread.py`, on three or four training
+sessions, from the widths that still take at least 50 fills a day.
+
+| asset | tick, bp | floor, bp | floor / tick |
+| --- | --- | --- | --- |
+| bnbusdc | 0.1181 | 2 | 17 |
+| ethusdc | 0.0225 | 4 | 178 |
+| suiusdc | 0.0294 | 8 | 273 |
+| suiusdt | 0.2936 | 8 | 27 |
+| xrpusdc | 0.3428 | 8 | 23 |
+| xrpusdt | 0.3423 | 8 | 23 |
+| avaxusdc | 0.4252 | 16 | 38 |
+| enausdc | 1.5898 | 32 | 20 |
+| enausdt | 1.5911 | 32 | 20 |
+
+Every one of them is wider than what GLFT calibrates to, by between two and
+twenty times. That is C1's negative result restated across nine assets rather
+than argued from one.
+
+The floor rises with the tick — log-log correlation 0.756 over the nine — but
+the claim has to be made carefully, for two reasons. The swept grid is powers
+of two, so the response variable takes seven values and a correlation on it is
+coarse. And the ratio is not constant: it sits at 20-38 for the six
+coarser-tick assets and jumps to 178 and 273 for ETHUSDC and SUIUSDC, the two
+with the finest ticks. So the tick is not what sets the floor. For a
+coarse-tick asset the two happen to move together because both are downstream
+of how much the price moves per unit time; for a fine-tick one there is
+nothing stopping the quote sitting close, and the binding constraint is
+adverse selection alone.
+
+Two entries are a useful internal check rather than new information: `enausdc`
+and `enausdt` are the same underlying in two stablecoins, and they land on the
+same floor from independent sweeps, as do `xrpusdc` and `xrpusdt`. `suiusdc`
+and `suiusdt` also agree at 8 bp despite their ticks differing by a factor of
+ten, which is the cleanest single piece of evidence that the floor is a
+property of the asset's flow and not of its tick.
 
 ## 9. Where these items come from
 
