@@ -49,8 +49,35 @@ COLOURS = {
     "obi": "tab:purple",
 }
 
+#: One line style per variant, so colour carries the strategy and style
+#: carries what was done to it.  Dotted is the published parameters, solid the
+#: widened spread, dashed the policy learned on top of the widened spread --
+#: which is also the order they were built in.
+STYLES = {"published": ":", "wide": "-", "TD3": "--"}
 
-def collect(day_set: str) -> list[dict]:
+#: Capital the equity paths are expressed as a percentage of, and the
+#: notional cap the inventory paths are normalised by.  Both match
+#: `strategies.py`, repeated so the plots read from `runs/` alone.
+BOOK_SIZE = 100_000.0
+MAX_POSITION_DOLLAR = 100_000.0
+
+
+#: The split, so a baseline run over the `all` day set can be cut down to the
+#: side being plotted.
+SPLIT_DATE = "2025-09-15"
+#: Points per session in the plotted paths.  The stored records are ~864,000
+#: samples a day and a figure cannot show that; 4,000 is more than a 4-inch
+#: panel has pixels.
+PLOT_POINTS = 4_000
+#: Fewer sessions than this and the run is a smoke test.
+MIN_SESSIONS = 4
+
+
+def _thin(values: np.ndarray) -> np.ndarray:
+    return values[:: max(1, len(values) // PLOT_POINTS)]
+
+
+def collect_learned(day_set: str) -> list[dict]:
     """Every finished evaluation run on `day_set`, with its stored paths."""
     root = RUNS / "c6-eval"
     if not root.exists():
@@ -64,30 +91,113 @@ def collect(day_set: str) -> list[dict]:
         if config_data["day_set"] != day_set:
             continue
         summary_data = json.loads(summary.read_text())
+        if len(summary_data["per_day"]) < MIN_SESSIONS:
+            continue
+        blob = np.load(paths)
         out.append({
-            "dir": path,
             "strategy": summary_data["strategy"],
+            "variant": "TD3",
             "symbol": summary_data["symbol"],
             "learned": config_data["policy"] != "baseline",
             "days": config_data["days"],
             "per_day": summary_data["per_day"],
-            "period": summary_data["period"],
-            "paths": np.load(paths),
+            "equity": {d: blob[f"equity_{d}"] for d in config_data["days"]
+                       if f"equity_{d}" in blob},
+            "position": {d: blob[f"position_{d}"] for d in config_data["days"]
+                         if f"position_{d}" in blob},
         })
     return out
 
 
+def collect_baselines(day_set: str) -> list[dict]:
+    """Fixed-parameter replays from `run_baseline.py`, on the same footing.
+
+    The runner stores each session's raw `hftbacktest` record rather than a
+    pre-computed equity path, so equity is marked to market here the same way
+    the environment does it -- balance plus position at the mid, less fees --
+    and both sources end up on the same axis.
+    """
+    root = RUNS / "c6"
+    if not root.exists():
+        return []
+    out = []
+    for path in sorted(root.iterdir()):
+        summary_path = path / "summary.json"
+        if not summary_path.exists():
+            continue
+        summary = json.loads(summary_path.read_text())
+        if "per_day" not in summary or "strategy" not in summary:
+            continue  # a training run, not a replay
+        keep = [d for d in summary["per_day"]
+                if (d["date"] >= SPLIT_DATE) == (day_set == "test")]
+        if len(keep) < MIN_SESSIONS:
+            continue
+        equity, position = {}, {}
+        for day in keep:
+            record_path = path / f"record_{day['date']}.npz"
+            if not record_path.exists():
+                continue
+            blob = np.load(record_path)
+            record = blob["record"]
+            marked = record["balance"] + record["position"] * record["price"] - record["fee"]
+            equity[day["date"]] = _thin(marked)
+            position[day["date"]] = blob["position"] * blob["mid"] / MAX_POSITION_DOLLAR
+        if not equity:
+            continue
+        name = summary["strategy"]
+        base, _, suffix = name.partition("-")
+        out.append({
+            "strategy": base,
+            "variant": suffix or "published",
+            "symbol": summary["symbol"],
+            "learned": False,
+            "days": [d["date"] for d in keep],
+            "per_day": keep,
+            "equity": equity,
+            "position": position,
+        })
+    return out
+
+
+def collect(day_set: str) -> list[dict]:
+    return collect_baselines(day_set) + collect_learned(day_set)
+
+
+#: How each line style reads in a caption.  Derived from `STYLES` rather than
+#: written beside it, because the two drifted apart the moment a third
+#: variant appeared and a figure with a wrong key is worse than no key.
+STYLE_WORDS = {":": "dotted", "-": "solid", "--": "dashed"}
+VARIANT_WORDS = {
+    "published": "the published parameters",
+    "wide": "the widened spread",
+    "TD3": "TD3 on the multipliers",
+}
+
+
+def legend(entries: list[dict]) -> str:
+    """A caption naming only the variants actually drawn."""
+    present = [v for v in STYLES if any(e["variant"] == v for e in entries)]
+    return ", ".join(
+        f"{STYLE_WORDS[STYLES[v]]}: {VARIANT_WORDS.get(v, v)}" for v in present
+    )
+
+
+def cumulative(entry: dict) -> np.ndarray:
+    """The sessions chained into one track record, in percent of book."""
+    returns = np.array([d["Return"] for d in entry["per_day"]])
+    return (np.cumprod(1.0 + returns) - 1.0) * 100
+
+
 def label_for(entry: dict) -> str:
-    kind = "TD3" if entry["learned"] else "baseline"
-    total = entry["period"]["cumulative_return"] * 100
-    return f"{entry['strategy']} {kind} ({total:+.2f}%)"
+    total = cumulative(entry)[-1]
+    return f"{entry['strategy']} {entry['variant']} ({total:+.2f}%)"
 
 
 def plot(entries: list[dict], key: str, ylabel: str, title: str, out: Path,
          cumulative_panel: bool) -> None:
     days = sorted({d for e in entries for d in e["days"]})
     n_panels = len(days) + (1 if cumulative_panel else 0)
-    cols = min(4, n_panels)
+    cols = min(4, n_panels) if n_panels > 6 else min(3, n_panels)
     rows = int(np.ceil(n_panels / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.2 * cols, 3.4 * rows), squeeze=False)
     flat = axes.ravel()
@@ -95,25 +205,32 @@ def plot(entries: list[dict], key: str, ylabel: str, title: str, out: Path,
     for index, date in enumerate(days):
         ax = flat[index]
         for entry in entries:
-            array = entry["paths"].get(f"{key}_{date}")
-            if array is None:
+            array = entry[key].get(date)
+            if array is None or not len(array):
                 continue
+            if key == "equity":
+                array = np.asarray(array) / BOOK_SIZE * 100
             hours = np.linspace(0, 24, len(array))
             ax.plot(hours, array, lw=1.0, color=COLOURS.get(entry["strategy"], "grey"),
-                    ls="--" if entry["learned"] else "-", alpha=0.9)
+                    ls=STYLES.get(entry["variant"], ":"), alpha=0.9)
         ax.set_title(date, fontsize=10)
         ax.axhline(0, color="grey", lw=0.5)
+        if key == "position":
+            # The notional cap gates *new* quotes; it does not truncate a
+            # fill, so one grid's worth of overshoot past +/-1 is expected and
+            # the lines mark how much of it there is.
+            for level in (-1.0, 1.0):
+                ax.axhline(level, color="grey", lw=0.5, ls=":")
         ax.set_xlabel("hours")
         ax.set_ylabel(ylabel)
 
     if cumulative_panel:
         ax = flat[len(days)]
         for entry in entries:
-            returns = np.array([d["Return"] for d in entry["per_day"]])
-            chained = (np.cumprod(1.0 + returns) - 1.0) * 100
+            chained = cumulative(entry)
             ax.plot(range(1, len(chained) + 1), chained, marker="o", ms=3, lw=1.2,
                     color=COLOURS.get(entry["strategy"], "grey"),
-                    ls="--" if entry["learned"] else "-", label=label_for(entry))
+                    ls=STYLES.get(entry["variant"], ":"), label=label_for(entry))
         ax.axhline(0, color="grey", lw=0.5)
         ax.set_title("all sessions, chained")
         ax.set_xlabel("sessions elapsed")
@@ -148,14 +265,13 @@ def main() -> None:
     out = Path(args.out)
     for symbol in sorted({e["symbol"] for e in entries}):
         subset = [e for e in entries if e["symbol"] == symbol]
-        suffix = "" if len({e["symbol"] for e in entries}) == 1 else f"-{symbol}"
+        suffix = f"-{symbol}"
+        key = legend(subset)
         plot(subset, "equity", "equity, % of book",
-             f"C6 {symbol}: equity on {args.days} sessions "
-             f"(solid: published parameters, dashed: TD3 on the multipliers)",
+             f"C6 {symbol}: equity on {args.days} sessions ({key})",
              out / f"pnl{suffix}.png", cumulative_panel=True)
-        plot(subset, "position", "position, units",
-             f"C6 {symbol}: inventory on {args.days} sessions "
-             f"(solid: published parameters, dashed: TD3 on the multipliers)",
+        plot(subset, "position", "inventory / cap",
+             f"C6 {symbol}: inventory on {args.days} sessions ({key})",
              out / f"inventory{suffix}.png", cumulative_panel=False)
 
 

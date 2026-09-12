@@ -97,8 +97,55 @@ def _period(returns: np.ndarray) -> dict[str, float]:
     }
 
 
-def _day_set(days: list[str]) -> str:
-    return "test" if days and days[0] >= "2025-09-15" else "train"
+#: The split, repeated here rather than imported, because the table has to
+#: stay readable from a runs directory alone.
+SPLIT_DATE = "2025-09-15"
+
+#: A run over fewer sessions than this is a smoke test, not a result.
+MIN_SESSIONS = 4
+
+
+def _summarise(per_day: list[dict], fields: dict[str, str]) -> dict:
+    """Period and per-session statistics over one block of sessions.
+
+    `fields` maps the table's column names onto the per-session keys, because
+    the baseline runner and the evaluator name a few of them differently and
+    a row from each has to land in the same column.
+    """
+    returns = np.array([d["Return"] for d in per_day])
+    row = {"n": len(per_day), **_period(returns),
+           "median_SR": float(np.median([d["SR"] for d in per_day])),
+           "median_return": float(np.median(returns)) * 100,
+           "max_dd": float(np.max([d["MaxDrawdown"] for d in per_day])) * 100}
+    for column, key in fields.items():
+        values = [d[key] for d in per_day if key in d]
+        row[column] = float(np.median(values)) if values else float("nan")
+    return row
+
+
+def _split(per_day: list[dict]) -> list[tuple[str, list[dict]]]:
+    """Separate a run's sessions into their train and held-out halves.
+
+    A run over the `all` day set covers both sides of the split, and pooling
+    them would put a strategy's training days into the number the held-out
+    comparison is made on.  Splitting here means one run yields up to two
+    rows and every row is about one side.
+    """
+    train = [d for d in per_day if d["date"] < SPLIT_DATE]
+    test = [d for d in per_day if d["date"] >= SPLIT_DATE]
+    return [(name, block) for name, block in (("train", train), ("test", test))
+            if len(block) >= MIN_SESSIONS]
+
+
+BASELINE_FIELDS = {
+    "half_spread_bp": "median_half_spread_bp",
+    "A": "median_A",
+    "k": "median_k",
+    "inv_k": "spread_floor_tick",
+    "fills_h": "fills_per_hour",
+    "abs_q": "median_abs_position",
+    "signal_bp": "median_abs_signal_bp",
+}
 
 
 def baseline_rows() -> list[dict]:
@@ -107,29 +154,18 @@ def baseline_rows() -> list[dict]:
     for path, config, summary in finished("c6"):
         if "per_day" not in summary or "strategy" not in summary:
             continue  # a training run, not a baseline replay
-        per_day = summary["per_day"]
-        returns = np.array([d["Return"] for d in per_day])
+        del config
         name = summary["strategy"]
         base, _, suffix = name.partition("-")
-        rows.append({
-            "strategy": base,
-            "variant": suffix or "published",
-            "symbol": summary["symbol"],
-            "days": _day_set(config["days"]),
-            "n": len(per_day),
-            **_period(returns),
-            "median_SR": float(np.median([d["SR"] for d in per_day])),
-            "median_return": float(np.median(returns)) * 100,
-            "max_dd": float(np.max([d["MaxDrawdown"] for d in per_day])) * 100,
-            "half_spread_bp": float(np.median([d["median_half_spread_bp"] for d in per_day])),
-            "A": float(np.median([d["median_A"] for d in per_day])),
-            "k": float(np.median([d["median_k"] for d in per_day])),
-            "inv_k": float(np.median([d["spread_floor_tick"] for d in per_day])),
-            "fills_h": float(np.median([d["fills_per_hour"] for d in per_day])),
-            "abs_q": float(np.median([d["median_abs_position"] for d in per_day])),
-            "signal_bp": float(np.median([d["median_abs_signal_bp"] for d in per_day])),
-            "_dir": path.name,
-        })
+        for day_set, block in _split(summary["per_day"]):
+            rows.append({
+                "strategy": base,
+                "variant": suffix or "published",
+                "symbol": summary["symbol"],
+                "days": day_set,
+                **_summarise(block, BASELINE_FIELDS),
+                "_dir": path.name,
+            })
     return rows
 
 
@@ -140,34 +176,35 @@ def eval_rows() -> list[dict]:
         if "period" not in summary:
             continue
         per_day = summary["per_day"]
-        returns = np.array([d["Return"] for d in per_day])
+        if len(per_day) < MIN_SESSIONS:
+            continue
+        for d in per_day:
+            d["inv_k"] = 1.0 / d["median_k"] if d["median_k"] else float("nan")
         name = summary["strategy"]
         base, _, suffix = name.partition("-")
         learned = config["policy"] != "baseline"
-        variant = "TD3" if learned else "baseline"
-        if suffix:
-            variant = f"{variant}/{suffix}"
+        variant = f"TD3/{suffix}" if learned and suffix else ("TD3" if learned else suffix or "published")
+        seed = Path(path).name.split("-s")[-1].split("__")[0] if learned else None
         rows.append({
             "strategy": base,
-            "variant": variant,
+            "variant": f"{variant} s{seed}" if seed and seed.isdigit() else variant,
             "symbol": summary["symbol"],
             "days": config["day_set"],
-            "n": len(per_day),
-            **_period(returns),
-            "median_SR": float(np.median([d["SR"] for d in per_day])),
-            "median_return": float(np.median(returns)) * 100,
-            "max_dd": float(np.max([d["MaxDrawdown"] for d in per_day])) * 100,
-            "half_spread_bp": float(np.median([d["median_half_spread_bp"] for d in per_day])),
-            "A": float(np.median([d["median_A"] for d in per_day])),
-            "k": float(np.median([d["median_k"] for d in per_day])),
-            "inv_k": float(np.median([1.0 / d["median_k"] if d["median_k"] else np.nan
-                                      for d in per_day])),
-            "fills_h": float(np.median([d["fills_per_hour"] for d in per_day])),
-            "abs_q": float(np.median([d["mean_abs_inventory"] for d in per_day])),
-            "signal_bp": float(np.median([d["median_abs_signal_bp"] for d in per_day])),
+            **_summarise(per_day, EVAL_FIELDS),
             "_dir": path.name,
         })
     return rows
+
+
+EVAL_FIELDS = {
+    "half_spread_bp": "median_half_spread_bp",
+    "A": "median_A",
+    "k": "median_k",
+    "inv_k": "inv_k",
+    "fills_h": "fills_per_hour",
+    "abs_q": "mean_abs_inventory",
+    "signal_bp": "median_abs_signal_bp",
+}
 
 
 def fmt(row: dict, key: str, spec: str) -> str:
@@ -199,8 +236,10 @@ def main() -> None:
     if not rows:
         raise SystemExit("no finished C6 runs found under runs/c6 or runs/c6-eval")
     order = {"glft": 0, "hfgrid": 1, "apt": 2, "basis": 3, "obi": 4}
-    rows.sort(key=lambda r: (r["days"] != "test", order.get(r["strategy"], 9),
-                             r["variant"], r["symbol"]))
+    variant_order = {"published": 0, "wide": 1}
+    rows.sort(key=lambda r: (r["days"] != "test", r["symbol"],
+                             order.get(r["strategy"], 9),
+                             variant_order.get(r["variant"], 2), r["variant"]))
 
     if args.markdown:
         head = "| " + " | ".join(label for _, _, label in COLUMNS) + " |"
