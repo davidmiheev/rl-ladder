@@ -30,7 +30,16 @@ LATENCY = REPO / "data" / "latency"
 SYMBOLS = {
     "ethusdc": {"tick_size": 0.01, "lot_size": 0.001, "roi_ub": 15_000.0},
     "xrpusdt": {"tick_size": 0.0001, "lot_size": 0.1, "roi_ub": 30.0},
+    "xrpusdc": {"tick_size": 0.0001, "lot_size": 0.1, "roi_ub": 30.0},
 }
+
+#: Reference leg for the two pair strategies in C6.  The published notebooks
+#: use *spot* against the perpetual; this dataset has no spot feed, so the
+#: USDT-quoted perpetual stands in as the reference for the USDC-quoted one.
+#: The pair is cointegrated for a different reason -- the stablecoin basis and
+#: a venue lead-lag, not cash-and-carry -- which changes what the signal means
+#: but not the shape of the strategy.  See docs/writeups/c6-strategy-zoo.md.
+REFERENCE_LEG = {"xrpusdc": "xrpusdt"}
 
 SYMBOL = "ethusdc"
 TICK_SIZE = SYMBOLS[SYMBOL]["tick_size"]
@@ -73,6 +82,33 @@ SPLIT_DATE = "2025-09-15"
 
 TRAIN_DAYS = ["2025-08-26", "2025-08-27", "2025-08-28", "2025-09-01", "2025-09-08"]
 TEST_DAYS = ["2025-09-15", "2025-09-18", "2025-09-20", "2025-09-22", "2025-09-25"]
+
+#: The wider day sets C6 uses.  These are *supersets* of the five-day lists
+#: above, on the same side of the same `SPLIT_DATE`: C1, C2 and C3 keep running
+#: on exactly the days they published on, and nothing already reported moves.
+#: Widening rather than re-picking is the point -- re-picking a split after
+#: seeing results is the failure C4's third item exists to catch, and doing it
+#: to ourselves would be worse than doing it by accident.
+#:
+#: Training days are ten of the twenty available before the split, spaced to
+#: cover the window rather than clustered at its start.  The held-out set is
+#: *every* day from the split to the end of the data, with no selection at all,
+#: which is the only held-out set that cannot be accused of cherry-picking.
+TRAIN_DAYS_EXT = [
+    "2025-08-26", "2025-08-27", "2025-08-28", "2025-08-29", "2025-09-01",
+    "2025-09-03", "2025-09-05", "2025-09-08", "2025-09-10", "2025-09-12",
+]
+TEST_DAYS_EXT = [
+    "2025-09-15", "2025-09-16", "2025-09-17", "2025-09-18", "2025-09-19",
+    "2025-09-20", "2025-09-21", "2025-09-22", "2025-09-23", "2025-09-24",
+    "2025-09-25",
+]
+
+#: The days the USDC/USDT pair strategies (C6's APT and basis) run on.  Two
+#: whole symbols per day is roughly three times the bytes of one, so this is a
+#: four-plus-four subset of the lists above rather than the full ten-plus-eleven.
+PAIR_TRAIN_DAYS = ["2025-08-26", "2025-08-29", "2025-09-03", "2025-09-08"]
+PAIR_TEST_DAYS = ["2025-09-15", "2025-09-18", "2025-09-22", "2025-09-25"]
 
 #: The single day A, k and sigma are first calibrated on by hand in item 1.
 CALIBRATION_DAY = TRAIN_DAYS[0]
