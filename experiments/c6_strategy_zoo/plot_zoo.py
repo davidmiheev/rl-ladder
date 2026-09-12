@@ -69,8 +69,9 @@ SPLIT_DATE = "2025-09-15"
 #: samples a day and a figure cannot show that; 4,000 is more than a 4-inch
 #: panel has pixels.
 PLOT_POINTS = 4_000
-#: Fewer sessions than this and the run is a smoke test.
-MIN_SESSIONS = 4
+#: Fewer sessions than this and the run is a smoke test.  Three: the breadth
+#: tier runs three held-out sessions.
+MIN_SESSIONS = 3
 
 
 def _thin(values: np.ndarray) -> np.ndarray:

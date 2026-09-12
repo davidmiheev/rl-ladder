@@ -77,17 +77,23 @@ COLUMNS = [
 
 
 def finished(phase: str):
-    """Every run directory under `phase` that has a summary."""
+    """Every run directory under `phase` that has a summary, newest per name.
+
+    Run directories are `<name>__<timestamp>`, so a job that was killed and
+    re-run leaves more than one. Only the newest of each name is reported:
+    otherwise a re-run silently doubles its row, and two rows that differ
+    only by when they were run look like two measurements.
+    """
     root = RUNS / phase
     if not root.exists():
         return []
-    out = []
+    newest: dict[str, Path] = {}
     for path in sorted(root.iterdir()):
-        summary = path / "summary.json"
-        config = path / "config.json"
-        if summary.exists() and config.exists():
-            out.append((path, json.loads(config.read_text()), json.loads(summary.read_text())))
-    return out
+        if (path / "summary.json").exists() and (path / "config.json").exists():
+            newest[path.name.split("__")[0]] = path  # sorted, so the last wins
+    return [(path, json.loads((path / "config.json").read_text()),
+             json.loads((path / "summary.json").read_text()))
+            for path in newest.values()]
 
 
 def _period(returns: np.ndarray) -> dict[str, float]:
@@ -104,8 +110,11 @@ def _period(returns: np.ndarray) -> dict[str, float]:
 #: stay readable from a runs directory alone.
 SPLIT_DATE = "2025-09-15"
 
-#: A run over fewer sessions than this is a smoke test, not a result.
-MIN_SESSIONS = 4
+#: A run over fewer sessions than this is a smoke test, not a result.  Three,
+#: because the breadth tier is three training and three held-out sessions by
+#: design; the session count is a column, so a three-session row cannot be
+#: mistaken for an eleven-session one.
+MIN_SESSIONS = 3
 
 
 def _summarise(per_day: list[dict], fields: dict[str, str]) -> dict:
