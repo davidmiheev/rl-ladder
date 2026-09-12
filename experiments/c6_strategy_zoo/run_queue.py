@@ -4,14 +4,19 @@ The machine this runs on kills long background jobs without warning -- a
 per-invocation memory cap, and anything still running when a session turn
 ends.  Several hours of replays were lost that way before this existed.
 
+(The name matters: every C6 script puts its own directory first on
+`sys.path`, so a module called `queue.py` here shadows the standard library's
+and breaks any dependency that imports it -- polars does, and every job in
+the first run of this file died on it.)
+
 So the queue is idempotent rather than long-lived: it enumerates every job
 C6 needs, asks `runs/` which ones already have a `summary.json`, and runs the
 rest in order.  Re-running it after a kill resumes; running it when
 everything is done prints "nothing to do".  That makes an interrupted job
 cost one job rather than a stream.
 
-    python experiments/c6_strategy_zoo/queue.py --list
-    python experiments/c6_strategy_zoo/queue.py --kind baseline --shard 0/2
+    python experiments/c6_strategy_zoo/run_queue.py --list
+    python experiments/c6_strategy_zoo/run_queue.py --kind baseline --shard 0/2
 """
 
 from __future__ import annotations
