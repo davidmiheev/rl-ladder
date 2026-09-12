@@ -44,7 +44,7 @@ sys.path.insert(0, str(HERE.parent / "a5_continuous_control"))
 sys.path.insert(0, str(HERE.parent / "c1_glft_baseline"))
 sys.path.insert(0, str(HERE.parents[1] / "src"))
 
-import config as market_config  # noqa: E402
+import assets  # noqa: E402
 import strategies  # noqa: E402
 from continuous import Config, ReplayBuffer, build_agent, select_action, update_step  # noqa: E402
 from env import ZooEnv  # noqa: E402
@@ -73,8 +73,8 @@ ACTION_NAMES = ("spread_mult", "skew_mult", "alpha_mult", "grid_mult")
 
 
 def training_days(symbol: str) -> list[str]:
-    pair = symbol in market_config.REFERENCE_LEG
-    return market_config.PAIR_TRAIN_DAYS if pair else market_config.TRAIN_DAYS_EXT
+    assets.ensure_registered(symbol)
+    return assets.train_days(symbol)
 
 
 def episode(env, agent, config, buffer, rng, act_dim, baseline, mask, explore,

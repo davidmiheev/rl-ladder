@@ -46,6 +46,7 @@ from numba import njit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c1_glft_baseline"))
 
+import assets  # noqa: E402
 import config  # noqa: E402
 import glft  # noqa: E402
 import precompute  # noqa: E402
@@ -167,8 +168,8 @@ class ZooEnv(gym.Env):
         allow_held_out: bool = False,
     ) -> None:
         super().__init__()
-        held_out = set(config.TEST_DAYS_EXT) | set(config.PAIR_TEST_DAYS)
-        if date in held_out and not allow_held_out:
+        assets.ensure_registered(symbol)
+        if date in assets.test_days(symbol) and not allow_held_out:
             raise ValueError(f"{date} is a held-out day; pass allow_held_out=True and mean it")
         config.use_symbol(symbol)
         self.date = date

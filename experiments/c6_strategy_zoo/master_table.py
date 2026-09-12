@@ -51,9 +51,10 @@ sys.path.insert(0, str(HERE))
 RUNS = HERE.parents[1] / "runs"
 
 COLUMNS = [
-    ("strategy", "{:<14}", "strategy"),
-    ("variant", "{:<10}", "variant"),
-    ("symbol", "{:<8}", "symbol"),
+    ("strategy", "{:<8}", "strategy"),
+    ("policy", "{:<12}", "policy"),
+    ("spread", "{:<10}", "spread"),
+    ("symbol", "{:<9}", "symbol"),
     ("days", "{:<6}", "days"),
     ("n", "{:>3}", "n"),
     ("cumulative", "{:>9}", "cum %"),
@@ -160,7 +161,8 @@ def baseline_rows() -> list[dict]:
         for day_set, block in _split(summary["per_day"]):
             rows.append({
                 "strategy": base,
-                "variant": suffix or "published",
+                "policy": "baseline",
+                "spread": "wide" if suffix == "wide" else "published",
                 "symbol": summary["symbol"],
                 "days": day_set,
                 **_summarise(block, BASELINE_FIELDS),
@@ -183,11 +185,11 @@ def eval_rows() -> list[dict]:
         name = summary["strategy"]
         base, _, suffix = name.partition("-")
         learned = config["policy"] != "baseline"
-        variant = f"TD3/{suffix}" if learned and suffix else ("TD3" if learned else suffix or "published")
-        seed = Path(path).name.split("-s")[-1].split("__")[0] if learned else None
+        seed = path.name.split("-s")[-1].split("__")[0] if learned else ""
         rows.append({
             "strategy": base,
-            "variant": f"{variant} s{seed}" if seed and seed.isdigit() else variant,
+            "policy": (f"RL TD3 s{seed}" if seed.isdigit() else "RL TD3") if learned else "baseline",
+            "spread": "wide" if suffix == "wide" else "published",
             "symbol": summary["symbol"],
             "days": config["day_set"],
             **_summarise(per_day, EVAL_FIELDS),
@@ -235,11 +237,15 @@ def main() -> None:
         rows = [r for r in rows if r["days"] == args.days]
     if not rows:
         raise SystemExit("no finished C6 runs found under runs/c6 or runs/c6-eval")
+    # Grouped so each strategy's three rows -- published baseline, widened
+    # baseline, and the policy learned on top of the widened one -- sit
+    # together, in the order they were built.
     order = {"glft": 0, "hfgrid": 1, "apt": 2, "basis": 3, "obi": 4}
-    variant_order = {"published": 0, "wide": 1}
+    spread_order = {"published": 0, "wide": 1}
     rows.sort(key=lambda r: (r["days"] != "test", r["symbol"],
                              order.get(r["strategy"], 9),
-                             variant_order.get(r["variant"], 2), r["variant"]))
+                             spread_order.get(r["spread"], 2),
+                             r["policy"] != "baseline", r["policy"]))
 
     if args.markdown:
         head = "| " + " | ".join(label for _, _, label in COLUMNS) + " |"
@@ -252,7 +258,12 @@ def main() -> None:
     else:
         header = " ".join(spec.format(label) for _, spec, label in COLUMNS)
         lines = [header, "-" * len(header)]
+        previous = None
         for row in rows:
+            group = (row["days"], row["symbol"], row["strategy"])
+            if previous is not None and group != previous:
+                lines.append("")
+            previous = group
             lines.append(" ".join(fmt(row, key, spec) for key, spec, _ in COLUMNS))
         text = "\n".join(lines)
 

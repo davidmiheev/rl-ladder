@@ -1,0 +1,56 @@
+{
+  "avaxusdc": {
+    "tick_size": 0.0009999999999976694,
+    "lot_size": 0.00999999999839929,
+    "price": 23.521,
+    "roi_ub": 94.084
+  },
+  "bnbusdc": {
+    "tick_size": 0.009999999999990905,
+    "lot_size": 0.009999999999990905,
+    "price": 846.75,
+    "roi_ub": 3387.0
+  },
+  "enausdc": {
+    "tick_size": 9.999999999998899e-05,
+    "lot_size": 1.0,
+    "price": 0.629,
+    "roi_ub": 2.516
+  },
+  "enausdt": {
+    "tick_size": 9.999999999998899e-05,
+    "lot_size": 1.0,
+    "price": 0.6285,
+    "roi_ub": 2.514
+  },
+  "ethusdc": {
+    "tick_size": 0.01,
+    "lot_size": 0.001,
+    "roi_ub": 15000.0,
+    "price": 4442.3150000000005
+  },
+  "suiusdc": {
+    "tick_size": 9.999999999621423e-06,
+    "lot_size": 0.09999999999126885,
+    "price": 3.40677,
+    "roi_ub": 13.62708
+  },
+  "suiusdt": {
+    "tick_size": 9.999999999976694e-05,
+    "lot_size": 0.09999999997671694,
+    "price": 3.4061,
+    "roi_ub": 13.6244
+  },
+  "xrpusdc": {
+    "tick_size": 0.0001,
+    "lot_size": 0.1,
+    "roi_ub": 30.0,
+    "price": 2.91705
+  },
+  "xrpusdt": {
+    "tick_size": 0.0001,
+    "lot_size": 0.1,
+    "roi_ub": 30.0,
+    "price": 2.9216
+  }
+}

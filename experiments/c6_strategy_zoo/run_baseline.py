@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c1_glft_baseline"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+import assets  # noqa: E402
 import config  # noqa: E402
 import precompute  # noqa: E402
 import strategies  # noqa: E402
@@ -56,18 +57,14 @@ NO_PRECOMPUTE = np.zeros((1, 3), np.float64)
 
 
 def day_sets(symbol: str) -> dict[str, list[str]]:
-    return {
-        "one": config.TRAIN_DAYS_EXT[:1],
-        "train": config.TRAIN_DAYS_EXT,
-        "test": config.TEST_DAYS_EXT,
-        "all": config.TRAIN_DAYS_EXT + config.TEST_DAYS_EXT,
-        "train-c1": config.TRAIN_DAYS,
-        "test-c1": config.TEST_DAYS,
-        "pair-one": config.PAIR_TRAIN_DAYS[:1],
-        "pair-train": config.PAIR_TRAIN_DAYS,
-        "pair-test": config.PAIR_TEST_DAYS,
-        "pair-all": config.PAIR_TRAIN_DAYS + config.PAIR_TEST_DAYS,
-    }
+    assets.ensure_registered(symbol)
+    sets = assets.day_sets(symbol)
+    # C1's original five-day lists, so a C6 run can be put beside a C1 one.
+    sets |= {"train-c1": config.TRAIN_DAYS, "test-c1": config.TEST_DAYS}
+    # Retained spellings from before `assets.py` existed.
+    sets |= {"pair-train": sets["train"], "pair-test": sets["test"],
+             "pair-all": sets["all"], "pair-one": sets["one"]}
+    return sets
 
 
 def table_for(strategy: str, symbol: str, date: str) -> np.ndarray:
@@ -87,6 +84,7 @@ def run_day(
     multipliers: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
 ) -> tuple[dict, np.ndarray, np.ndarray]:
     """Replay one session; return its statistics, its record and the quoter's log."""
+    assets.ensure_registered(symbol)
     config.use_symbol(symbol)
     kwargs = {"beta": overrides["beta"]} if strategy.split("-")[0] == "apt" else {}
     params = strategies.build(strategy, symbol, **kwargs)

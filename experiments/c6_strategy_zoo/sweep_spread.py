@@ -49,7 +49,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "c1_glft_baseline"))
 sys.path.insert(0, str(HERE.parents[1] / "src"))
 
-import config as market_config  # noqa: E402
+import assets  # noqa: E402
 import run_baseline  # noqa: E402
 import strategies  # noqa: E402
 
@@ -101,9 +101,8 @@ VALUES = {
 #: search can run on.  Named here rather than inline so the writeup can say
 #: exactly which sessions chose the number.
 def sweep_days(symbol: str, n: int) -> list[str]:
-    days = (market_config.PAIR_TRAIN_DAYS if symbol in market_config.REFERENCE_LEG
-            else market_config.TRAIN_DAYS_EXT)
-    return days[:n]
+    assets.ensure_registered(symbol)
+    return assets.train_days(symbol)[:n]
 
 
 def main() -> None:

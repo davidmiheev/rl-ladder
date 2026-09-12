@@ -33,7 +33,7 @@ sys.path.insert(0, str(HERE.parent / "a5_continuous_control"))
 sys.path.insert(0, str(HERE.parent / "c1_glft_baseline"))
 sys.path.insert(0, str(HERE.parents[1] / "src"))
 
-import config as market_config  # noqa: E402
+import assets  # noqa: E402
 from continuous import Config, build_agent  # noqa: E402
 from env import ZooEnv  # noqa: E402
 from train import ACTION_NAMES, ALGOS  # noqa: E402
@@ -45,13 +45,13 @@ REPORTED = ["SR", "Sortino", "Return", "MaxDrawdown", "ReturnOverMDD",
 
 
 def held_out_days(symbol: str) -> list[str]:
-    pair = symbol in market_config.REFERENCE_LEG
-    return market_config.PAIR_TEST_DAYS if pair else market_config.TEST_DAYS_EXT
+    assets.ensure_registered(symbol)
+    return assets.test_days(symbol)
 
 
 def train_days(symbol: str) -> list[str]:
-    pair = symbol in market_config.REFERENCE_LEG
-    return market_config.PAIR_TRAIN_DAYS if pair else market_config.TRAIN_DAYS_EXT
+    assets.ensure_registered(symbol)
+    return assets.train_days(symbol)
 
 
 def load_policy(path: Path):

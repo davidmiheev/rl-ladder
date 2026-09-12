@@ -47,6 +47,7 @@ from numba import njit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c1_glft_baseline"))
 
+import assets  # noqa: E402
 import config  # noqa: E402
 import glft  # noqa: E402
 
@@ -82,6 +83,7 @@ def measure_mid(hbt, interval_ns, out_ts, out_mid):
 
 
 def _mid_series(symbol: str, date: str) -> tuple[np.ndarray, np.ndarray]:
+    assets.ensure_registered(symbol)
     config.use_symbol(symbol)
     config.ensure_latency(date)
     hbt = config.build_backtest(date)
@@ -122,6 +124,7 @@ def _rolling_mean(x: np.ndarray, window: int) -> np.ndarray:
 
 def build(symbol: str, date: str, overwrite: bool = False) -> tuple[Path, Path]:
     """Write this day's APT and basis tables for `symbol` against its reference."""
+    assets.ensure_registered(symbol)
     reference = config.REFERENCE_LEG[symbol]
     apt_path = PRECOMP / f"apt_{symbol}_{date}.npy"
     basis_path = PRECOMP / f"basis_{symbol}_{date}.npy"
@@ -206,11 +209,8 @@ def main() -> None:
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    days = {
-        "pair-train": config.PAIR_TRAIN_DAYS,
-        "pair-test": config.PAIR_TEST_DAYS,
-        "pair-all": config.PAIR_TRAIN_DAYS + config.PAIR_TEST_DAYS,
-    }[args.days]
+    assets.ensure_registered(args.symbol)
+    days = assets.day_sets(args.symbol)[args.days.replace("pair-", "")]
 
     for date in days:
         apt_path, basis_path = build(args.symbol, date, overwrite=args.overwrite)
@@ -224,7 +224,7 @@ def main() -> None:
             f"median basis {spread_bp:+7.3f} bp"
         )
 
-    beta, r2 = fit_beta(args.symbol, config.PAIR_TRAIN_DAYS)
+    beta, r2 = fit_beta(args.symbol, assets.train_days(args.symbol))
     print(f"\nbeta fitted on training days: {beta:.4f}   R^2 {r2:.4f}")
 
 
