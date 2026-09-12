@@ -78,7 +78,7 @@ def _thin(values: np.ndarray) -> np.ndarray:
     return values[:: max(1, len(values) // PLOT_POINTS)]
 
 
-def collect_learned(day_set: str) -> list[dict]:
+def collect_learned(day_set: str, symbol: str | None = None) -> list[dict]:
     """Every finished evaluation run on `day_set`, with its stored paths."""
     root = RUNS / "c6-eval"
     if not root.exists():
@@ -93,6 +93,8 @@ def collect_learned(day_set: str) -> list[dict]:
             continue
         summary_data = json.loads(summary.read_text())
         if len(summary_data["per_day"]) < MIN_SESSIONS:
+            continue
+        if symbol is not None and summary_data["symbol"] != symbol:
             continue
         blob = np.load(paths)
         out.append({
@@ -110,7 +112,7 @@ def collect_learned(day_set: str) -> list[dict]:
     return out
 
 
-def collect_baselines(day_set: str) -> list[dict]:
+def collect_baselines(day_set: str, symbol: str | None = None) -> list[dict]:
     """Fixed-parameter replays from `run_baseline.py`, on the same footing.
 
     The runner stores each session's raw `hftbacktest` record rather than a
@@ -129,6 +131,8 @@ def collect_baselines(day_set: str) -> list[dict]:
         summary = json.loads(summary_path.read_text())
         if "per_day" not in summary or "strategy" not in summary:
             continue  # a training run, not a replay
+        if symbol is not None and summary["symbol"] != symbol:
+            continue
         keep = [d for d in summary["per_day"]
                 if (d["date"] >= SPLIT_DATE) == (day_set == "test")]
         if len(keep) < MIN_SESSIONS:
@@ -160,8 +164,31 @@ def collect_baselines(day_set: str) -> list[dict]:
     return out
 
 
-def collect(day_set: str) -> list[dict]:
-    return collect_baselines(day_set) + collect_learned(day_set)
+def collect(day_set: str, symbol: str | None = None) -> list[dict]:
+    """Entries for one asset, or for all of them.
+
+    The symbol filter is applied *before* any record is opened. A session's
+    record is ~55 MB and the study has nine assets, so collecting everything
+    and filtering afterwards reads tens of gigabytes to draw one figure.
+    """
+    return collect_baselines(day_set, symbol) + collect_learned(day_set, symbol)
+
+
+def symbols_with_runs() -> list[str]:
+    """Which assets have anything to plot, without opening a record."""
+    found = set()
+    for phase in ("c6", "c6-eval"):
+        root = RUNS / phase
+        if not root.exists():
+            continue
+        for path in sorted(root.iterdir()):
+            summary_path = path / "summary.json"
+            if not summary_path.exists():
+                continue
+            summary = json.loads(summary_path.read_text())
+            if "symbol" in summary and "per_day" in summary:
+                found.add(summary["symbol"])
+    return sorted(found)
 
 
 #: How each line style reads in a caption.  Derived from `STYLES` rather than
@@ -255,25 +282,26 @@ def main() -> None:
     parser.add_argument("--out", default="docs/assets/c6")
     args = parser.parse_args()
 
-    entries = collect(args.days)
-    if args.symbol:
-        entries = [e for e in entries if e["symbol"] == args.symbol]
-    if not entries:
-        raise SystemExit(f"no finished C6 evaluations on the {args.days} days")
-
-    # One asset per figure: ETHUSDC has eleven held-out sessions and XRPUSDC
-    # four, and putting them on one grid would imply they are the same period.
+    # One asset per figure, collected one asset at a time: the held-out
+    # periods differ in length between the deep and breadth tiers, and
+    # putting them on one grid would imply they are the same period.
     out = Path(args.out)
-    for symbol in sorted({e["symbol"] for e in entries}):
-        subset = [e for e in entries if e["symbol"] == symbol]
-        suffix = f"-{symbol}"
+    wanted = [args.symbol] if args.symbol else symbols_with_runs()
+    drawn = 0
+    for symbol in wanted:
+        subset = collect(args.days, symbol)
+        if not subset:
+            continue
         key = legend(subset)
         plot(subset, "equity", "equity, % of book",
              f"C6 {symbol}: equity on {args.days} sessions ({key})",
-             out / f"pnl{suffix}.png", cumulative_panel=True)
+             out / f"pnl-{symbol}.png", cumulative_panel=True)
         plot(subset, "position", "inventory / cap",
              f"C6 {symbol}: inventory on {args.days} sessions ({key})",
-             out / f"inventory{suffix}.png", cumulative_panel=False)
+             out / f"inventory-{symbol}.png", cumulative_panel=False)
+        drawn += 1
+    if not drawn:
+        raise SystemExit(f"no finished C6 runs on the {args.days} days")
 
 
 if __name__ == "__main__":
