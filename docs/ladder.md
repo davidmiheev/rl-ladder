@@ -997,3 +997,26 @@ APT) your notes are based on
   analytic model with a manual extension is the better engineering choice, and
   knowing that is worth the experiment.
 
+---
+
+## C6. The strategy zoo (added, not from the original ladder)
+
+Not one of the 59 items. C6 came from a request after C3 landed: run all five
+of the strategies hftbacktest publishes rather than only GLFT, give each one a
+wider asset-appropriate spread, use more days on both sides of the split, and
+put the lot in one table with PnL and inventory plots.
+
+It exists because C3's answer -- learned parameters do not beat fixed ones --
+was open to the objection that GLFT is a losing baseline on this venue, so
+beating it proves little. C6 removes that objection and asks again.
+
+Writeup: [`writeups/c6-strategy-zoo.md`](writeups/c6-strategy-zoo.md).
+Lab notebook: [`../experiments/c6_strategy_zoo/README.md`](../experiments/c6_strategy_zoo/README.md).
+Tables: [`writeups/c6-compare.md`](writeups/c6-compare.md) (paired) and
+[`writeups/c6-table.md`](writeups/c6-table.md) (per configuration).
+
+C6 is also where C5's two items get answered, since folding the basis and APT
+alpha signals into the state and re-running C3 is exactly what the `apt` and
+`basis` strategies plus the `alpha_mult` action do. They are ticked there, not
+here, only once the evidence for each is in the writeup.
+
