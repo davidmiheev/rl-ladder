@@ -173,7 +173,35 @@ five-day lists on the same side of the same `SPLIT_DATE = 2025-09-15`:
 Nothing C1, C2 or C3 reported moves, because their days are a subset of these
 and each session is replayed independently.
 
-### 4.2 The substitution APT and basis need
+### 4.2 What tier the data is, and what that costs
+
+Market-by-price (L2), not market-by-order (L3), verified from the files
+rather than from the dataset description: `order_id` is zero on all
+16,885,548 rows of a day, and the event types are 16.5M incremental depth
+updates, 394k trades, six depth-clears and 6,000 snapshot rows -- the
+snapshot and clear being why each day is self-contained and replayable on
+its own.
+
+The consequence is the one that matters most for every number in this phase.
+**With no order identities, queue position cannot be observed and has to be
+modelled.** hftbacktest guesses where a resting order sits within its price
+level; C6 uses `power_prob_queue_model(2.0)` throughout, and C1 measured that
+this choice moves results more than anything the strategy does.
+
+It is also the reason §5 ends where it does. The tape says a quote breaks
+even at almost any depth; the simulator says C1's baseline lost 0.80 bp per
+fill. The gap is *which* aggressive trades reach a resting order, and that is
+exactly what L3 would answer and L2 cannot. Every spread floor in §8.1 is
+therefore conditional on the queue model, and tighter quotes are where that
+conditionality bites hardest -- a quote at the touch is almost all queue
+position, a quote 30 bp out is almost none.
+
+Order latency is synthesised for the same reason: the dataset carries no
+order-latency feed, so entry and response latency are 4x and 3x the observed
+*feed* latency (`local_ts - exch_ts`), following hftbacktest's own tutorial,
+which is about a 20 ms round trip on these days.
+
+### 4.3 The substitution APT and basis need
 
 Both pair strategies need a second instrument. The notebooks use **spot**
 against the perpetual; `cardinalai/backtest_data` has no spot feed — it is
@@ -397,15 +425,37 @@ to the objection that GLFT was a losing baseline. It is no longer: the widened
 baselines are a genuinely better starting point, and the answer does not
 change.
 
-Over 14 (asset, strategy) pairs with at least one trained seed, TD3 on the
-four multipliers is worth a **median -2.13 points** against its own widened
-baseline, mean -2.87, positive in **4 of 14**, range -12.90 to +1.24. No
-learned policy is profitable over its held-out period; the widened baselines
-manage it eight times.
+Over all **33** (asset, strategy) pairs, TD3 on the four multipliers is worth
+a **median -1.13 points** against its own widened baseline, positive in
+**14 of 33**.
+
+|  | published | widened | learned |
+| --- | --- | --- | --- |
+| pairs profitable, held out | 3 / 33 | **8 / 33** | 7 / 33 |
+| median cumulative return | -4.55% | **-1.65%** | -2.63% |
 
 So the C3 result survives the obvious objection. Learned, state-conditioned
 parameters do not beat well-chosen fixed ones here, and that is now a
-statement about five strategies and nine assets rather than one of each.
+statement about five strategies and nine assets rather than one of each. The
+widened baseline is the best column in that table on both counts.
+
+By strategy, the median points RL adds to its own widened baseline:
+
+| strategy | n | median d RL |
+| --- | --- | --- |
+| glft | 9 | **+0.55** |
+| obi | 9 | -1.31 |
+| hfgrid | 9 | -1.34 |
+| apt | 3 | -2.25 |
+| basis | 3 | -5.98 |
+
+`glft` is the only one where RL roughly breaks even, and it is also the only
+one whose half spread is already a live function of market state -- `A`, `k`
+and sigma, refit every five seconds -- rather than a constant. A plausible
+reading is that state-conditioning helps exactly where the baseline was
+already state-conditioned, and that the multiplier the policy is being handed
+is a cruder version of a knob the formula already turns. That is a hypothesis
+the data here is too thin to test, and it is recorded as one.
 
 **The seed spread is not a footnote.** C3 measured 3.74 points between the
 best and worst seed, and C6 reproduced the hazard exactly once it had two
@@ -420,6 +470,20 @@ Read from seed 0 alone the policy looks worth +0.91 points over the -1.65%
 baseline; with both seeds the median is -2.00% and it is 0.35 points *worse*.
 Every single-seed row in the table above is exposed to that, which is why the
 seed count is a column and why the median over seeds is what is reported.
+
+The effect shows up in the aggregate too, and it is large enough to change
+the conclusion one would draw:
+
+| | pairs | median d RL | positive |
+| --- | --- | --- | --- |
+| all pairs (mostly one seed) | 33 | -1.13 | 14 / 33 |
+| the eight pairs with two seeds | 8 | **-2.26** | **2 / 8** |
+
+Single-seed rows are systematically kinder to RL than two-seed rows, which is
+what one expects if a single seed is partly a draw from the spread rather
+than a measurement of it. The two-seed subset is the honest estimate; the
+single-seed rows are provisional, and a full answer needs more seeds than
+four cores allowed.
 
 The mechanism is the one thing here that generalises: seed 0 chose to widen
 further (8 bp to 15.5 bp) and lost less; seed 1 stayed near the floor and lost
