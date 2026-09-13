@@ -97,8 +97,13 @@ def collect_learned(day_set: str, symbol: str | None = None) -> list[dict]:
         if symbol is not None and summary_data["symbol"] != symbol:
             continue
         blob = np.load(paths)
+        # `summary["strategy"]` is the full preset name, e.g. "glft-wide".
+        # The colour map is keyed on the base strategy, so storing the preset
+        # name here made every learned curve miss the lookup and come out
+        # grey -- three indistinguishable grey lines under a caption
+        # promising one colour per strategy.
         out.append({
-            "strategy": summary_data["strategy"],
+            "strategy": summary_data["strategy"].partition("-")[0],
             "variant": "TD3",
             "symbol": summary_data["symbol"],
             "learned": config_data["policy"] != "baseline",
