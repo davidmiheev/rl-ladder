@@ -1,0 +1,12 @@
+policy                                sig?   steps  sd sig  r(sig,alpha)  r(sig,skew)  r(inv,skew)
+--------------------------------------------------------------------------------------------------
+apt-wide-enausdc-td3-forced-all-s0     yes   12000   0.634        -0.123       -0.070        0.064
+apt-wide-suiusdc-td3-forced-all-s0     yes   12000   0.446         0.235       -0.093       -0.526
+apt-wide-xrpusdc-td3-forced-all-s0     yes   12000   0.333        -0.084        0.261        0.183
+basis-wide-enausdc-td3-forced-all-s0   yes   12000   0.545         0.451       -0.498        0.025
+basis-wide-suiusdc-td3-forced-all-s0   yes   12000   0.362        -0.021       -0.055       -0.032
+basis-wide-xrpusdc-td3-forced-all-s0   yes   12000   0.282         0.031        0.063       -0.178
+hfgrid-wide-avaxusdc-td3-forced-all-   yes   12000   0.088         0.453        0.322          nan
+hfgrid-wide-bnbusdc-td3-forced-all-s   yes   12000   0.016        -0.372       -0.653        0.127
+
+with a signal: median |r(signal, alpha)| = 0.179, |r(signal, skew)| = 0.177, control |r(inventory, skew)| = 0.127

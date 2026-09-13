@@ -984,12 +984,12 @@ signal into the analytic formula.
 — includes the official "Market Making with Alpha" notebooks (imbalance, basis,
 APT) your notes are based on
 
-- [ ] Fold the basis/APT alpha signals into the state (or into a directly-predicted fair-price adjustment) and re-run C3/C4
+- [x] Fold the basis/APT alpha signals into the state (or into a directly-predicted fair-price adjustment) and re-run C3/C4
 
   Give the policy directional information and re-run. Either it uses it or it
   does not, and both answers are useful.
 
-- [ ] Check whether the RL-tuned coefficients learn to widen/narrow skew in response to the alpha signal automatically, versus the manual extension a fixed-form model would need
+- [x] Check whether the RL-tuned coefficients learn to widen/narrow skew in response to the alpha signal automatically, versus the manual extension a fixed-form model would need
 
   The real question of Part C: does RL discover the *interaction* between an
   alpha signal and the quoting coefficients on its own, or does it merely

@@ -426,6 +426,52 @@ further (8 bp to 15.5 bp) and lost less; seed 1 stayed near the floor and lost
 more. The policies that do well are the ones that rediscover the finding of
 §8.2, and the variance between seeds is mostly variance in whether they do.
 
+### 8.4 Does the policy respond to the alpha signal? (C5's second item)
+
+C5 asks whether RL discovers the *interaction* between an alpha signal and
+the quoting parameters on its own, or merely reproduces what a person would
+write by hand -- and says plainly that a negative answer is a finding.
+
+**The answer is no.** Replaying a held-out session and correlating what each
+policy saw against what it emitted, over the six policies whose signal
+actually moved during the session (`sd(signal) >= 0.25`):
+
+| | median \|r\| | sign agreement |
+| --- | --- | --- |
+| signal → alpha weight | 0.104 | 3 of 6 positive |
+| signal → skew | 0.082 | 2 of 6 positive |
+| **inventory → skew** (control) | **0.121** | — |
+
+The response to the alpha signal is *weaker than the response to inventory*,
+and its sign is a coin flip across assets within the same strategy. There is
+no interaction here to have discovered.
+
+Two caveats, both of which cut the same way. The control is itself small:
+0.121 is a weak response to the inventory penalty these policies were
+explicitly trained against, so the honest reading is "these policies are
+barely state-conditioned on anything" rather than "they learned everything
+except the signal". And two further policies were dropped from the median
+because their signal barely varied (`sd` 0.088 and 0.016) -- a correlation
+against a near-constant is not a measurement, which is why `sd(signal)` is a
+reported column rather than a filter applied silently.
+
+So for this problem the analytic model with a hand-written alpha term is the
+better engineering choice, which is exactly the outcome C5 anticipated and
+asked to have checked rather than assumed.
+
+**How not to answer this.** The first attempt swept the signal feature
+through a trained policy with the other features held neutral and read off
+the response. It gives large, confident-looking numbers -- and its negative
+control destroys them. `glft` quotes off the mid, so its signal feature is
+identically zero throughout training and its policy cannot have learned
+anything about that input; swept the same way, `glft` policies move the alpha
+weight across 181% of its range against 181% for policies whose signal is
+real. Sweeping an input a network never saw vary measures extrapolation. Both
+scripts are kept (`probe_policy.py`, `probe_in_session.py`) because the
+failing control is the more useful of the two results.
+
+Raw output: [`c6-probe.txt`](c6-probe.txt).
+
 ## 9. Where these items come from
 
 | what | source | why this one |
