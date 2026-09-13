@@ -306,7 +306,11 @@ def compare_rows(rows: list[dict]) -> list[dict]:
                 entry["half_bp"] = row["half_spread_bp"]
                 entry["q_wide"] = row["abs_q"]
             entry.setdefault("half_bp", row["half_spread_bp"])
-        else:
+        elif row["spread"] == "wide":
+            # Only policies trained on the widened baseline belong in this
+            # column: the whole question is what RL adds *on top of* a
+            # sensible spread, so a policy trained on the published variant
+            # is answering a different one and would be averaged in silently.
             entry["rl_values"].append(row["cumulative"])
             entry["rl_fills"].append(row["fills_h"])
             entry["rl_q"].append(row["abs_q"])

@@ -116,6 +116,12 @@ def policy_jobs() -> list[dict]:
         checkpoint = path / "policy.pt"
         if not checkpoint.exists() or not (path / "summary.json").exists():
             continue
+        # Smoke-test runs cap the episode at a few hundred steps, so their
+        # policies saw minutes of trading rather than sessions.  One of them
+        # reached the results table before this check existed.
+        config_path = path / "config.json"
+        if config_path.exists() and json.loads(config_path.read_text()).get("max_steps"):
+            continue
         out.append({
             "kind": "eval", "id": f"eval-{path.name}",
             "check": ("c6-eval", path.name),
