@@ -253,21 +253,29 @@ ask and leaves us short, so the cost is $+(m_{t+h} - m_t)$, and the sign flips
 on the other side. Volume weighted, because a maker's exposure to a bucket is
 proportional to how much traded in it.
 
-That gives a cost *curve* over depth rather than C1's single regression, and
-it is the right shape: on ETHUSDC at a 10 s horizon the cost rises from
-0.38 bp at the touch to 2.2 bp at 200 ticks. But the depth earned rises faster
-— from 0.01 bp to 4.6 bp — so on the tape a quote breaks even nearly
-everywhere, and the implied floor is essentially zero.
+That gives a cost *curve* over depth rather than C1's single regression. On
+ETHUSDC at a 10 s horizon, volume weighted, a fill costs 0.82 bp at the touch
+and rises slowly, to 1.07 bp at 30 ticks and 2.74 bp at 200. What the quote
+earns — its depth plus the 0.5 bp maker rebate — starts below that and rises
+faster. They cross at **30 ticks, 0.69 bp**: on the tape, a quote any closer
+loses and any further out wins.
+
+Weighting matters. Unweighted, the cost at the touch is 0.38 bp rather than
+0.82, and the curve sits under the earnings line almost everywhere, which
+would put the floor at the touch. The big buckets are the expensive ones,
+and a maker is exposed to them in proportion to their size.
 
 ![adverse-selection](../assets/c6/adverse-selection.png)
 
 *Figure — ETHUSDC, ten training sessions, 10 s holding horizon: what a fill
-costs on the tape (red), volume-weighted and not, against what a quote at
-that depth earns (blue).*
+costs on the tape (red), volume weighted and not, against what a quote at
+that depth earns (blue). Break-even is where blue crosses solid red.*
 
 ### 5.2 From the simulator, and why the two disagree
 
-The simulator says the opposite: C1's `glft-grid` lost 0.80 bp per fill.
+The simulator is far less forgiving. C1's `glft-grid` lost 0.80 bp per fill,
+and the sweep in §8.1 puts the ETHUSDC floor at 4 bp — six times the tape's
+0.69 bp.
 
 The gap is **fill selection**, and the tape cannot see it. A resting quote is
 not filled by the average trade at its depth; it is filled by the subset of
@@ -437,8 +445,9 @@ than zero. At a 5% hole rate that moved the standardised alpha by up to
 **The adverse-selection estimate was reported as a floor, and is not one.**
 Its first version also had the sign backwards, which made adverse selection
 look like a *gain* — caught because the sign of that number is known in
-advance. Corrected, it still disagrees with the simulator by ~0.9 bp per fill,
-which is why §5.2 exists and why it does not set the spread.
+advance. Corrected and volume weighted, it puts the ETHUSDC break-even at 0.69 bp,
+six times closer than the 4 bp the simulator needs, which is why §5.2 exists
+and why it does not set the spread.
 
 ## 8. Results
 

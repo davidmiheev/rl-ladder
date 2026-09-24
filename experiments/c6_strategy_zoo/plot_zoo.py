@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -51,9 +52,9 @@ COLOURS = {
 
 #: One line style per variant, so colour carries the strategy and style
 #: carries what was done to it.  Dotted is the published parameters, solid the
-#: widened spread, dashed the policy learned on top of the widened spread --
-#: which is also the order they were built in.
-STYLES = {"published": ":", "wide": "-", "TD3": "--"}
+#: widened spread, dashed and dash-dotted the two training recipes learned on
+#: top of the widened spread -- which is also the order they were built in.
+STYLES = {"published": ":", "wide": "-", "RL v1": "--", "RL v2": "-."}
 
 #: Capital the equity paths are expressed as a percentage of, and the
 #: notional cap the inventory paths are normalised by.  Both match
@@ -79,11 +80,18 @@ def _thin(values: np.ndarray) -> np.ndarray:
 
 
 def collect_learned(day_set: str, symbol: str | None = None) -> list[dict]:
-    """Every finished evaluation run on `day_set`, with its stored paths."""
+    """The median-seed evaluation of each (strategy, recipe) on `day_set`.
+
+    Five seeds per recipe drawn together are thirty dashed lines on one
+    panel, which reads as noise.  The seed whose cumulative return is the
+    median stands in for the recipe, and the master table carries the rest.
+    A policy evaluated twice (the XRP held-out set grew from four sessions to
+    eleven) keeps its evaluation over the most sessions.
+    """
     root = RUNS / "c6-eval"
     if not root.exists():
         return []
-    out = []
+    best: dict[tuple[str, str, str], dict] = {}
     for path in sorted(root.iterdir()):
         summary, config, paths = path / "summary.json", path / "config.json", path / "paths.npz"
         if not (summary.exists() and config.exists() and paths.exists()):
@@ -91,29 +99,46 @@ def collect_learned(day_set: str, symbol: str | None = None) -> list[dict]:
         config_data = json.loads(config.read_text())
         if config_data["day_set"] != day_set:
             continue
+        recipe = config_data.get("recipe", "v1")
+        if f"RL {recipe}" not in STYLES:
+            continue  # the ablations run on one pair and are reported in the writeup
         summary_data = json.loads(summary.read_text())
         if len(summary_data["per_day"]) < MIN_SESSIONS:
             continue
         if symbol is not None and summary_data["symbol"] != symbol:
             continue
-        blob = np.load(paths)
+        seed = re.search(r"-s(\d+)__", config_data["policy"]).group(1)
+        key = (summary_data["strategy"], recipe, seed)
+        if key in best and len(best[key]["per_day"]) > len(summary_data["per_day"]):
+            continue
         # `summary["strategy"]` is the full preset name, e.g. "glft-wide".
         # The colour map is keyed on the base strategy, so storing the preset
         # name here made every learned curve miss the lookup and come out
         # grey -- three indistinguishable grey lines under a caption
         # promising one colour per strategy.
-        out.append({
+        best[key] = {
             "strategy": summary_data["strategy"].partition("-")[0],
-            "variant": "TD3",
+            "variant": f"RL {recipe}",
             "symbol": summary_data["symbol"],
-            "learned": config_data["policy"] != "baseline",
+            "learned": True,
             "days": config_data["days"],
             "per_day": summary_data["per_day"],
-            "equity": {d: blob[f"equity_{d}"] for d in config_data["days"]
-                       if f"equity_{d}" in blob},
-            "position": {d: blob[f"position_{d}"] for d in config_data["days"]
-                         if f"position_{d}" in blob},
-        })
+            "paths": paths,
+        }
+
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for entry in best.values():
+        groups.setdefault((entry["strategy"], entry["variant"]), []).append(entry)
+    out = []
+    for group in groups.values():
+        group.sort(key=lambda e: cumulative(e)[-1])
+        entry = group[(len(group) - 1) // 2]
+        blob = np.load(entry.pop("paths"))
+        entry["seeds"] = len(group)
+        entry["equity"] = {d: blob[f"equity_{d}"] for d in entry["days"] if f"equity_{d}" in blob}
+        entry["position"] = {d: blob[f"position_{d}"] for d in entry["days"]
+                             if f"position_{d}" in blob}
+        out.append(entry)
     return out
 
 
@@ -128,7 +153,7 @@ def collect_baselines(day_set: str, symbol: str | None = None) -> list[dict]:
     root = RUNS / "c6"
     if not root.exists():
         return []
-    out = []
+    best: dict[str, tuple[Path, dict, list[dict]]] = {}
     for path in sorted(root.iterdir()):
         summary_path = path / "summary.json"
         if not summary_path.exists():
@@ -142,6 +167,14 @@ def collect_baselines(day_set: str, symbol: str | None = None) -> list[dict]:
                 if (d["date"] >= SPLIT_DATE) == (day_set == "test")]
         if len(keep) < MIN_SESSIONS:
             continue
+        # A preset replayed twice (the XRP held-out set grew from four
+        # sessions to eleven) keeps its replay over the most sessions.
+        previous = best.get(summary["strategy"])
+        if previous is None or len(keep) >= len(previous[2]):
+            best[summary["strategy"]] = (path, summary, keep)
+
+    out = []
+    for path, summary, keep in best.values():
         equity, position = {}, {}
         for day in keep:
             record_path = path / f"record_{day['date']}.npz"
@@ -203,7 +236,8 @@ STYLE_WORDS = {":": "dotted", "-": "solid", "--": "dashed"}
 VARIANT_WORDS = {
     "published": "the published parameters",
     "wide": "the widened spread",
-    "TD3": "TD3 on the multipliers",
+    "RL v1": "TD3 recipe v1, median seed",
+    "RL v2": "TD3 recipe v2 (residual), median seed",
 }
 
 
@@ -223,7 +257,9 @@ def cumulative(entry: dict) -> np.ndarray:
 
 def label_for(entry: dict) -> str:
     total = cumulative(entry)[-1]
-    return f"{entry['strategy']} {entry['variant']} ({total:+.2f}%)"
+    count = entry.get("seeds")
+    seeds = f", {count} seed{'s' if count > 1 else ''}" if count else ""
+    return f"{entry['strategy']} {entry['variant']} ({total:+.2f}%{seeds})"
 
 
 def plot(entries: list[dict], key: str, ylabel: str, title: str, out: Path,

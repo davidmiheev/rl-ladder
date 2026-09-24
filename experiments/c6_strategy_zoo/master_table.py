@@ -278,10 +278,11 @@ def fmt(row: dict, key: str, spec: str) -> str:
         elif key in ("k",):
             text = f"{value:.4f}"
         elif key in ("A", "inv_k", "inv_k_bp", "fills_h", "abs_q", "half_spread_bp", "signal_bp",
-                     "half_bp", "fills_pub", "fills_wide", "fills_rl", "q_wide", "q_rl"):
+                     "half_bp", "fills_pub", "fills_wide", "fills_v1", "fills_v2", "q_wide",
+                     "q_v1", "q_v2"):
             text = f"{value:.2f}"
-        elif key in ("cumulative", "worst", "median_return", "published", "wide", "rl",
-                     "spread_gain", "rl_gain"):
+        elif key in ("cumulative", "worst", "median_return", "published", "wide", "rl_v1",
+                     "rl_v2", "spread_gain", "gain_v1", "gain_v2"):
             text = f"{value:+.2f}"
         else:
             text = f"{value:.2f}"
@@ -300,17 +301,25 @@ COMPARE = [
     ("n", "{:>3}", "n"),
     ("published", "{:>10}", "published"),
     ("wide", "{:>9}", "wide"),
-    ("rl", "{:>9}", "RL"),
-    ("seeds", "{:>6}", "seeds"),
+    ("rl_v1", "{:>9}", "RL v1"),
+    ("seeds_v1", "{:>5}", "n v1"),
+    ("rl_v2", "{:>9}", "RL v2"),
+    ("seeds_v2", "{:>5}", "n v2"),
     ("spread_gain", "{:>9}", "d wide"),
-    ("rl_gain", "{:>9}", "d RL"),
+    ("gain_v1", "{:>9}", "d v1"),
+    ("gain_v2", "{:>9}", "d v2"),
     ("half_bp", "{:>8}", "half bp"),
-    ("fills_pub", "{:>9}", "f/h pub"),
     ("fills_wide", "{:>9}", "f/h wide"),
-    ("fills_rl", "{:>9}", "f/h RL"),
+    ("fills_v1", "{:>9}", "f/h v1"),
+    ("fills_v2", "{:>9}", "f/h v2"),
     ("q_wide", "{:>8}", "|q| wide"),
-    ("q_rl", "{:>8}", "|q| RL"),
+    ("q_v1", "{:>8}", "|q| v1"),
+    ("q_v2", "{:>8}", "|q| v2"),
 ]
+
+#: Recipes that get their own columns in the comparison view. The ablations
+#: run on one pair only and are reported separately in the writeup.
+COMPARE_RECIPES = ("v1", "v2")
 
 
 def compare_rows(rows: list[dict]) -> list[dict]:
@@ -325,8 +334,7 @@ def compare_rows(rows: list[dict]) -> list[dict]:
     for row in rows:
         key = (row["symbol"], row["strategy"])
         entry = groups.setdefault(key, {"symbol": row["symbol"], "strategy": row["strategy"],
-                                        "n": row["n"], "rl_values": [], "rl_fills": [],
-                                        "rl_q": []})
+                                        "n": row["n"], "learned": {}})
         if row["policy"] == "baseline":
             slot = "published" if row["spread"] == "published" else "wide"
             entry[slot] = row["cumulative"]
@@ -336,25 +344,27 @@ def compare_rows(rows: list[dict]) -> list[dict]:
                 entry["q_wide"] = row["abs_q"]
             entry.setdefault("half_bp", row["half_spread_bp"])
         elif row["spread"] == "wide":
-            # Only policies trained on the widened baseline belong in this
-            # column: the whole question is what RL adds *on top of* a
+            # Only policies trained on the widened baseline belong in these
+            # columns: the whole question is what RL adds *on top of* a
             # sensible spread, so a policy trained on the published variant
             # is answering a different one and would be averaged in silently.
-            entry["rl_values"].append(row["cumulative"])
-            entry["rl_fills"].append(row["fills_h"])
-            entry["rl_q"].append(row["abs_q"])
+            entry["learned"].setdefault(row["recipe"], []).append(row)
 
     out = []
     for entry in groups.values():
-        rl = entry.pop("rl_values")
-        entry["seeds"] = len(rl)
-        entry["rl"] = float(np.median(rl)) if rl else float("nan")
-        entry["fills_rl"] = float(np.median(entry.pop("rl_fills"))) if rl else float("nan")
-        entry["q_rl"] = float(np.median(entry.pop("rl_q"))) if rl else float("nan")
-        published, wide = entry.get("published"), entry.get("wide")
+        learned = entry.pop("learned")
+        wide = entry.get("wide")
+        for recipe in COMPARE_RECIPES:
+            runs = learned.get(recipe, [])
+            entry[f"seeds_{recipe}"] = len(runs)
+            for key, field in (("rl", "cumulative"), ("fills", "fills_h"), ("q", "abs_q")):
+                entry[f"{key}_{recipe}"] = float(np.median([r[field] for r in runs])) if runs \
+                    else float("nan")
+            entry[f"gain_{recipe}"] = (entry[f"rl_{recipe}"] - wide) if wide is not None and runs \
+                else float("nan")
+        published = entry.get("published")
         entry["spread_gain"] = (wide - published) if published is not None and wide is not None \
             else float("nan")
-        entry["rl_gain"] = (entry["rl"] - wide) if wide is not None and rl else float("nan")
         out.append(entry)
     order = {"glft": 0, "hfgrid": 1, "apt": 2, "basis": 3, "obi": 4}
     out.sort(key=lambda r: (r["symbol"], order.get(r["strategy"], 9)))
