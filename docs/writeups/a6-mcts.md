@@ -4,6 +4,13 @@ What phase A6 asks, why search is a different kind of answer from everything
 before it, and what the runs showed. The lab notebook is
 [`experiments/a6_mcts/README.md`](../../experiments/a6_mcts/README.md).
 
+
+> **At a glance**
+>
+> - UCT converges: optimal-move rate rises from 0.54 to 0.99 between 10 and 800 simulations, and the seed spread tightens as it does.
+> - The learned network is worth a doubling of search: AlphaZero-style search at 50 simulations matches plain MCTS at 100.
+> - The policy prior does almost all of that work (+0.162); the value head alone adds +0.019.
+
 ---
 
 ## 1. The task
@@ -184,6 +191,10 @@ simulations means less dependence on which rollouts happened to occur. A 2% loss
 rate survives at 800 simulations, which is correct — consistency is a statement
 about the limit, not about any finite budget.
 
+![uct-convergence](../assets/a6/uct-convergence.png)
+
+*Figure — Tic-tac-toe, 5 seeds: plain UCT's optimal-move rate and draw rate against a perfect opponent, from 10 to 800 simulations.*
+
 **The network is worth a doubling of search.** AZ at 50 simulations beats plain
 MCTS at 50 ($0.708$) and sits at parity with plain MCTS at 100 ($0.492$). Stating
 it as a simulation-equivalence rather than a win rate is what makes it portable:
@@ -191,6 +202,10 @@ it as a simulation-equivalence rather than a win rate is what makes it portable:
 decision time. It is a lower bound — a two-layer convnet and 900 games is
 nothing next to the original — and the per-iteration curve is only 20 games per
 point, so its swings are sampling noise around a rising trend.
+
+![alphazero](../assets/a6/alphazero.png)
+
+*Figure — AlphaZero-style training: win rate per iteration (20 games a point), search equivalence against plain MCTS, and what each part of the network contributes.*
 
 **The prior does almost all the work.** The 2×2 attributes the gain sharply:
 

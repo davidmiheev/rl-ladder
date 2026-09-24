@@ -4,6 +4,13 @@ The environment every later Part C result passes through, and the four checks
 that make it trustworthy. Lab notebook:
 [`experiments/c2_env/README.md`](../../experiments/c2_env/README.md).
 
+
+> **At a glance**
+>
+> - A Gymnasium environment whose action is the GLFT coefficient set, not a quote price, so the fixed formula is a strict special case of any policy.
+> - Four known-answer checks pass: exact reproduction of C1's `glft-grid` (2,694 trades identical), no lookahead, a reward that telescopes to the PnL, and Gymnasium's own conformance check.
+> - The action space has a degenerate optimum: quoting so wide that nothing fills returns exactly 0, which beats the baseline (−0.93%) on a training day.
+
 ---
 
 ## 1. The task
@@ -224,6 +231,10 @@ because Gymnasium action spaces are `float32` by convention and a policy emits
 exactly *despite* that is the more informative result.
 
 ## 6. Does the action space do anything?
+
+![pnl](../assets/c2/pnl.png)
+
+*Figure — What the coefficient action space can do to one session (ETHUSDC, 2025-08-26): the corners of the space (a), and the same without the tightest corner, whose losses dwarf the rest (b).*
 
 An action space the policy cannot move the outcome with produces a flat
 learning curve that looks like a hard problem. One session, ETHUSDC

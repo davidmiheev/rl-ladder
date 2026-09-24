@@ -5,6 +5,14 @@ of answer from everything before it, and what the runs showed. The lab notebook
 with the numbers is
 [`experiments/a4_policy_gradient/README.md`](../../experiments/a4_policy_gradient/README.md).
 
+
+> **At a glance**
+>
+> - On CartPole, REINFORCE (333) and REINFORCE with a baseline (451) beat A3's DQN (250), with a smaller spread across seeds.
+> - A baseline is free in expectation and worth a lot in practice: it cuts advantage spread by 30%.
+> - GAE λ trades bias for variance exactly as the estimator predicts. λ = 0 has the lowest variance and fails (20.8); the best is λ = 0.99 (479).
+> - A2C's apparent thousand-point win on LunarLander was mostly a confound, and a control caught it.
+
 ---
 
 ## 1. The task
@@ -197,6 +205,10 @@ added. DQN's spread is a different phenomenon — divergence, which A3 measured
 directly. Both systems are lightly tuned at an equal budget, so this compares
 these implementations at 30k steps, not the algorithm families.
 
+![reinforce-vs-dqn](../assets/a4/reinforce-vs-dqn.png)
+
+*Figure — CartPole, 5 seeds, the same protocol as A3: REINFORCE with and without a learned baseline.*
+
 **The baseline is free in theory and substantial in practice.** Section 3 proves
 it cannot change the gradient in expectation; the run shows it cutting advantage
 spread 30% while raising return from 333 to 451 and retention from 0.68 to 0.90.
@@ -212,6 +224,10 @@ almost entirely an estimate of the critic's own error. Minimum variance is
 worthless when the estimand is wrong. The optimum is interior, at
 $\lambda = 0.99$ ($478.8 \pm 26.0$, also the tightest across seeds).
 
+![gae-sweep](../assets/a4/gae-sweep.png)
+
+*Figure — GAE λ sweep on CartPole, 5 seeds. λ = 0 barely learns despite the lowest-variance advantages; the curves improve as λ approaches 1.*
+
 **Item 3's headline was mostly a confound, and a control caught it.** A2C
 appeared to beat episodic REINFORCE by a thousand points on LunarLander; but
 shrinking REINFORCE's batch from 4000 to 1000 — same algorithm, same environment
@@ -219,6 +235,10 @@ steps, 4× the updates — recovers about 900 of them. A2C still wins on what
 remains (27.6 against −75.6, with a quarter of the thrash), and it is the only
 arm reaching positive return, but the effect is an order of magnitude smaller
 than the raw table implied.
+
+![a2c-lunarlander](../assets/a4/a2c-lunarlander.png)
+
+*Figure — LunarLander, 5 seeds: A2C with 8 environments, REINFORCE with baseline and GAE, and the small-batch REINFORCE control.*
 
 The general lesson is about the axis, not the algorithms. Holding *environment
 steps* fixed is the right comparison when environment interaction is the scarce

@@ -4,6 +4,13 @@ Why every convergence guarantee from A2 onward assumed something that stops
 being true the moment a second learner enters the environment. The lab notebook
 is [`experiments/a7_multi_agent/README.md`](../../experiments/a7_multi_agent/README.md).
 
+
+> **At a glance**
+>
+> - Non-stationarity, measured: checkpoints score worse against later opponents than against the one they trained with (mean drop 0.465).
+> - Self-play wins (optimal-move rate 0.936 against 0.77 and 0.75), and mostly because a shared table sees twice the states.
+> - Independent learners specialise by seat; self-play cannot fail that way.
+
 ---
 
 ## 1. The task
@@ -112,6 +119,10 @@ Tables in the [phase README](../../experiments/a7_multi_agent/README.md).
 its contemporary opponent than against later ones — mean drop $+0.465$, positive
 in 6 of 7 rows. The 18k policy goes from $+0.80$ against the opponent it trained
 alongside to $-0.10$ against later ones, without changing.
+
+![multiagent](../assets/a7/multiagent.png)
+
+*Figure — Left: seat-1 checkpoints scored against every seat-2 checkpoint; the outlined diagonal is each one's contemporary opponent. Right: policy quality tracks state-action coverage across the three training arms.*
 
 The row-wise form of the comparison is doing real work. The raw diagonal
 ($+0.575$) versus off-diagonal ($+0.254$) is confounded: column means fall from

@@ -5,6 +5,13 @@ Reproducing it on 2025 ETHUSDC turns out to be a negative result with a precise
 cause, and the cause is what decides how C2 builds its environment. Lab
 notebook: [`experiments/c1_glft_baseline/README.md`](../../experiments/c1_glft_baseline/README.md).
 
+
+> **At a glance**
+>
+> - The calibrated GLFT market maker reproduces the published machinery (c₁, c₂ to 5×10⁻¹³; intensity fits with R² 0.94–0.999) and loses money on 2025 ETHUSDC.
+> - Why: its half spread is about half a tick, so nearly all of its income is the 0.5 bp maker rebate, and a fill's adverse selection costs more than that whenever volatility exceeds 8 ticks/√s.
+> - No risk aversion can fix it. The half spread is bounded below by 1/k, and the cost of a fill exceeds its income on 8 of 10 assets.
+
 ---
 
 ## 1. The task

@@ -4,6 +4,13 @@ What phase A2 asks, why the ladder puts dynamic programming and TD control on
 the same rung, and what the runs showed. The lab notebook with the numbers is
 [`experiments/a2_tabular/README.md`](../../experiments/a2_tabular/README.md).
 
+
+> **At a glance**
+>
+> - Value and policy iteration both reach the known optimum, checked two independent ways.
+> - On the cliff, Q-learning learns the optimal path (greedy return −13) yet earns less online (−48.6) than SARSA (−26.3), which routes a row away from the edge. They answer different questions.
+> - Dyna-Q with 50 planning steps gets within 20% of the optimal path in 7 episodes against Q-learning's 43, from replaying remembered transitions alone.
+
 ---
 
 ## 1. The task
@@ -214,6 +221,10 @@ is still $\varepsilon$-greedy, and one exploratory step in ten sends it over.
 SARSA's target includes that $\varepsilon$, so it prices the risk correctly and
 routes a row higher. Neither is wrong; they answer different questions.
 
+![cliff-return](../assets/a2/cliff-return.png)
+
+*Figure — Cliff walking, online return per episode (50 seeds, 20-episode moving average). SARSA earns more while exploring; Q-learning's greedy path runs along the edge.*
+
 ### An unplanned finding: SARSA's greedy policy can loop
 
 In 10 of 50 seeds SARSA's *extracted greedy* policy never reaches the goal, which
@@ -268,6 +279,10 @@ hyperparameter to tune for performance — **it is part of the problem statement
 and changing it changes which answer is correct.
 
 ### $\alpha$ changes the estimator
+
+![alpha-study](../assets/a2/alpha-study.png)
+
+*Figure — Sensitivity to the step size α on the cliff, 30 seeds, deterministic and slippery variants. Both learners are flat over two orders of magnitude; SARSA collapses at the largest step sizes.*
 
 The learning rate never changes what is optimal — it controls how the estimate
 tracks, exactly as in A1 item 3. A constant $\alpha$ makes $Q$ an exponential
@@ -327,6 +342,10 @@ alone. The mechanism is credit propagation: one-step Q-learning moves value
 backward one state per real transition, so information about the goal crawls
 along the path at one cell per episode. Planning sweeps do that crawling in
 memory, between steps, at no environmental cost.
+
+![dyna-steps](../assets/a2/dyna-steps.png)
+
+*Figure — Dyna maze, steps per episode (30 seeds; the optimum is 14). More planning steps per real step converge in fewer episodes.*
 
 *Why the speedup is so large.* One-step Q-learning applies the sampled Bellman
 backup once per real transition, so information about the goal propagates

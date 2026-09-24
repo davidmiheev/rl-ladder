@@ -4,6 +4,13 @@ What phase A5 asks, why the argmax that carried A2 and A3 stops working, and
 what the runs showed. The lab notebook with the numbers is
 [`experiments/a5_continuous_control/README.md`](../../experiments/a5_continuous_control/README.md).
 
+
+> **At a glance**
+>
+> - On Pendulum every TD3 ablation finishes within 5 points of the others, against a seed spread of ±20, so return cannot tell them apart. Critic bias can: DDPG +26.3, TD3 −9.8, and twin critics do most of the correcting.
+> - DDPG's instability shows up in its critic, not in its returns.
+> - The SAC temperature sweep came out monotone, which says the range was wrong rather than that the answer is an endpoint.
+
 ---
 
 ## 1. The task
@@ -168,6 +175,10 @@ return.** On Pendulum all five arms finish within 5 points of one another
 against a seed spread of $\pm 20$ — a null result on performance, because the
 task is too easy to separate them. The value bias separates cleanly:
 
+![ddpg-td3](../assets/a5/ddpg-td3.png)
+
+*Figure — Pendulum, 5 seeds: DDPG, full TD3, and TD3 with each of its three fixes removed. By return they are indistinguishable, which is why the table uses critic bias.*
+
 | arm | bias | change vs full TD3 |
 | --- | --- | --- |
 | TD3 (all three) | $-9.8$ | — |
@@ -204,6 +215,10 @@ a task with returns in the hundreds needs a larger $\alpha$ than one with
 returns in single digits, and that is precisely why later SAC learns it against
 a target entropy instead of exposing it.
 
+![sac-alpha](../assets/a5/sac-alpha.png)
+
+*Figure — SAC on LunarLanderContinuous, 3 seeds per entropy temperature.*
+
 The variance result is the stronger one: at $\alpha = 0.2$ the three seeds land
 at $-20, 72, 266$ ($\pm 119$); at $\alpha = 0.5$ at $221, 203, 248$
 ($\pm 18$). A sixfold reduction in across-seed spread *while* the mean rises —
@@ -216,6 +231,10 @@ action noise nothing degrades at all — all three are flat, and TD3 and SAC
 marginally improve, which is what small action noise does to a policy balancing
 a pendulum at an unstable equilibrium. Under observation noise everything
 collapses and **SAC collapses most** ($646.2$ against TD3's $558.5$).
+
+![noise](../assets/a5/noise.png)
+
+*Figure — Pendulum at evaluation time: return against action-noise σ (left) and observation-noise σ (right) for DDPG, TD3 and SAC.*
 
 Two limits before that is taken as a refutation. Per-seed spread was not
 recorded for the noise sweep, so a 90-point gap between arms whose training

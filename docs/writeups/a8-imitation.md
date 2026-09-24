@@ -4,6 +4,13 @@ Why copying an expert's actions and recovering an expert's objective are
 different things, and what the difference costs. Lab notebook:
 [`experiments/a8_imitation/README.md`](../../experiments/a8_imitation/README.md).
 
+
+> **At a glance**
+>
+> - Behaviour cloning is exactly as good as its data: expert-level on demonstrated states, −70.6 against −8.1 off them.
+> - Generalising is not generalising correctly. Feature-based BC answers everywhere and is worse everywhere, drifting off-distribution 24× as often as the expert.
+> - IRL followed by RL matches the expert almost everywhere, yet the recovered reward correlates only 0.56 with the true one: the objective is not identifiable, only its optimal policy.
+
 ---
 
 ## 1. The task
@@ -134,6 +141,10 @@ Tables in the [phase README](../../experiments/a8_imitation/README.md).
 expert on 100% of demonstrated states and returns $-12.3$ from the demonstrated
 start, indistinguishable from the expert's $-11.7$. From never-demonstrated
 states it returns $-70.6$ against the expert's $-8.1$.
+
+![imitation](../assets/a8/imitation.png)
+
+*Figure — Agreement with the expert on and off the demonstration distribution (left), and return where success rate saturates and stops discriminating (right).*
 
 **Generalising is not generalising correctly.** The feature-based BC answers
 everywhere and is worse than the tabular version *at every measurement*,

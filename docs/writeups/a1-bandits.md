@@ -5,6 +5,13 @@ three algorithms differ, and what the runs actually showed. The lab notebook
 with the numbers is [`experiments/a1_bandits/README.md`](../../experiments/a1_bandits/README.md);
 this document is the reasoning behind it.
 
+
+> **At a glance**
+>
+> - Thompson sampling has the least regret after 1,000 pulls (71.5 ± 33), ahead of UCB1 at c = 2 (153) and ε-greedy at 0.1 (226) — and a quarter of ε-greedy's spread across seeds.
+> - Both exploration knobs trace an inverted U. The best values are ε ≈ 0.04 and c ≈ 1; the textbook c = 2 costs twice as much at this horizon.
+> - On a drifting bandit a constant step size finds the best arm 74% of the time against 45% for sample averages, and the sample-average failure is stale information, not variance.
+
 ---
 
 ## 1. The task
@@ -245,9 +252,17 @@ Design decisions worth stating:
 ε-greedy(0.1) 226.2 ± 131.4. The ordering matches the theory — adaptive
 exploration beats a fixed tax.
 
+![comparison-regret](../assets/a1/comparison-regret.png)
+
+*Figure — Cumulative regret on a 10-armed Gaussian bandit, 100 seeds, ±1 s.d. bands. Thompson sampling is lowest and has the narrowest band.*
+
 **Both sweeps are cleanly inverted-U**, which is the tradeoff made visible: too
 little exploration and you never find the best arm, too much and you keep paying
 after you have. The optima are ε=0.04 and c=1.0.
+
+![parameter-study](../assets/a1/parameter-study.png)
+
+*Figure — Average reward over the second half of the run against the exploration parameter, on a log scale: ε for ε-greedy, c for UCB1. The dashed line is pure greedy.*
 
 **c=2 — the constant usually quoted as standard — is more than twice as costly as
 c=1 here** (153 vs 62 regret). That is not UCB being wrong; it is horizon
@@ -268,6 +283,10 @@ figures in papers later.
 
 **The non-stationary result is stark:** constant α reaches 74% optimal actions
 against sample averaging's 45%, with 2.2× less regret.
+
+![nonstationary-optimal-action](../assets/a1/nonstationary-optimal-action.png)
+
+*Figure — Drifting bandit: fraction of pulls on the current best arm (500-pull moving average). The sample-average band spans nearly the whole range, which is the stale-information failure.*
 
 **And the most useful finding is in the band, not the mean.** The sample-average
 agent's spread covers nearly the whole 0–1 range (final regret std 1687 vs 194).

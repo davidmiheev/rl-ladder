@@ -4,6 +4,13 @@ What phase A3 asks, why the table has to go, and what the ablations showed. The
 lab notebook with the numbers is
 [`experiments/a3_dqn/README.md`](../../experiments/a3_dqn/README.md).
 
+
+> **At a glance**
+>
+> - Remove DQN's target network and it diverges to a constant action (9.2, worse than random); remove replay and it merely slows down (80 against 250).
+> - Full DQN is itself unstable on CartPole: it peaks at 469 and ends at 250.
+> - Overestimation only appears once the network has learned (after ~16–20k steps). Double DQN halves it; on Pong it turns over-estimation into under-estimation, as van Hasselt predicts.
+
 ---
 
 ## 1. The task
@@ -231,6 +238,10 @@ $Q$-function degenerates until the greedy action is the same everywhere, which
 is divergence rather than slow learning, and leaves it *worse than random*.
 Removing replay instead costs a lot without being fatal (80.0 against 250.1).
 
+![ablation](../assets/a3/ablation.png)
+
+*Figure — CartPole greedy evaluation return, 5 seeds: full DQN against DQN without replay, without a target network, and without either.*
+
 So the two stabilisers are not interchangeable, and the asymmetry has a reason.
 Replay attacks the *data* — correlation and distribution shift — and a learner
 with correlated data is inefficient. The target network attacks the
@@ -258,12 +269,20 @@ At 90k steps Double DQN halves the typical overestimation on stock CartPole
 predicted direction; on the reward-noised variant the medians are
 indistinguishable ($+42.0$ vs $+43.0$).
 
+![overestimation](../assets/a3/overestimation.png)
+
+*Figure — Predicted V(s₀) minus the realised return. The bias starts negative while the network is learning and turns positive only later; the noised variants show the per-seed divergence discussed below.*
+
 **The larger effect, though, is per-seed divergence, and it afflicts both.** One
 DQN seed ends at $+841$ and one Double DQN seed at $+779$, against medians in the
 20–150 range — and against a ceiling of $\approx 99$, the largest discounted
 return the environment can pay at $\gamma = 0.99$. Estimates that exceed the
 maximum possible return are not mis-calibration, they are divergence. Double DQN
 reduces the typical bias; it does not prevent that.
+
+![dueling](../assets/a3/dueling.png)
+
+*Figure — Dueling against vanilla DQN on CartPole, 5 seeds. The bands overlap throughout.*
 
 **Item 4 (Atari) settled item 2's question and could not settle item 3's.** Run
 on a Colab T4, Pong, 1M steps per arm, one seed each. The bias probe separates
@@ -274,6 +293,10 @@ the bias needs estimate noise and a horizon before it dominates, and Pong
 supplies both where CartPole did not. It also matches van Hasselt's result
 precisely: the double estimator does not eliminate the bias, it **converts
 overestimation into underestimation**.
+
+![atari-pong](../assets/a3/atari-pong.png)
+
+*Figure — Pong, one seed per arm: greedy evaluation return (left) and value bias (right). DQN's bias stays positive late in training; Double DQN's goes negative.*
 
 The performance comparison, though, is unusable, and that is the more
 instructive half. Double DQN never learned in this run — 550k consecutive steps

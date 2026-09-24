@@ -117,7 +117,7 @@ tr { break-inside: avoid; }
 th, td { border: 1px solid #ccc; padding: .25em .5em; vertical-align: top; }
 th { background: #eef1f5; }
 tr:nth-child(even) td { background: #fafafa; }
-img { max-width: 100%; display: block; margin: .8em auto; break-inside: avoid; }
+img { max-width: 100%; max-height: 95mm; width: auto; display: block; margin: .8em auto; break-inside: avoid; }
 blockquote { border-left: 3px solid #999; margin: .8em 0; padding: .1em 1em; color: #444; }
 hr { border: 0; border-top: 1px solid #ccc; margin: 1.5em 0; }
 /* markdown-it-texmath wraps inline math in <eq> and display math in <eqn>. */

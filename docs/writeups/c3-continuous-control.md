@@ -4,6 +4,13 @@ The first real test in Part C: do learned, state-conditioned coefficients beat
 well-calibrated fixed ones? Lab notebook:
 [`experiments/c3_continuous_control/README.md`](../../experiments/c3_continuous_control/README.md).
 
+
+> **At a glance**
+>
+> - DDPG, TD3 and SAC, three seeds each, on the C2 environment with forced participation. On five held-out sessions every learned configuration lost less than the fixed formula; none made money. Best: TD3 −0.63% against −8.44%.
+> - The summary statistic decides the story: the median per-session Sharpe ranks the strategies almost inversely to the cumulative return an operator would actually get.
+> - Pinning γ shrinks the seed spread eightfold and costs 4.6 points of return.
+
 ---
 
 ## 1. The task
@@ -199,6 +206,10 @@ configuration above it caps its worst session between −0.30% and −3.7%.
 What RL bought here is a smaller left tail, not an edge.
 
 ![held out](../assets/c3/held-out.png)
+
+![pnl](../assets/c3/pnl.png)
+
+*Figure — Equity paths on the held-out sessions for the chosen learned policies against the fixed formula (dashed black), per session and chained.*
 
 ### Why the first version concluded the opposite
 
