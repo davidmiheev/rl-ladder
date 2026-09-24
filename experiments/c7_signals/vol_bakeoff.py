@@ -21,8 +21,8 @@ The target is computed two ways, from 1 s and from 5 s returns, because on a
 coarse-tick asset the 1 s mid path is mostly the bid-ask bounce and a target
 built on it rewards estimators that share the same noise.
 
-Each estimator is scored raw and *calibrated*: multiplied by the one constant
-that minimises its QLIKE on the training days. GLFT consumes sigma in a
+Each estimator is scored raw and *calibrated*: multiplied by its median ratio
+of target to forecast on the training days. GLFT consumes sigma in a
 formula, so a biased-but-responsive estimator is usable once its bias is known,
 and the calibrated score separates "wrong level" from "wrong timing".
 
@@ -73,6 +73,10 @@ def load_mid(symbol: str, date: str) -> tuple[np.ndarray, float]:
     idx = np.where(np.isfinite(half_ticks), np.arange(len(half_ticks)), 0)
     np.maximum.accumulate(idx, out=idx)
     half_ticks = half_ticks[idx]
+    # Before the first two-sided book there is nothing to carry forward;
+    # back-fill from the first mid rather than let a NaN run through every
+    # cumulative sum downstream.
+    half_ticks[: np.argmax(np.isfinite(half_ticks))] = half_ticks[np.isfinite(half_ticks)][0]
     return half_ticks * float(blob["tick"]) / 2.0, float(blob["tick"])
 
 
@@ -97,7 +101,7 @@ def _ewma(x: np.ndarray, halflife_s: float) -> np.ndarray:
 
 def day_series(symbol: str, date: str) -> dict[str, np.ndarray]:
     """Every estimator and both targets, at every evaluation second, in bp^2/s."""
-    mid100, _ = load_mid(symbol, date)
+    mid100, tick = load_mid(symbol, date)
     log100 = np.log(mid100) * 1e4  # in bp
     n_sec = len(log100) // 10
     log1 = log100[9: n_sec * 10: 10]  # the last mid of each second
@@ -161,6 +165,15 @@ def day_series(symbol: str, date: str) -> dict[str, np.ndarray]:
     out["_y1"] = fwd1
     out["_y5"] = fwd5
 
+    # The resolution floor: one half-tick move of the mid over the horizon.
+    # A quiet book can hold the mid still for twenty minutes (XRPUSDC on
+    # 2025-08-29), and a short EWMA then forecasts a variance of ~0, which
+    # QLIKE punishes without bound. No estimator can resolve less than one
+    # mid move, so every forecast is floored at it, the same for all.
+    floor = (tick / 2.0 / np.nanmedian(mid100) * 1e4) ** 2 / HORIZON_S
+    for name in NAMES:
+        if name in out:
+            out[name] = np.maximum(out[name], floor)
     keep = np.arange(WARMUP_S, n_sec - HORIZON_S, EVERY_S)
     return {k: v[keep] for k, v in out.items()}
 
@@ -209,14 +222,18 @@ def evaluate(symbol: str, train_days: list[str], test_days: list[str]) -> dict:
         beta = fit_har(list(train.values()), target)
         for split in (train, test):
             for d in split.values():
-                d["har"] = har_forecast(d, beta, target, list(train.values()))
+                d["har"] = np.maximum(har_forecast(d, beta, target, list(train.values())),
+                                      np.nanmin(d["rv_1s_10m"]))
         rows = {}
         for name in NAMES:
-            # Calibration constant: the scale c minimising QLIKE of c*f on the
-            # training days is mean(y/f).
+            # Calibration constant, from the training days. The scale that
+            # minimises QLIKE in sample is mean(y/f), but that mean belongs to
+            # the handful of seconds when a frozen mid starts moving again
+            # (y/f ~ 1e4) and calibrates everything else badly; the median
+            # ratio is the typical bias, and is what is used.
             ratios = np.concatenate([t[target] / t[name] for t in train.values()])
             ratios = ratios[np.isfinite(ratios) & (ratios > 0)]
-            scale = float(np.mean(ratios))
+            scale = float(np.median(ratios))
             raw = [qlike(d[target], d[name]) for d in test.values()]
             cal = [qlike(d[target], scale * d[name]) for d in test.values()]
             rows[name] = {"scale": scale, "qlike_raw": float(np.mean(raw)),

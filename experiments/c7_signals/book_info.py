@@ -88,7 +88,9 @@ def _log_mid(blob) -> np.ndarray:
     m = m[9: n_sec * 10: 10]
     idx = np.where(np.isfinite(m), np.arange(len(m)), 0)
     np.maximum.accumulate(idx, out=idx)
-    return np.log(m[idx] * float(blob["tick"]) / 2.0) * 1e4
+    m = m[idx]
+    m[: np.argmax(np.isfinite(m))] = m[np.isfinite(m)][0]
+    return np.log(m * float(blob["tick"]) / 2.0) * 1e4
 
 
 def book_features(blob, prefix: str) -> dict[str, np.ndarray]:
