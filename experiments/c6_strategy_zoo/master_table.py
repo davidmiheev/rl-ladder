@@ -27,9 +27,13 @@ is the headline.
   order arrivals.  They describe the *market*, not the strategy, and are
   measured identically for all five, so they are the yardstick the rest of
   the row is read against.
-- `1/k` ticks is the depth at which arrivals fall by a factor of e.  C1's
-  proof that `inf_gamma H(gamma) = 1/k` means no amount of risk aversion lets
-  a GLFT quoter sit inside it.
+- `1/k` is the depth at which arrivals fall by a factor of e.  C1's proof
+  that `inf_gamma H(gamma) = 1/k` means no amount of risk aversion lets a GLFT
+  quoter sit inside it.  **Units:** the notebook's intensity histogram buckets
+  depth in *half*-ticks (a factor-of-two slip it documents and keeps), so the
+  fitted `k` is per half-tick.  The table converts once, here: `k` is shown
+  per tick and `1/k` in ticks and in bp.  An earlier version printed the raw
+  half-tick value under a "1/k t" heading, which overstated the depth by 2x.
 - `fills/h` is what the strategy actually got. A strategy quoting at 30 bp on
   an asset whose arrivals decay over 1 bp is not a market maker with a wide
   spread; it is a strategy that does not trade, and the two are only
@@ -68,8 +72,9 @@ COLUMNS = [
     ("max_dd", "{:>7}", "maxDD%"),
     ("half_spread_bp", "{:>8}", "half bp"),
     ("A", "{:>7}", "A"),
-    ("k", "{:>8}", "k"),
-    ("inv_k", "{:>7}", "1/k t"),
+    ("k", "{:>8}", "k/tick"),
+    ("inv_k", "{:>8}", "1/k tick"),
+    ("inv_k_bp", "{:>7}", "1/k bp"),
     ("fills_h", "{:>8}", "fills/h"),
     ("abs_q", "{:>7}", "|q|"),
     ("signal_bp", "{:>8}", "sig bp"),
@@ -135,6 +140,24 @@ def _summarise(per_day: list[dict], fields: dict[str, str]) -> dict:
     return row
 
 
+def _intensity_in_ticks(row: dict, symbol: str) -> dict:
+    """Convert the fitted intensity from half-tick buckets to ticks and bp.
+
+    `fit_intensity` regresses on bucket indices that are half-ticks apart, so
+    its `k` is per half-tick: per tick it is twice that, and `1/k` in ticks is
+    half the raw value.  Doing it here rather than in the quoter keeps the
+    quoter bit-identical to the notebook it transcribes.
+    """
+    tick_bp = None
+    entry = assets.ensure_registered(symbol)
+    if entry.get("price"):
+        tick_bp = entry["tick_size"] / entry["price"] * 1e4
+    row["k"] = row["k"] * 2.0
+    row["inv_k"] = row["inv_k"] / 2.0
+    row["inv_k_bp"] = row["inv_k"] * tick_bp if tick_bp else float("nan")
+    return row
+
+
 def _split(per_day: list[dict]) -> list[tuple[str, list[dict]]]:
     """Separate a run's sessions into their train and held-out halves.
 
@@ -191,7 +214,7 @@ def baseline_rows() -> list[dict]:
         base, _, suffix = name.partition("-")
         _backfill_inventory(summary["per_day"], summary["symbol"])
         for day_set, block in _split(summary["per_day"]):
-            rows.append({
+            rows.append(_intensity_in_ticks({
                 "strategy": base,
                 "policy": "baseline",
                 "spread": "wide" if suffix == "wide" else "published",
@@ -199,7 +222,7 @@ def baseline_rows() -> list[dict]:
                 "days": day_set,
                 **_summarise(block, BASELINE_FIELDS),
                 "_dir": path.name,
-            })
+            }, summary["symbol"]))
     return rows
 
 
@@ -218,7 +241,7 @@ def eval_rows() -> list[dict]:
         base, _, suffix = name.partition("-")
         learned = config["policy"] != "baseline"
         seed = path.name.split("-s")[-1].split("__")[0] if learned else ""
-        rows.append({
+        rows.append(_intensity_in_ticks({
             "strategy": base,
             "policy": (f"RL TD3 s{seed}" if seed.isdigit() else "RL TD3") if learned else "baseline",
             "spread": "wide" if suffix == "wide" else "published",
@@ -226,7 +249,7 @@ def eval_rows() -> list[dict]:
             "days": config["day_set"],
             **_summarise(per_day, EVAL_FIELDS),
             "_dir": path.name,
-        })
+        }, summary["symbol"]))
     return rows
 
 
@@ -248,7 +271,7 @@ def fmt(row: dict, key: str, spec: str) -> str:
             text = "-"
         elif key in ("k",):
             text = f"{value:.4f}"
-        elif key in ("A", "inv_k", "fills_h", "abs_q", "half_spread_bp", "signal_bp",
+        elif key in ("A", "inv_k", "inv_k_bp", "fills_h", "abs_q", "half_spread_bp", "signal_bp",
                      "half_bp", "fills_pub", "fills_wide", "fills_rl", "q_wide", "q_rl"):
             text = f"{value:.2f}"
         elif key in ("cumulative", "worst", "median_return", "published", "wide", "rl",

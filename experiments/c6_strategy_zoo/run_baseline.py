@@ -119,7 +119,8 @@ def quoter_stats(out: np.ndarray, interval_ns: int, max_position_dollar: float) 
     C1 calibrates; they are measured identically for all five strategies and
     depend only on the market, so they belong in the master table as the
     *market's* trade intensity, against which each strategy's realised fill
-    rate can be read.  `1/k` is the depth in ticks at which arrivals fall by a
+    rate can be read.  `1/k` is the depth, in *half*-tick buckets (the notebook's
+    unit; `master_table.py` converts), at which arrivals fall by a
     factor of e -- C1's proof that no risk aversion lets GLFT quote inside it.
     """
     finite = np.isfinite(out["A"]) & (out["k"] > 0)

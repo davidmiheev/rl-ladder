@@ -90,7 +90,8 @@ $$ c_1 = \frac{1}{\xi\Delta}\log\!\left(1 + \frac{\xi\Delta}{k}\right),
 with $\gamma = 0.05$, $\text{adj}_1 = 1$, $\text{adj}_2 = 0.05$ — the
 notebook's values, and C1's `glft-grid`. C1's spread-floor result applies
 here: $\inf_{\gamma>0} h(\gamma) = 1/k$, so no amount of risk aversion lets
-this quoter sit inside $1/k$ ticks of the mid.
+this quoter sit inside a depth of $1/k$ from the mid. (The notebook fits $k$
+per *half*-tick; the tables convert it to ticks and bp.)
 
 **`hfgrid`** — no model of arrival intensity at all. The fair price is the
 micro-price and the half spread is a multiple of realised volatility,
