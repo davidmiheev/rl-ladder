@@ -216,6 +216,7 @@ def baseline_rows() -> list[dict]:
         for day_set, block in _split(summary["per_day"]):
             rows.append(_intensity_in_ticks({
                 "strategy": base,
+                "recipe": "baseline",
                 "policy": "baseline",
                 "spread": "wide" if suffix == "wide" else "published",
                 "symbol": summary["symbol"],
@@ -241,9 +242,14 @@ def eval_rows() -> list[dict]:
         base, _, suffix = name.partition("-")
         learned = config["policy"] != "baseline"
         seed = path.name.split("-s")[-1].split("__")[0] if learned else ""
+        # Evaluations written before training recipes existed are v1 by
+        # construction: that was the only recipe.
+        recipe = config.get("recipe", "v1") if learned else "baseline"
         rows.append(_intensity_in_ticks({
             "strategy": base,
-            "policy": (f"RL TD3 s{seed}" if seed.isdigit() else "RL TD3") if learned else "baseline",
+            "recipe": recipe,
+            "policy": (f"RL {recipe} s{seed}" if seed.isdigit() else f"RL {recipe}") if learned
+            else "baseline",
             "spread": "wide" if suffix == "wide" else "published",
             "symbol": summary["symbol"],
             "days": config["day_set"],

@@ -52,6 +52,7 @@ would be the exact leak C4's third item exists to catch.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -62,6 +63,7 @@ from numba import njit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c1_glft_baseline"))
 
+import assets  # noqa: E402
 import config  # noqa: E402
 import glft  # noqa: E402
 
@@ -77,7 +79,7 @@ DEPTH_TICKS = (0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 20.0, 30.0, 50.0, 80.0, 120.0
 #: a statement about those fills.
 MIN_FILLS = 200
 
-OUT = Path(__file__).resolve().parent / "spread_floor.json"
+RUNS_OUT = Path(__file__).resolve().parents[2] / "runs" / "c6-adverse"
 CACHE = Path(__file__).resolve().parents[2] / "data" / "measured"
 
 
@@ -159,19 +161,21 @@ def cost_curve(
     mid: np.ndarray, buy: np.ndarray, sell: np.ndarray,
     buy_qty: np.ndarray, sell_qty: np.ndarray, horizon_s: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """`(cost_bp, fills)` at each depth in `DEPTH_TICKS`, for one day.
+    """`(weighted_cost_bp, unweighted_cost_bp, fills)` at each depth, for one day.
 
-    Volume weighted: a maker's exposure to a bucket is proportional to how
-    much traded in it, so a one-lot print must not count as much as a sweep.
-    Unweighted, the curve sits about 0.2 bp lower at every depth, which is
-    enough to flip the sign of the break-even -- the weighting is not a
-    refinement.
+    Volume weighted is the one reported: a maker's exposure to a bucket is
+    proportional to how much traded in it, so a one-lot print should not count
+    as much as a sweep. The unweighted mean is returned beside it so the
+    difference the weighting makes is measured rather than asserted -- an
+    earlier version of this docstring asserted it, and the first published
+    numbers were the unweighted ones labelled as weighted.
     """
     h = int(round(horizon_s * 1e9 / INTERVAL_NS))
     move_bp = np.full_like(mid, np.nan)
     move_bp[:-h] = (mid[h:] - mid[:-h]) / mid[:-h] * 1e4
 
     costs = np.full(len(DEPTH_TICKS), np.nan)
+    plain = np.full(len(DEPTH_TICKS), np.nan)
     fills = np.zeros(len(DEPTH_TICKS), np.int64)
     for i, d in enumerate(DEPTH_TICKS):
         # Filled on the ask by a buy that reached >= d: we are short, and a
@@ -179,13 +183,15 @@ def cost_curve(
         short = np.isfinite(move_bp) & (buy >= d)
         long_ = np.isfinite(move_bp) & (sell >= d)
         fills[i] = int(short.sum() + long_.sum())
+        if fills[i]:
+            plain[i] = float((move_bp[short].sum() - move_bp[long_].sum()) / fills[i])
         weight = buy_qty[short].sum() + sell_qty[long_].sum()
         if weight > 0:
             costs[i] = float(
                 (np.dot(move_bp[short], buy_qty[short]) - np.dot(move_bp[long_], sell_qty[long_]))
                 / weight
             )
-    return costs, fills
+    return costs, plain, fills
 
 
 def main() -> None:
@@ -196,8 +202,8 @@ def main() -> None:
     parser.add_argument("--days", default="train")
     args = parser.parse_args()
 
-    days = {
-        "train": config.TRAIN_DAYS_EXT,
+    assets.ensure_registered(args.symbol)
+    days = assets.day_sets(args.symbol)[args.days] if args.days in ("train", "one") else {
         "train-c1": config.TRAIN_DAYS,
         "pair-train": config.PAIR_TRAIN_DAYS,
     }[args.days]
@@ -206,14 +212,16 @@ def main() -> None:
     tick_size = config.SYMBOLS[args.symbol]["tick_size"]
 
     curves = {h: [] for h in HORIZONS}
+    plains = {h: [] for h in HORIZONS}
     counts = {h: [] for h in HORIZONS}
     mids = []
     for date in days:
         mid, buy, sell, buy_qty, sell_qty = day_series(args.symbol, date)
         mids.append(np.nanmedian(mid))
         for h in HORIZONS:
-            costs, fills = cost_curve(mid, buy, sell, buy_qty, sell_qty, h)
+            costs, plain, fills = cost_curve(mid, buy, sell, buy_qty, sell_qty, h)
             curves[h].append(costs)
+            plains[h].append(plain)
             counts[h].append(fills)
         print(f"{date}  done", flush=True)
 
@@ -223,12 +231,14 @@ def main() -> None:
     print(f"\n{args.symbol}: median mid {median_mid:.4f}, tick {tick_size:g} "
           f"({tick_size / median_mid * 1e4:.4f} bp), maker rebate {rebate_bp:.3f} bp")
     print(f"adverse selection on a fill at depth d, bp, mean over {len(days)} training days\n")
-    header = "  depth       bp  " + "".join(f"{h:>8.1f}s" for h in HORIZONS) + "     fills"
+    header = ("  depth       bp  " + "".join(f"{h:>8.1f}s" for h in HORIZONS)
+              + f"  unwtd@{FLOOR_HORIZON:g}s     fills")
     print(header)
     for i, d in enumerate(DEPTH_TICKS):
         row = "".join(f"{np.nanmean([c[i] for c in curves[h]]):9.3f}" for h in HORIZONS)
+        unweighted = np.nanmean([c[i] for c in plains[FLOOR_HORIZON]])
         n = int(np.sum([c[i] for c in counts[FLOOR_HORIZON]]))
-        print(f"  {d:6.1f}t {depth_bp[i]:8.3f}{row}  {n:9d}")
+        print(f"  {d:6.1f}t {depth_bp[i]:8.3f}{row} {unweighted:10.3f}  {n:9d}")
 
     cost = np.array([np.nanmean([c[i] for c in curves[FLOOR_HORIZON]]) for i in range(len(DEPTH_TICKS))])
     fills = np.array([int(np.sum([c[i] for c in counts[FLOOR_HORIZON]])) for i in range(len(DEPTH_TICKS))])
@@ -244,6 +254,21 @@ def main() -> None:
         print("  no depth on the tape breaks even: cost outruns the spread everywhere")
     print("\nThis is the cost of the average aggressive trade at that depth, not of the\n"
           "fills a resting quote actually wins.  `sweep_spread.py` is what sets the floor.")
+
+    # Kept for plot_c6_summary.py, which draws the curve.
+    plain = np.array([np.nanmean([c[i] for c in plains[FLOOR_HORIZON]])
+                      for i in range(len(DEPTH_TICKS))])
+    out = RUNS_OUT / f"{args.symbol}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
+        "symbol": args.symbol, "days": days, "horizon_s": FLOOR_HORIZON,
+        "depth_ticks": list(DEPTH_TICKS), "depth_bp": depth_bp.tolist(),
+        "cost_bp": cost.tolist(), "cost_unweighted_bp": plain.tolist(),
+        "fills": fills.tolist(), "rebate_bp": rebate_bp,
+        "by_horizon": {f"{h:g}": [float(np.nanmean([c[i] for c in curves[h]]))
+                                  for i in range(len(DEPTH_TICKS))] for h in HORIZONS},
+    }, indent=1))
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":

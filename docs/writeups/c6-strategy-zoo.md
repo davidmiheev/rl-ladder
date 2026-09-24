@@ -55,10 +55,10 @@ held-out ones.
 ### 3.1 What they share
 
 Every one of them is a grid quoter. At each 100 ms iteration it forms a fair
-price $p^\*$, a half spread $h$ and an inventory skew $s$, sets a reservation
+price $p^{\ast}$, a half spread $h$ and an inventory skew $s$, sets a reservation
 price
 
-$$ p^r = p^\* - s \cdot \frac{q \, m}{Q} $$
+$$ p^r = p^{\ast} - s \cdot \frac{q \, m}{Q} $$
 
 where $q$ is the position in units of the asset, $m$ the mid and $Q$ the
 notional position cap (so the second factor is the normalised inventory, $-1$
@@ -69,7 +69,7 @@ $$ p^{\text{bid}}_i = p^r - h - i\,g, \qquad p^{\text{ask}}_i = p^r + h + i\,g $
 
 aligned to a grid of step $g$, with any order already correctly placed left
 alone so it keeps its queue position. What differs between the five is only
-$p^\*$, $h$ and $s$.
+$p^{\ast}$, $h$ and $s$.
 
 ### 3.2 Where each one gets its numbers
 
@@ -105,16 +105,16 @@ identically — C2 measured this rather than assuming it — so `hfgrid` and `ob
 differ in how far into the book they look, not in the kind of signal.
 
 **`apt`** — a lead-lag fair price,
-$p^\* = (1 + \beta r_{\text{ref}})\, p_{t-5\text{m}}$, where
+$p^{\ast} = (1 + \beta r_{\text{ref}})\, p_{t-5\text{m}}$, where
 $r_{\text{ref}}$ is the reference instrument's five-minute return and
 $p_{t-5\text{m}}$ our own mid five minutes ago. Half spread and skew are both
 3 bp.
 
-**`basis`** — $p^\* = p_{\text{ref}} + \overline{(p - p_{\text{ref}})}$, the
+**`basis`** — $p^{\ast} = p_{\text{ref}} + \overline{(p - p_{\text{ref}})}$, the
 reference price plus a five-minute rolling mean of the basis. Same 3 bp
 spread and skew.
 
-**`obi`** — $p^\* = m + c_1 \alpha$ with $\alpha$ the order-book imbalance
+**`obi`** — $p^{\ast} = m + c_1 \alpha$ with $\alpha$ the order-book imbalance
 over a band $\pm 0.1\%$ wide, standardised over a ten-minute rolling window.
 
 ### 3.3 Everything in basis points
@@ -174,6 +174,14 @@ five-day lists on the same side of the same `SPLIT_DATE = 2025-09-15`:
 Nothing C1, C2 or C3 reported moves, because their days are a subset of these
 and each session is replayed independently.
 
+The XRP pair started with four training and four held-out sessions, because
+two symbols per day is roughly three times the bytes of one. Four held-out
+sessions proved too few once the seed spread was measured (§8.4), so the
+pair's held-out set was widened the same way, to all eleven days from the
+split onward. The other seven assets keep three and three: they are there for
+breadth, and the session count is printed next to every row so the two tiers
+are never read as the same kind of evidence.
+
 ### 4.2 What tier the data is, and what that costs
 
 Market-by-price (L2), not market-by-order (L3), verified from the files
@@ -210,7 +218,7 @@ Binance USDⓈ-M perpetuals only. What it does have is the same underlying
 quoted in two stablecoins: `xrpusdc` and `xrpusdt`. C6 trades the USDC leg and
 uses the USDT leg as the reference.
 
-Fitted by OLS through the origin on the four pair training days:
+Fitted by OLS through the origin on the four pair training sessions:
 
 $$ \beta = 0.9913, \qquad R^2 = 0.9985 $$
 
@@ -223,7 +231,7 @@ the direction of a **weaker** result:
 - ours is a stablecoin spread plus a venue lead-lag: smaller, faster, and
   with no funding anchor pulling it back.
 
-The median USDC/USDT basis across the eight pair days runs +0.56 to +8.68 bp,
+The median USDC/USDT basis across the first eight pair sessions runs +0.56 to +8.68 bp,
 so it is real and sizeable, but it is not the same object. A *better* result
 here than the notebooks' would be the suspicious one. This is stated before
 the results because it is exactly the kind of substitution that is easy to
@@ -250,6 +258,12 @@ it is the right shape: on ETHUSDC at a 10 s horizon the cost rises from
 0.38 bp at the touch to 2.2 bp at 200 ticks. But the depth earned rises faster
 — from 0.01 bp to 4.6 bp — so on the tape a quote breaks even nearly
 everywhere, and the implied floor is essentially zero.
+
+![adverse-selection](../assets/c6/adverse-selection.png)
+
+*Figure — ETHUSDC, ten training sessions, 10 s holding horizon: what a fill
+costs on the tape (red), volume-weighted and not, against what a quote at
+that depth earns (blue).*
 
 ### 5.2 From the simulator, and why the two disagree
 
@@ -316,6 +330,71 @@ already paid for:
   multiplier at 2× so that "do learned parameters beat published ones" is
   asked of two market makers.
 
+### 6.1 Recipe v2: what changed after v1 lost to its baseline
+
+The first round (recipe **v1**, everything above) lost to its own widened
+baseline on median. Three changes were made together as recipe **v2**, and two
+ablations each remove one of them, so their effects can be told apart.
+
+**A residual policy.** Every multiplier ranges over $[\tfrac12, 2]$, which is
+symmetric in log space about 1, so the action $0$ *is* the baseline. The
+actor's last layer is initialised to zero, so training starts exactly on the
+baseline, and it explores with small Gaussian noise around it instead of v1's
+first episode of uniformly random parameters. In market making a random
+episode is not free exploration: it is a day of large, real losses that then
+dominate the replay buffer. A small penalty,
+$0.001\,\text{bp} \times \overline{a^2}$ per step, keeps the policy away from
+the no-fill corner without pinning it: holding one multiplier at $2^{0.5}$ for a
+whole session costs about 1 bp, the size of the effects in §8.
+
+**Five-second decisions.** With a discount of $\gamma = 0.99$ per step, the
+effective horizon is about $1/(1-\gamma) = 100$ steps. At one-second steps that
+is 100 seconds, shorter than the minutes over which inventory and adverse
+selection actually cost money. At five seconds it is about eight minutes.
+
+**A counterfactual reward.** Replay the same session at the baseline action,
+record its per-step reward $b_t$, and train on
+
+$$ \tilde r_t = r_t - c\, b_t. $$
+
+Because $b_t$ never depends on the policy's action, subtracting it cannot
+change which policy is optimal. It can only change how noisy the signal
+pointing to that policy is. The variance of $\tilde r$ is
+
+$$ \operatorname{Var}(r - c\,b) = \operatorname{Var} r - 2c\operatorname{Cov}(r,b)
+   + c^2 \operatorname{Var} b, $$
+
+minimised at $c^{\ast} = \operatorname{Cov}(r,b)/\operatorname{Var} b$. **The
+first design used $c = 1$, and that was wrong.** On a training session, it
+*raised* the per-step variance 1.1–2.3× on XRPUSDC. Near the spread floor fills
+are sparse, so a policy that widens slightly stops trading while the baseline
+keeps going, and subtracting an uncorrelated series only adds its noise:
+
+| probe | corr$(r,b)$ | variance at $c=1$ | variance at $c^{\ast}$ | $c^{\ast}$ |
+| --- | --- | --- | --- | --- |
+| XRP, spread +0.05 | 0.62 | ×1.14 | ×0.62 | 0.46 |
+| XRP, spread +0.10 | 0.59 | ×2.31 | ×0.66 | 0.31 |
+| XRP, exploration noise | 0.36 | ×1.26 | ×0.87 | 0.36 |
+| ETH, spread +0.05 | 0.48 | ×0.93 | ×0.77 | 0.54 |
+| ETH, spread +0.10 | 0.55 | ×0.88 | ×0.70 | 0.56 |
+| ETH, exploration noise | 0.79 | ×0.43 | ×0.38 | 0.77 |
+
+A fixed $c = 0.5$ recovers most of the optimum in every row and never raises
+variance (×0.45–0.89 by the formula above). That is what v2 uses. The gain is
+real but modest, a 10–60% variance cut, and it is reported as that rather
+than as the order-of-magnitude one might hope for from a control variate.
+
+| recipe | step | actions | reward | exploration |
+| --- | --- | --- | --- | --- |
+| v1 | 1 s | forced ranges | absolute | 1 random episode, then noise |
+| **v2** | 5 s | residual $[\tfrac12, 2]$ | $r - 0.5\,b$, deviation penalty | noise around the baseline |
+| v2-no-cf | 5 s | residual | absolute, deviation penalty | noise around the baseline |
+| v2-no-residual | 5 s | forced ranges | $r - 0.5\,b$ | 1 random episode, then noise |
+
+**Five seeds.** v1 and v2 are both run with five seeds on every (asset,
+strategy) pair of the two deep assets; the ablations with five seeds on
+`glft` over XRPUSDC.
+
 ## 7. Checks with known answers
 
 `run_checks.py`, all run before any number below.
@@ -329,6 +408,20 @@ already paid for:
 | reward telescopes | to 1e-6 bp over 400 steps |
 | baseline is a strict special case | fills and equity bit-identical to the runner; quoted spread equal to float32 precision |
 | `gymnasium.utils.env_checker` | passes |
+| residual: the action 0 is the baseline | exactly: multipliers $(1,1,1,1)$ |
+| residual: zero-initialised actor | outputs exactly 0 for any input, with a non-zero gradient into its last layer |
+| counterfactual reward at the baseline | exactly 0 at every one of a session's 17,160 steps; trace and episode the same length |
+
+The last check is the one that rules out a leak. If the cached baseline trace
+were off by one step, the agent would be handed the *next* step's market move
+inside its reward, which looks exactly like skill.
+
+Two of the older rows were claimed as exact in the first version of this
+writeup without having been run: the slow checks had only ever been run with
+`--skip-slow`. Run, they hold to float32 precision rather than exactly,
+because the action space is float32. The fills and the equity are
+bit-identical, so no result moves, but the claim was wrong and the table now
+says what was measured.
 
 Two of these earned their place by failing first.
 
@@ -369,6 +462,20 @@ sessions, from the widths that still take at least 50 fills a day.
 | enausdc | 1.5898 | 32 | 20 |
 | enausdt | 1.5911 | 32 | 20 |
 
+![spread-sweep](../assets/c6/spread-sweep.png)
+
+*Figure — GLFT with a half-spread floor on each asset's training sessions.
+Filled points take at least 50 fills a day and are eligible; open points
+barely trade and are excluded, however well they score. The red line is the
+floor chosen.*
+
+The figure shows two things the table cannot. On `bnbusdc` the best-scoring
+width (8 bp) is one of the excluded ones: it made +0.57% on a few dozen fills.
+That is the participation guard doing its job, since a width that barely
+trades wins by not trading. And on `enausdc` and `enausdt` the curve is still
+rising at 32 bp, the widest value swept, so their floors mean "at least 32 bp"
+rather than "32 bp".
+
 Every one of them is wider than what GLFT calibrates to, by between two and
 twenty times. That is C1's negative result restated across nine assets rather
 than argued from one.
@@ -383,6 +490,13 @@ coarse-tick asset the two happen to move together because both are downstream
 of how much the price moves per unit time; for a fine-tick one there is
 nothing stopping the quote sitting close, and the binding constraint is
 adverse selection alone.
+
+![floor-vs-intensity](../assets/c6/floor-vs-intensity.png)
+
+*Figure — each asset's chosen floor (blue) and its intensity decay $1/k$
+(orange), both in bp, against tick size. The floor sits 9–19× outside $1/k$
+on eight of the nine assets (2.3× on `bnbusdc`): the depth at which trades
+stop arriving is not the depth at which quoting stops losing.*
 
 Two entries are a useful internal check rather than new information: `enausdc`
 and `enausdt` are the same underlying in two stablecoins, and they land on the
@@ -419,7 +533,37 @@ quotes 3.7 bp, the floor never binds, and the published and widened rows are
 **identical to the digit** (-1.62%, 296.70 fills/h both). A pipeline that can
 produce that row is at least wired correctly.
 
-### 8.3 What RL adds on top: mostly nothing
+### 8.3 More orders in the grid does nothing
+
+The request asked for deeper grids. Holding order size fixed, so a deeper grid
+takes no extra risk and only adds price levels, GLFT on XRPUSDC's training
+sessions gives:
+
+| orders per side | published spread: return | fills | widened spread: return | fills |
+| --- | --- | --- | --- | --- |
+| 1 | −8.85% | 46,753 | −0.008% | 38 |
+| 5 | −9.91% | 51,859 | −0.014% | 170 |
+| 20 | −10.06% | 51,925 | −0.053% | 376 |
+| 40 | −10.05% | 51,935 | −0.053% | 376 |
+| 60 | −10.05% | 51,907 | −0.053% | 376 |
+
+![grid-depth](../assets/c6/grid-depth.png)
+
+*Figure — return against orders per side, labelled with total fills.*
+
+Past 20 orders the extra ones never fill. At the widened spread the 20-, 40-
+and 60-order rows are identical to the digit, because the grid step equals the
+half spread: the 21st order sits twenty half spreads from the fair price, and
+nothing reaches it. What people usually mean by "more orders" is finer
+spacing, and that is the knob that matters — which is why the RL action scales
+the grid *step* and not the count.
+
+The table also says something less expected: **fewer** orders did better on
+these sessions, at both spreads. The deep orders only fill during sweeps, and
+a sweep is exactly when the fill is most adversely selected. That is four
+training sessions of one asset, so it is a direction to test, not a finding.
+
+### 8.4 What RL adds on top: mostly nothing
 
 This is the question C6 exists to answer, because C3's version of it was open
 to the objection that GLFT was a losing baseline. It is no longer: the widened
@@ -491,7 +635,7 @@ further (8 bp to 15.5 bp) and lost less; seed 1 stayed near the floor and lost
 more. The policies that do well are the ones that rediscover the finding of
 §8.2, and the variance between seeds is mostly variance in whether they do.
 
-### 8.4 Does the policy respond to the alpha signal? (C5's second item)
+### 8.5 Does the policy respond to the alpha signal? (C5's second item)
 
 C5 asks whether RL discovers the *interaction* between an alpha signal and
 the quoting parameters on its own, or merely reproduces what a person would
