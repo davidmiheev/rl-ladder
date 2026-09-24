@@ -205,7 +205,7 @@ def extract(symbol: str, date: str, raw: Path) -> Path:
         BacktestAsset()
         .data([str(raw)])
         .linear_asset(1.0)
-        .constant_latency(0, 0)
+        .constant_order_latency(0, 0)
         .risk_adverse_queue_model()
         .no_partial_fill_exchange()
         .trading_value_fee_model(0.0, 0.0)
