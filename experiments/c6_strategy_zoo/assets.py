@@ -75,7 +75,7 @@ def test_days(symbol: str) -> list[str]:
     if symbol == "ethusdc":
         return config.TEST_DAYS_EXT
     if symbol == "xrpusdc":
-        return config.PAIR_TEST_DAYS
+        return config.PAIR_TEST_DAYS_EXT
     return CROSS_TEST_DAYS
 
 

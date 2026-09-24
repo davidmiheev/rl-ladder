@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c1_glft_baseline"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "a5_continuous_control"))
 
 import config  # noqa: E402
 import env as zoo_env  # noqa: E402
@@ -57,14 +58,29 @@ def check_skew_conversion() -> tuple[bool, str]:
     return err < 1e-12, f"max relative error {err:.2e} over 2000 random states"
 
 
+#: Relative precision of a float32 action.  The Gymnasium action space is
+#: float32, so a v1 baseline action like 0.13082401 is stored rounded and maps
+#: back to a multiplier of 1 +/- ~2e-8, not 1 exactly.  Under residual ranges
+#: the baseline is the action 0, which float32 represents exactly -- v2 checks
+#: to zero tolerance below.
+FLOAT32_TOLERANCE = 1e-6
+
+
 def check_baseline_action() -> tuple[bool, str]:
-    """`baseline_action()` must map back to multipliers of exactly 1."""
+    """`baseline_action()` must map back to multipliers of 1 (to float32 precision).
+
+    This check, and `check_baseline_matches_runner`, were written in C6's
+    first round but only ever run with `--skip-slow`, and the writeup claimed
+    both as exact. They are not: they hold to float32 precision. The fills
+    and the equity are bit-identical, which is the claim that matters.
+    """
     errs = []
     for ranges in (None, zoo_env.ZooEnv.FORCED_PARTICIPATION):
         env = zoo_env.ZooEnv(date=config.TRAIN_DAYS_EXT[0], strategy="glft", action_ranges=ranges)
         got = np.array(env.to_multipliers(env.baseline_action()))
         errs.append(float(np.max(np.abs(got - 1.0))))
-    return max(errs) < 1e-12, f"max deviation from 1.0: free {errs[0]:.2e}, forced {errs[1]:.2e}"
+    return max(errs) < FLOAT32_TOLERANCE, (
+        f"max deviation from 1.0: free {errs[0]:.2e}, forced {errs[1]:.2e} (float32 action)")
 
 
 def check_obi_standardisation() -> tuple[bool, str]:
@@ -213,7 +229,9 @@ def check_baseline_matches_runner(strategy: str = "glft") -> tuple[bool, str]:
     spread_err = float(np.nanmax(np.abs(out[: len(env_log)]["half_spread_bp"] - env_log["half_spread_bp"])))
     pos_err = float(np.nanmax(np.abs(out[: len(env_log)]["position"] - env_log["position"])))
     equity_err = abs(direct_equity - env_equity)
-    ok = spread_err < 1e-12 and pos_err < 1e-12 and equity_err < 1e-6
+    # Position and equity must match exactly: those are the fills. The quoted
+    # half spread differs only by the float32 rounding of the baseline action.
+    ok = pos_err == 0.0 and equity_err == 0.0 and spread_err < FLOAT32_TOLERANCE
     return ok, (
         f"{len(env_log)} iterations: half spread {spread_err:.2e} bp, "
         f"position {pos_err:.2e}, equity {equity_err:.2e}"
@@ -234,6 +252,60 @@ def check_env_api() -> tuple[bool, str]:
     return True, "gymnasium.utils.env_checker passed"
 
 
+def check_residual_zero_is_baseline() -> tuple[bool, str]:
+    """Under residual ranges the action 0 must be the baseline, exactly."""
+    env = zoo_env.ZooEnv(date=config.TRAIN_DAYS_EXT[0], strategy="glft-wide", residual=2.0)
+    base = env.baseline_action()
+    mults = np.array(env.to_multipliers(np.zeros(4, np.float32)))
+    env.close()
+    err = max(float(np.max(np.abs(base))), float(np.max(np.abs(mults - 1.0))))
+    return err < 1e-12, f"baseline action {base.tolist()}, multipliers at 0 {mults.tolist()}"
+
+
+def check_zero_initialised_actor() -> tuple[bool, str]:
+    """A freshly built residual actor must output exactly 0 for any input."""
+    import torch
+    from continuous import Config, build_agent
+    from train import ALGOS, zero_final_layer
+
+    torch.manual_seed(0)
+    agent = build_agent(Config(hidden=(64, 64), **ALGOS["td3"]), len(zoo_env.FEATURES), 4, 1.0)
+    zero_final_layer(agent.actor)
+    zero_final_layer(agent.actor_target)
+    obs = torch.randn(512, len(zoo_env.FEATURES)) * 3
+    worst = max(float(agent.actor(obs).abs().max()), float(agent.actor_target(obs).abs().max()))
+    # And it must still be able to learn: the last layer's weights get a
+    # non-zero gradient because the hidden activations are not zero.
+    loss = agent.actor(obs).sum()
+    loss.backward()
+    final = [m for m in agent.actor.modules() if isinstance(m, torch.nn.Linear)][-1]
+    grad = float(final.weight.grad.abs().sum())
+    return worst == 0.0 and grad > 0, f"max |output| {worst:.1e}, final-layer grad {grad:.2e}"
+
+
+def check_counterfactual_is_zero_at_baseline() -> tuple[bool, str]:
+    """Always playing the baseline must earn exactly zero counterfactual reward.
+
+    Tests the alignment of the cached trace with the live episode: an
+    off-by-one would hand the agent the *next* step's market move -- a leak
+    that looks like skill.
+    """
+    env = zoo_env.ZooEnv(date=config.PAIR_TRAIN_DAYS[0], strategy="glft-wide", symbol="xrpusdc",
+                         step_interval_ns=5_000_000_000, residual=2.0,
+                         reward_mode="counterfactual", cf_coef=1.0)
+    env.reset(seed=0)
+    action = env.baseline_action()
+    worst, steps, truncated = 0.0, 0, False
+    while not truncated:
+        _, reward, _, truncated, _ = env.step(action)
+        worst = max(worst, abs(reward))
+        steps += 1
+    length = len(env._baseline_trace)
+    env.close()
+    return worst == 0.0 and steps == length, (
+        f"max |reward| {worst:.1e} over {steps} steps; trace length {length}")
+
+
 FAST = [
     ("skew unit conversion", check_skew_conversion),
     ("obi running standardisation", check_obi_standardisation),
@@ -244,6 +316,9 @@ SLOW = [
     ("reward telescopes", check_reward_telescopes),
     ("baseline is a special case", check_baseline_matches_runner),
     ("gymnasium api", check_env_api),
+    ("residual: action 0 is the baseline", check_residual_zero_is_baseline),
+    ("residual: zero-initialised actor", check_zero_initialised_actor),
+    ("counterfactual is 0 at baseline", check_counterfactual_is_zero_at_baseline),
 ]
 
 

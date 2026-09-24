@@ -110,6 +110,13 @@ TEST_DAYS_EXT = [
 PAIR_TRAIN_DAYS = ["2025-08-26", "2025-08-29", "2025-09-03", "2025-09-08"]
 PAIR_TEST_DAYS = ["2025-09-15", "2025-09-18", "2025-09-22", "2025-09-25"]
 
+#: The pair's held-out set, widened to every day from the split onward -- the
+#: same eleven sessions ETHUSDC is held out on.  Four sessions turned out to be
+#: too few to tell a learned policy from its baseline once the seed spread was
+#: measured, so this is widened the way the rest of the split was: a superset,
+#: on the same side of the same date, with no day chosen.
+PAIR_TEST_DAYS_EXT = list(TEST_DAYS_EXT)
+
 #: The single day A, k and sigma are first calibrated on by hand in item 1.
 CALIBRATION_DAY = TRAIN_DAYS[0]
 

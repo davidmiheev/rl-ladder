@@ -324,10 +324,10 @@ already paid for:
 | --- | --- |
 | skew unit conversion, C1 ticks vs C6 price | 4.95e-16 max relative error over 2,000 random states |
 | OBI running standardisation vs brute-force windowed | 2.84e-14 max absolute difference over 7,588 steps |
-| `baseline_action()` maps to multipliers of 1.0 | exact, free and forced ranges |
+| `baseline_action()` maps to multipliers of 1.0 | to float32 precision (2e-8), free and forced ranges; exactly under residual ranges |
 | reference tables strictly causal | no row usable before its own timestamp, 500 probes |
 | reward telescopes | to 1e-6 bp over 400 steps |
-| baseline is a strict special case | episode reproduces the runner to 1e-12 |
+| baseline is a strict special case | fills and equity bit-identical to the runner; quoted spread equal to float32 precision |
 | `gymnasium.utils.env_checker` | passes |
 
 Two of these earned their place by failing first.

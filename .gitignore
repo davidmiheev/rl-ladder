@@ -37,3 +37,7 @@ companions/
 
 # Ad-hoc job scripts and logs for the current session; nothing here is a result.
 scratchpad/
+
+# PDF build tooling (docs/pdf/build.mjs)
+docs/pdf/node_modules/
+docs/writeups/.*.render.html

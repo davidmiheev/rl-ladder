@@ -64,7 +64,8 @@ def load_policy(path: Path):
     symbol = blob.get("symbol", cfg["symbol"])
     overrides = {"grid_num": cfg["grid_num"]} if cfg.get("grid_num") else {}
     env = ZooEnv(date=train_days(symbol)[0], strategy=strategy, symbol=symbol,
-                 overrides=overrides, beta=cfg.get("beta", 1.0))
+                 overrides=overrides, beta=cfg.get("beta", 1.0),
+                 residual=blob.get("recipe_params", {}).get("residual", 0.0))
     obs_dim = int(np.prod(env.observation_space.shape))
     env.close()
     # The actor's action space is the learnable multipliers only; pinned ones
@@ -76,7 +77,17 @@ def load_policy(path: Path):
     # Evaluating a forced-participation policy under free ranges replays it
     # through a different action mapping than it was trained with, which
     # silently reports a different policy.  C3 shipped that bug once.
+    # A policy is only the policy it was trained as if it is replayed through
+    # the same action mapping and at the same decision interval: a v2 policy's
+    # zero means "the baseline" only under residual ranges, and its outputs
+    # are held for five seconds, not one.  Checkpoints from before recipes
+    # existed are v1 by construction.
+    recipe = blob.get("recipe", "v1")
+    params = blob.get("recipe_params", {"step_seconds": 1, "residual": 0.0})
     return {
+        "recipe": recipe,
+        "step_seconds": params.get("step_seconds", 1),
+        "residual": params.get("residual", 0.0),
         "agent": agent,
         "baseline": np.asarray(blob["baseline"], dtype=np.float32),
         "mask": list(blob["mask"]),
@@ -102,8 +113,11 @@ def act(agent, obs, is_sac: bool) -> np.ndarray:
 def run_session(date: str, policy: dict | None, strategy: str, symbol: str,
                 overrides: dict, beta: float, participation: str) -> dict:
     ranges = ZooEnv.FORCED_PARTICIPATION if participation == "forced" else None
+    step_seconds = policy["step_seconds"] if policy else 1
+    residual = policy["residual"] if policy else 0.0
     env = ZooEnv(date=date, strategy=strategy, symbol=symbol, allow_held_out=True,
-                 action_ranges=ranges, overrides=overrides, beta=beta)
+                 action_ranges=ranges, overrides=overrides, beta=beta,
+                 step_interval_ns=int(step_seconds * 1e9), residual=residual)
     obs, _ = env.reset(seed=0)
     baseline_action = env.baseline_action()
     multipliers, inventories = [], []
@@ -176,6 +190,7 @@ def main() -> None:
     days = held_out_days(symbol) if args.days == "test" else train_days(symbol)
     run = Run(phase="c6-eval", name=args.tag or name, config={
         "policy": args.policy, "strategy": strategy, "symbol": symbol,
+        "recipe": policy["recipe"] if policy else "baseline",
         "days": days, "day_set": args.days, "participation": participation,
         "grid_num": overrides.get("grid_num"), "beta": beta,
     })

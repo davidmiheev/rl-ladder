@@ -33,6 +33,7 @@ signal more when the signal is informative.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -166,8 +167,14 @@ class ZooEnv(gym.Env):
         overrides: dict[str, float] | None = None,
         beta: float = 1.0,
         allow_held_out: bool = False,
+        residual: float = 0.0,
+        reward_mode: str = "absolute",
+        deviation_penalty: float = 0.0,
+        cf_coef: float = 1.0,
     ) -> None:
         super().__init__()
+        if reward_mode not in ("absolute", "counterfactual"):
+            raise ValueError(f"unknown reward_mode {reward_mode!r}")
         assets.ensure_registered(symbol)
         if date in assets.test_days(symbol) and not allow_held_out:
             raise ValueError(f"{date} is a held-out day; pass allow_held_out=True and mean it")
@@ -196,9 +203,31 @@ class ZooEnv(gym.Env):
         config.use_symbol(symbol)  # `precompute` repoints the symbol while building
 
         ranges = action_ranges or {}
+        if residual:
+            # A residual policy: every multiplier ranges over [1/R, R], which
+            # is symmetric in log space about 1, so the action 0 *is* the
+            # baseline.  A zero-initialised actor therefore starts exactly on
+            # the published-plus-floor parameters and can only learn to move
+            # away from them, which is the question being asked.
+            if residual <= 1.0:
+                raise ValueError("residual range must exceed 1")
+            ranges = {name: (1.0 / residual, residual) for name, _, _ in self.ACTION_RANGES}
+        self.residual = float(residual)
         self.action_ranges = tuple(
             (name, *ranges.get(name, (low, high))) for name, low, high in self.ACTION_RANGES
         )
+        self.reward_mode = reward_mode
+        self.deviation_penalty = float(deviation_penalty)
+        # How much of the baseline's reward to subtract.  1 is the plain
+        # counterfactual; the variance-optimal constant is Cov(r, b) / Var(b),
+        # which is 1 only when the policy trades like the baseline.  Any
+        # constant leaves the optimal policy unchanged, because the baseline's
+        # reward never depends on the action.
+        self.cf_coef = float(cf_coef)
+        self.step_interval_ns = int(step_interval_ns)
+        self._overrides = dict(overrides or {})
+        self._beta = beta
+        self._baseline_trace = None
         self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.action_ranges),), dtype=np.float32)
         self.observation_space = spaces.Box(-10.0, 10.0, shape=(len(FEATURES),), dtype=np.float32)
 
@@ -259,6 +288,12 @@ class ZooEnv(gym.Env):
         warmup = glft.window_steps(self.quote_interval_ns)
         self._done = self._advance(self.BASELINE, warmup) != 0
         self._equity = self._mark_to_market()
+        if self.reward_mode == "counterfactual" and self._baseline_trace is None:
+            self._baseline_trace = baseline_trace(
+                self.strategy, self.symbol, self.date, self.step_interval_ns, self.eta,
+                self._overrides, self._beta,
+            )
+        self._reference = self.baseline_action()
         return self._observe(), {"warmup_steps": warmup}
 
     def step(self, action):
@@ -272,12 +307,28 @@ class ZooEnv(gym.Env):
         pnl_bp = (equity - self._equity) / self.book_size * 1e4
         self._equity = equity
         inventory = self._hbt.position(0) * self._mid() / self.max_position_dollar
-        reward = pnl_bp - self.eta * inventory**2
+        absolute = pnl_bp - self.eta * inventory**2
+        reward = absolute
+        baseline_reward = 0.0
+        if self._baseline_trace is not None and self._steps - 1 < len(self._baseline_trace):
+            # The same session replayed at the baseline action produced this
+            # reward at this step.  Subtracting it leaves only what the policy
+            # changed: the market's own move, which dominates both, cancels.
+            # It depends on the day and the step but never on the action, so
+            # it cannot change which policy is optimal -- only how noisy the
+            # signal pointing to it is.
+            baseline_reward = float(self._baseline_trace[self._steps - 1])
+            reward = absolute - self.cf_coef * baseline_reward
+        if self.deviation_penalty:
+            deviation = np.asarray(action, dtype=np.float64) - self._reference
+            reward -= self.deviation_penalty * float(np.mean(deviation**2))
 
         truncated = status != 0 or self._steps >= self._session_steps
         self._done = truncated
         info = {
             "pnl_bp": pnl_bp,
+            "absolute_reward": absolute,
+            "baseline_reward": baseline_reward,
             "inventory": inventory,
             "equity": equity,
             "spread_mult": multipliers[0],
@@ -350,6 +401,44 @@ class ZooEnv(gym.Env):
             dtype=np.float32,
         )
         return np.clip(obs, -10.0, 10.0)
+
+
+def baseline_trace(strategy: str, symbol: str, date: str, step_interval_ns: int,
+                   eta: float, overrides: dict | None = None, beta: float = 1.0) -> np.ndarray:
+    """Per-step reward of the baseline on one session, computed once and cached.
+
+    The counterfactual reward is the policy's step reward minus this. Because
+    a replay is deterministic, a policy that always plays the baseline action
+    earns exactly zero at every step -- `run_checks.py` tests that rather than
+    assuming it, since an off-by-one in the alignment would silently hand the
+    agent a reward that leaks the next step's market move.
+    """
+    overrides = dict(overrides or {})
+    tag = "-".join(f"{k}{v:g}" for k, v in sorted(overrides.items())) or "none"
+    step_s = step_interval_ns / 1e9
+    path = (precompute.PRECOMP /
+            f"cf_{strategy}_{symbol}_{date}_{step_s:g}s_eta{eta:g}_b{beta:g}_{tag}.npy")
+    if path.exists():
+        return np.load(path)
+    env = ZooEnv(date=date, strategy=strategy, symbol=symbol, eta=eta,
+                 step_interval_ns=step_interval_ns, overrides=overrides, beta=beta,
+                 allow_held_out=True)
+    env.reset(seed=0)
+    action = env.baseline_action()
+    rewards = []
+    truncated = False
+    while not truncated:
+        _, reward, _, truncated, _ = env.step(action)
+        rewards.append(reward)
+    env.close()
+    trace = np.asarray(rewards, dtype=np.float64)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Written to a temporary name and renamed, so two training runs that
+    # build the same trace at once cannot leave a half-written file behind.
+    tmp = path.with_suffix(f".tmp{os.getpid()}.npy")
+    np.save(tmp, trace)
+    os.replace(tmp, path)
+    return trace
 
 
 def _imbalance(bid_qty: float, ask_qty: float) -> float:

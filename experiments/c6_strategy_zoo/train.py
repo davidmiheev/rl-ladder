@@ -71,6 +71,57 @@ LEARNABLE = {
 
 ACTION_NAMES = ("spread_mult", "skew_mult", "alpha_mult", "grid_mult")
 
+#: Training recipes.  `v1` is exactly what C6 first ran, kept so its extra
+#: seeds are the same experiment.  `v2` bundles the three changes made after
+#: v1 lost to its own baseline: a policy that starts *on* the baseline and can
+#: only move away from it (`residual`), explored with small noise around it
+#: rather than a first episode of uniformly random parameters, deciding every
+#: five seconds so a discount of 0.99 spans minutes rather than a hundred
+#: seconds, and rewarded against the same session replayed at the baseline
+#: (`reward`, `cf_coef`) so that most of the market's own noise cancels.  The
+#: two `v2-no-*` recipes each remove one of those, so their effects can be told
+#: apart.
+#:
+#: `cf_coef = 0.5`, not 1.  Subtracting the *whole* baseline reward was the
+#: first design and it was wrong: measured on a held-back training session,
+#: it raised the per-step reward variance 1.1-2.3x on XRPUSDC, because near the
+#: spread floor fills are sparse and a policy that widens slightly stops
+#: trading while the baseline keeps going -- subtracting an uncorrelated
+#: series only adds its noise.  The variance-optimal constant is
+#: Cov(r, b)/Var(b), which came out between 0.31 and 0.77 across six
+#: probes on two assets; 0.5 recovers most of the optimum in every one of them
+#: and never increases variance (x0.45 to x0.89).
+#:
+#: `deviation_penalty = 0.001` bp per step on the mean squared distance from
+#: the baseline action: holding one multiplier at 2^0.5 for a whole session
+#: of five-second steps costs about 1 bp, the size of the effects in the
+#: results table -- enough to keep the policy off the no-fill corner without
+#: pinning it to the baseline.
+RECIPES = {
+    "v1": dict(step_seconds=1, residual=0.0, reward="absolute", cf_coef=0.0,
+               deviation_penalty=0.0, explore_episodes=1, participation="forced"),
+    "v2": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+               deviation_penalty=0.001, explore_episodes=0, participation="residual"),
+    "v2-no-cf": dict(step_seconds=5, residual=2.0, reward="absolute", cf_coef=0.0,
+                     deviation_penalty=0.001, explore_episodes=0, participation="residual"),
+    "v2-no-residual": dict(step_seconds=5, residual=0.0, reward="counterfactual", cf_coef=0.5,
+                           deviation_penalty=0.0, explore_episodes=1, participation="forced"),
+}
+
+
+def zero_final_layer(actor) -> None:
+    """Make an untrained deterministic actor output exactly zero.
+
+    With residual action ranges, zero *is* the baseline, so the policy begins
+    on the published-plus-floor parameters instead of at a random point, and
+    only the last layer's weights start at zero -- the hidden layers keep their
+    random initialisation, so the gradient into that layer is not zero.
+    """
+    final = [m for m in actor.modules() if isinstance(m, torch.nn.Linear)][-1]
+    with torch.no_grad():
+        final.weight.zero_()
+        final.bias.zero_()
+
 
 def training_days(symbol: str) -> list[str]:
     assets.ensure_registered(symbol)
@@ -140,7 +191,11 @@ def main() -> None:
     parser.add_argument("--grid-num", type=int, default=None)
     parser.add_argument("--participation", default="forced", choices=["free", "forced"])
     parser.add_argument("--max-steps", type=int, default=0, help="smoke tests only")
+    parser.add_argument("--recipe", default="v1", choices=sorted(RECIPES))
     args = parser.parse_args()
+    recipe = dict(RECIPES[args.recipe])
+    args.explore_episodes = recipe["explore_episodes"]
+    args.participation = recipe["participation"]
 
     torch.set_num_threads(1)
     torch.manual_seed(args.seed)
@@ -150,7 +205,11 @@ def main() -> None:
     overrides = {"grid_num": args.grid_num} if args.grid_num else {}
     ranges = ZooEnv.FORCED_PARTICIPATION if args.participation == "forced" else None
     env_kwargs = dict(strategy=args.strategy, symbol=args.symbol, max_steps=args.max_steps,
-                      action_ranges=ranges, overrides=overrides, beta=args.beta)
+                      action_ranges=ranges, overrides=overrides, beta=args.beta,
+                      step_interval_ns=int(recipe["step_seconds"] * 1e9),
+                      residual=recipe["residual"], reward_mode=recipe["reward"],
+                      cf_coef=recipe["cf_coef"],
+                      deviation_penalty=recipe["deviation_penalty"])
 
     config = Config(buffer_size=500_000, learning_starts=0,
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo])
@@ -162,9 +221,13 @@ def main() -> None:
     mask = list(LEARNABLE[args.learnable])
     act_dim = len(mask)
     agent = build_agent(config, obs_dim, act_dim, 1.0)
+    if recipe["residual"]:
+        zero_final_layer(agent.actor)
+        zero_final_layer(agent.actor_target)
     buffer = ReplayBuffer(config.buffer_size, obs_dim, act_dim)
 
-    name = f"{args.strategy}-{args.symbol}-{args.algo}-{args.participation}-{args.learnable}-s{args.seed}"
+    tag = f"{args.participation}-{args.learnable}" if args.recipe == "v1" else args.recipe
+    name = f"{args.strategy}-{args.symbol}-{args.algo}-{tag}-s{args.seed}"
     run = Run(phase="c6", name=name, config={
         "strategy": args.strategy, "symbol": args.symbol, "algo": args.algo, "seed": args.seed,
         "passes": args.passes, "learnable": args.learnable, "learnable_indices": mask,
@@ -172,6 +235,7 @@ def main() -> None:
         "train_days": days, "max_steps": args.max_steps, "participation": args.participation,
         "grid_num": args.grid_num, "beta": args.beta, "hidden": config.hidden,
         "gamma_rl": config.gamma, "batch_size": config.batch_size, "eta": 0.015,
+        "recipe": args.recipe, **{f"recipe_{k}": v for k, v in recipe.items()},
         "algo_overrides": ALGOS[args.algo],
     })
 
@@ -205,7 +269,8 @@ def main() -> None:
     torch.save({"actor": agent.actor.state_dict(), "config": vars(args),
                 "baseline": baseline, "mask": mask, "algo": args.algo,
                 "act_dim": act_dim, "participation": args.participation,
-                "strategy": args.strategy, "symbol": args.symbol},
+                "strategy": args.strategy, "symbol": args.symbol,
+                "recipe": args.recipe, "recipe_params": recipe},
                run.path("policy.pt"))
     run.finish({"history": history, "final": history[-1]})
     print(f"\nrun dir: {run.dir}")

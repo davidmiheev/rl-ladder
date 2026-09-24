@@ -1,0 +1,15 @@
+{
+  "name": "rl-ladder-pdf",
+  "private": true,
+  "description": "Builds docs/writeups/*.md into PDFs with KaTeX-rendered math. See build.mjs.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "katex": "0.18.9",
+    "markdown-it": "15.0.2",
+    "markdown-it-anchor": "10.0.0",
+    "markdown-it-texmath": "1.0.0"
+  }
+}
