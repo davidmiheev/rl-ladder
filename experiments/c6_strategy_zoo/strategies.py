@@ -77,6 +77,11 @@ def _base() -> np.ndarray:
     params[zoo.P_GRID_NUM] = GRID_NUM
     params[zoo.P_OBI_WINDOW] = 1  # unused unless the strategy is `obi`
     params[zoo.P_BETA] = 1.0
+    # C7's additions, at values that leave C6's quoter unchanged: sigma at its
+    # measured scale, no HAR (`har_b1 = 0`), no markout widening (`kappa = 0`).
+    params[zoo.P_VOL_SCALE] = 1.0
+    params[zoo.P_MARKOUT_STEPS] = 50  # 5 s at the 100 ms quoting interval
+    params[zoo.P_MARKOUT_HALFLIFE] = 20.0  # fills
     return params
 
 

@@ -156,8 +156,9 @@ def evaluate(
     overrides: dict[str, float],
     tag: str | None = None,
     keep_records: bool = True,
+    phase: str = "c6",
 ) -> dict:
-    run = Run("c6", tag or f"{strategy}-{symbol}", config={
+    run = Run(phase, tag or f"{strategy}-{symbol}", config={
         "strategy": strategy, "symbol": symbol, "days": days, **overrides,
     })
     interval_ns = int(overrides.get("interval_ns", strategies.INTERVAL_NS))
@@ -213,6 +214,8 @@ def main() -> None:
     parser.add_argument("--strategy", required=True, choices=sorted(strategies.NAMES))
     parser.add_argument("--symbol", default="ethusdc")
     parser.add_argument("--days", default="train")
+    parser.add_argument("--dates", nargs="*", default=None,
+                        help="explicit session dates; overrides --days")
     parser.add_argument("--grid-num", type=float, default=None)
     parser.add_argument("--half-spread-bp", type=float, default=None)
     parser.add_argument("--interval-ms", type=float, default=None)
@@ -220,12 +223,16 @@ def main() -> None:
     parser.add_argument("--queue-model", default=config.DEFAULT_QUEUE_MODEL)
     parser.add_argument("--tag", default=None)
     parser.add_argument("--no-records", action="store_true")
+    parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
+                        help="override any quoter parameter by name, e.g. vol_scale=1.5")
+    parser.add_argument("--phase", default="c6",
+                        help="runs/<phase>/ to write under; C7's variants use c7")
     args = parser.parse_args()
 
     sets = day_sets(args.symbol)
     if args.days not in sets:
         raise SystemExit(f"unknown day set {args.days!r}; known: {sorted(sets)}")
-    days = sets[args.days]
+    days = args.dates or sets[args.days]
 
     overrides: dict[str, float] = {"beta": args.beta, "queue_model": args.queue_model}
     if args.grid_num is not None:
@@ -234,10 +241,15 @@ def main() -> None:
         overrides["half_spread_bp"] = args.half_spread_bp
     if args.interval_ms is not None:
         overrides["interval_ns"] = args.interval_ms * 1e6
+    for item in args.set:
+        name, _, value = item.partition("=")
+        if name not in zoo.PARAM_NAMES:
+            raise SystemExit(f"unknown parameter {name!r}")
+        overrides[name] = float(value)
 
     summary = evaluate(
         args.strategy, args.symbol, days, overrides,
-        tag=args.tag, keep_records=not args.no_records,
+        tag=args.tag, keep_records=not args.no_records, phase=args.phase,
     )
     print(json.dumps({k: v for k, v in summary.items() if k.endswith("_median")}, indent=2))
 

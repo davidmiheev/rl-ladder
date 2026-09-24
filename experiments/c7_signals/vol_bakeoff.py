@@ -198,19 +198,21 @@ def fit_har(days: list[dict[str, np.ndarray]], target: str) -> np.ndarray:
     return beta
 
 
-def har_forecast(d: dict[str, np.ndarray], beta: np.ndarray, target: str,
-                 train: list[dict[str, np.ndarray]]) -> np.ndarray:
-    x = np.column_stack([np.ones(len(d["_rv_1m"])), np.log(d["_rv_1m"]),
-                         np.log(d["rv_1s_10m"]), np.log(d["_rv_1h"])])
-    # exp(E[log y]) underestimates E[y]; correct by the training residual
-    # variance, the standard log-normal adjustment.
+def har_residual_var(train: list[dict[str, np.ndarray]], beta: np.ndarray, target: str) -> float:
+    """Variance of the training residuals of log y, for the log-normal correction."""
     resid = []
     for t in train:
         xt = np.column_stack([np.ones(len(t["_rv_1m"])), np.log(t["_rv_1m"]),
                               np.log(t["rv_1s_10m"]), np.log(t["_rv_1h"])])
         r = np.log(t[target]) - xt @ beta
         resid.append(r[np.isfinite(r)])
-    s2 = float(np.var(np.concatenate(resid)))
+    return float(np.var(np.concatenate(resid)))
+
+
+def har_forecast(d: dict[str, np.ndarray], beta: np.ndarray, s2: float) -> np.ndarray:
+    """exp(E[log y]) underestimates E[y]; `s2 / 2` is the log-normal correction."""
+    x = np.column_stack([np.ones(len(d["_rv_1m"])), np.log(d["_rv_1m"]),
+                         np.log(d["rv_1s_10m"]), np.log(d["_rv_1h"])])
     return np.exp(x @ beta + 0.5 * s2)
 
 
@@ -220,10 +222,10 @@ def evaluate(symbol: str, train_days: list[str], test_days: list[str]) -> dict:
     results = {}
     for target in ("_y1", "_y5"):
         beta = fit_har(list(train.values()), target)
+        s2 = har_residual_var(list(train.values()), beta, target)
         for split in (train, test):
             for d in split.values():
-                d["har"] = np.maximum(har_forecast(d, beta, target, list(train.values())),
-                                      np.nanmin(d["rv_1s_10m"]))
+                d["har"] = np.maximum(har_forecast(d, beta, s2), np.nanmin(d["rv_1s_10m"]))
         rows = {}
         for name in NAMES:
             # Calibration constant, from the training days. The scale that
@@ -239,7 +241,10 @@ def evaluate(symbol: str, train_days: list[str], test_days: list[str]) -> dict:
             rows[name] = {"scale": scale, "qlike_raw": float(np.mean(raw)),
                           "qlike_cal": float(np.mean(cal)),
                           "per_day_cal": dict(zip(test, cal, strict=True))}
-        results[target.strip("_")] = {"har_beta": beta.tolist(), "rows": rows}
+        # `har_b0` is the intercept with the log-normal correction folded in:
+        # what the quoter's `har_b0` parameter takes.
+        results[target.strip("_")] = {"har_beta": beta.tolist(), "har_s2": s2,
+                                      "har_b0": float(beta[0] + 0.5 * s2), "rows": rows}
     return results
 
 

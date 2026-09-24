@@ -79,9 +79,9 @@ STRATEGY_NAMES = {v: k for k, v in STRATEGY_IDS.items()}
     Z_T, Z_A, Z_K, Z_VOL, Z_MID, Z_PREV_MID, Z_SPREAD, Z_BIDQ, Z_ASKQ,
     Z_DEEPBIDQ, Z_DEEPASKQ, Z_HALF_PX, Z_SKEW_PX, Z_SIGNAL_PX, Z_FAIR_PX,
     Z_DATA_I, Z_REF_A, Z_REF_B, Z_OBI_SUM, Z_OBI_SUMSQ, Z_OBI_N, Z_OBI_RAW,
-    Z_ALPHA, Z_ORDER_QTY, Z_NORM_POS,
-) = range(25)
-STATE_SIZE = 25
+    Z_ALPHA, Z_ORDER_QTY, Z_NORM_POS, Z_TOX,
+) = range(26)
+STATE_SIZE = 26
 
 #: Slots in the `params` vector, which carries the union of every strategy's
 #: knobs.  A vector rather than a dozen keyword arguments because numba
@@ -92,14 +92,18 @@ STATE_SIZE = 25
     P_GRID_INTERVAL_BP, P_ORDER_QTY_DOLLAR, P_MAX_POSITION_DOLLAR,
     P_GAMMA, P_ADJ1, P_ADJ2, P_VOL_TO_HALF_SPREAD, P_BETA,
     P_OBI_DEPTH, P_OBI_WINDOW, P_ROI_LB_TICK, P_ROI_UB_TICK,
-) = range(17)
-PARAM_SIZE = 17
+    P_VOL_SCALE, P_HAR_B0, P_HAR_B1, P_HAR_B2, P_HAR_B3,
+    P_MARKOUT_KAPPA, P_MARKOUT_STEPS, P_MARKOUT_HALFLIFE,
+) = range(25)
+PARAM_SIZE = 25
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
     "grid_interval_bp", "order_qty_dollar", "max_position_dollar",
     "gamma", "adj1", "adj2", "vol_to_half_spread", "beta",
     "obi_depth", "obi_window", "roi_lb_tick", "roi_ub_tick",
+    "vol_scale", "har_b0", "har_b1", "har_b2", "har_b3",
+    "markout_kappa", "markout_steps", "markout_halflife",
 )
 
 #: Price levels each side that the deep-imbalance feature sums over, as in C2.
@@ -229,6 +233,28 @@ def quote_once(
             state[Z_A] = A_
             state[Z_K] = k_
         state[Z_VOL] = glft.realised_volatility(buf_midchg[t + 1 - window : t + 1], interval_ns)
+        # C7: `vol_scale` multiplies the variance (C7 measured the estimator
+        # above reading 1.5-1.7x low); a non-zero `har_b1` replaces it with a
+        # HAR forecast from 1 s returns over the last minute, ten minutes and
+        # hour, once an hour of data exists. Both default to C6's sigma.
+        state[Z_VOL] *= np.sqrt(params[P_VOL_SCALE])
+        per_second = int(1e9 / interval_ns)
+        hour = 3600 * per_second
+        if params[P_HAR_B1] != 0.0 and t >= hour and np.isfinite(mid_price_tick):
+            tick_bp = 1e4 / mid_price_tick  # one tick in bp at this mid
+            rv = np.zeros(3)
+            for j, seconds in enumerate((60, 600, 3600)):
+                total = 0.0
+                for s in range(seconds):
+                    end = t + 1 - s * per_second
+                    move = np.nansum(buf_midchg[end - per_second : end])
+                    total += move * move
+                rv[j] = total / seconds * tick_bp * tick_bp
+            if rv[0] > 0.0 and rv[1] > 0.0 and rv[2] > 0.0:
+                var_bp = np.exp(params[P_HAR_B0] + params[P_HAR_B1] * np.log(rv[0])
+                                + params[P_HAR_B2] * np.log(rv[1])
+                                + params[P_HAR_B3] * np.log(rv[2]))
+                state[Z_VOL] = np.sqrt(var_bp) / tick_bp
 
     mid_price = mid_price_tick * tick_size
     order_qty = max(round((params[P_ORDER_QTY_DOLLAR] / mid_price) / lot_size) * lot_size, lot_size)
@@ -332,6 +358,24 @@ def quote_once(
 
     floor_half_px = params[P_HALF_SPREAD_BP] * 1e-4 * mid_price
     half_px = spread_mult * max(model_half_px, floor_half_px)
+
+    # C7's markout rule: each fill is marked `markout_steps` later against the
+    # mid it was filled at, signed so that a positive number is a loss (the
+    # price moved against the position the fill opened). An exponential
+    # average over fills, `markout_halflife` fills long, is added to the half
+    # spread times `markout_kappa`: quote wider for as long as recent fills
+    # have been adversely selected. Zero kappa is C6's quoter exactly.
+    if params[P_MARKOUT_KAPPA] > 0.0:
+        lag = int(params[P_MARKOUT_STEPS])
+        if t > lag:
+            filled = out[t - lag].position - out[t - lag - 1].position
+            then = out[t - lag].mid
+            if filled != 0.0 and then > 0.0:
+                loss_bp = -np.sign(filled) * (mid_price - then) / then * 1e4
+                weight = abs(filled) / order_qty
+                step = 1.0 - 0.5 ** (weight / params[P_MARKOUT_HALFLIFE])
+                state[Z_TOX] += step * (loss_bp - state[Z_TOX])
+        half_px += params[P_MARKOUT_KAPPA] * max(state[Z_TOX], 0.0) * 1e-4 * mid_price
     if strat == HFGRID:
         # The notebook skews hfgrid multiplicatively on the half spread, so its
         # skew scales with volatility too; keep that, but express the result in
