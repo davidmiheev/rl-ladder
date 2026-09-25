@@ -190,6 +190,7 @@ class ZooEnv(gym.Env):
         deviation_penalty: float = 0.0,
         cf_coef: float = 1.0,
         extra_features: bool = False,
+        inventory_weight: float = 1.0,
     ) -> None:
         super().__init__()
         if reward_mode not in ("absolute", "counterfactual"):
@@ -243,6 +244,14 @@ class ZooEnv(gym.Env):
         # constant leaves the optimal policy unchanged, because the baseline's
         # reward never depends on the action.
         self.cf_coef = float(cf_coef)
+        # How much of the step's PnL that comes from *holding* inventory
+        # (last step's position times the mid's move) counts, against the PnL
+        # that comes from *trading* (this step's fills marked at the step's
+        # closing mid, plus rebates and fees). The two sum to the step's PnL
+        # exactly, so 1 is the plain reward. Below 1, the reward credits the
+        # market making and discounts the direction: a windfall from holding
+        # the right inventory through a crash is not something to learn.
+        self.inventory_weight = float(inventory_weight)
         self.step_interval_ns = int(step_interval_ns)
         self._overrides = dict(overrides or {})
         self._beta = beta
@@ -314,9 +323,11 @@ class ZooEnv(gym.Env):
         if self.reward_mode == "counterfactual" and self._baseline_trace is None:
             self._baseline_trace = baseline_trace(
                 self.strategy, self.symbol, self.date, self.step_interval_ns, self.eta,
-                self._overrides, self._beta,
+                self._overrides, self._beta, self.inventory_weight,
             )
         self._reference = self.baseline_action()
+        self._last_position = self._hbt.position(0)
+        self._last_mid = self._mid()
         if self.extra_features and self._extra is None:
             x, _, ts = book_info.day_features(self.symbol, self.date)
             self._extra_ts = ts
@@ -335,8 +346,12 @@ class ZooEnv(gym.Env):
         equity = self._mark_to_market()
         pnl_bp = (equity - self._equity) / self.book_size * 1e4
         self._equity = equity
-        inventory = self._hbt.position(0) * self._mid() / self.max_position_dollar
-        absolute = pnl_bp - self.eta * inventory**2
+        position, mid = self._hbt.position(0), self._mid()
+        inventory = position * mid / self.max_position_dollar
+        holding_bp = self._last_position * (mid - self._last_mid) / self.book_size * 1e4
+        trading_bp = pnl_bp - holding_bp
+        self._last_position, self._last_mid = position, mid
+        absolute = trading_bp + self.inventory_weight * holding_bp - self.eta * inventory**2
         reward = absolute
         baseline_reward = 0.0
         if self._baseline_trace is not None and self._steps - 1 < len(self._baseline_trace):
@@ -356,6 +371,8 @@ class ZooEnv(gym.Env):
         self._done = truncated
         info = {
             "pnl_bp": pnl_bp,
+            "trading_bp": trading_bp,
+            "holding_bp": holding_bp,
             "absolute_reward": absolute,
             "baseline_reward": baseline_reward,
             "inventory": inventory,
@@ -437,7 +454,8 @@ class ZooEnv(gym.Env):
 
 
 def baseline_trace(strategy: str, symbol: str, date: str, step_interval_ns: int,
-                   eta: float, overrides: dict | None = None, beta: float = 1.0) -> np.ndarray:
+                   eta: float, overrides: dict | None = None, beta: float = 1.0,
+                   inventory_weight: float = 1.0) -> np.ndarray:
     """Per-step reward of the baseline on one session, computed once and cached.
 
     The counterfactual reward is the policy's step reward minus this. Because
@@ -448,6 +466,8 @@ def baseline_trace(strategy: str, symbol: str, date: str, step_interval_ns: int,
     """
     overrides = dict(overrides or {})
     tag = "-".join(f"{k}{v:g}" for k, v in sorted(overrides.items())) or "none"
+    if inventory_weight != 1.0:
+        tag += f"_w{inventory_weight:g}"  # weight 1 keeps the existing cache names
     step_s = step_interval_ns / 1e9
     path = (precompute.PRECOMP /
             f"cf_{strategy}_{symbol}_{date}_{step_s:g}s_eta{eta:g}_b{beta:g}_{tag}.npy")
@@ -455,7 +475,7 @@ def baseline_trace(strategy: str, symbol: str, date: str, step_interval_ns: int,
         return np.load(path)
     env = ZooEnv(date=date, strategy=strategy, symbol=symbol, eta=eta,
                  step_interval_ns=step_interval_ns, overrides=overrides, beta=beta,
-                 allow_held_out=True)
+                 allow_held_out=True, inventory_weight=inventory_weight)
     env.reset(seed=0)
     action = env.baseline_action()
     rewards = []

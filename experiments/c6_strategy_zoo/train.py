@@ -113,6 +113,12 @@ RECIPES = {
     "v2-deep": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
                     deviation_penalty=0.001, explore_episodes=0, participation="residual",
                     extra_features=True),
+    # v2 with the step reward split into trading and holding PnL and the
+    # holding part counted at a quarter: credit for market making, little for
+    # direction. Only the reward differs from v2.
+    "v2-edge": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                    deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                    inventory_weight=0.25),
 }
 
 
@@ -217,7 +223,8 @@ def main() -> None:
                       residual=recipe["residual"], reward_mode=recipe["reward"],
                       cf_coef=recipe["cf_coef"],
                       deviation_penalty=recipe["deviation_penalty"],
-                      extra_features=recipe.get("extra_features", False))
+                      extra_features=recipe.get("extra_features", False),
+                      inventory_weight=recipe.get("inventory_weight", 1.0))
 
     config = Config(buffer_size=500_000, learning_starts=0,
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo])

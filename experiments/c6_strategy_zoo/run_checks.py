@@ -306,6 +306,29 @@ def check_counterfactual_is_zero_at_baseline() -> tuple[bool, str]:
         f"max |reward| {worst:.1e} over {steps} steps; trace length {length}")
 
 
+def check_trading_holding_split() -> tuple[bool, str]:
+    """Trading plus holding PnL is the step's PnL; weight 1 is the plain reward.
+
+    Played with random actions, so fills and inventory actually move.
+    """
+    env = zoo_env.ZooEnv(date=config.PAIR_TRAIN_DAYS[0], strategy="obi-wide", symbol="xrpusdc",
+                         step_interval_ns=5_000_000_000, residual=2.0, max_steps=2000)
+    env.reset(seed=0)
+    rng = np.random.default_rng(0)
+    worst_split, worst_reward, holding, truncated = 0.0, 0.0, 0.0, False
+    while not truncated:
+        _, reward, _, truncated, info = env.step(rng.uniform(-1, 1, 4).astype(np.float32))
+        worst_split = max(worst_split,
+                          abs(info["trading_bp"] + info["holding_bp"] - info["pnl_bp"]))
+        plain = info["pnl_bp"] - env.eta * info["inventory"] ** 2
+        worst_reward = max(worst_reward, abs(reward - plain))
+        holding += abs(info["holding_bp"])
+    env.close()
+    ok = worst_split < 1e-9 and worst_reward < 1e-9 and holding > 0
+    return ok, (f"max |split error| {worst_split:.1e} bp, max |reward - plain| "
+                f"{worst_reward:.1e} bp, total |holding| {holding:.1f} bp")
+
+
 FAST = [
     ("skew unit conversion", check_skew_conversion),
     ("obi running standardisation", check_obi_standardisation),
@@ -319,6 +342,7 @@ SLOW = [
     ("residual: action 0 is the baseline", check_residual_zero_is_baseline),
     ("residual: zero-initialised actor", check_zero_initialised_actor),
     ("counterfactual is 0 at baseline", check_counterfactual_is_zero_at_baseline),
+    ("trading + holding = step PnL", check_trading_holding_split),
 ]
 
 
