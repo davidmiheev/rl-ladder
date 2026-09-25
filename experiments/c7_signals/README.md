@@ -51,6 +51,7 @@ reaches any of them.
 | book information | + deeper levels, OFI, returns, BTC | held-out R² added at 1 s, ETH | +0.2 own book, ≈0 BTC | `runs/c7-book/` |
 | markout rule | κ from 4 training days | held-out cumulative, better than C6 | 6 / 6 | `runs/c7/*-mk?__*` |
 | markout rule, untuned | κ = 2, seven unseen assets | held-out, better than C6 (excl. AVAX) | 15 / 21 (13 / 18) | `runs/c7/*-mk2__*` |
+| RL `v2-deep` | v2 + 14 book/BTC observations, 5 seeds, ETH | median vs v2 | glft −0.64, obi +1.91 points (inside seed spread) | `runs/c6/*-v2-deep-s?__*` |
 
 ## Findings
 

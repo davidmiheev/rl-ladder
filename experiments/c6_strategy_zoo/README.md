@@ -95,12 +95,13 @@ setting it to 0 turns a strategy into a pure mid-price quoter with the same
 spread and skew, so what the policy chooses for it measures what that
 strategy's signal is worth on these days.
 
-TD3 only, two seeds. Both are compute decisions on a four-core machine, and
-both are recorded as such in `train.py`: C3 already ran the three-way
-algorithm comparison and TD3 won, and two seeds is enough to notice that a
-result is seed-dependent but *not* enough to rank two configurations that are
-close. C3 measured the seed spread on this problem at 3.74 points of return;
-any C6 claim resting on a smaller gap is flagged rather than made.
+TD3 only — C3 already ran the three-way algorithm comparison and TD3 won.
+Two recipes (`train.py`'s `RECIPES`): **v1**, C3's setup, and **v2**, a
+residual policy started on the baseline with five-second decisions and a
+partly counterfactual reward, plus two ablations of v2 and C7's `v2-deep`.
+Five seeds of v1 and v2 on every pair of the two deep assets, one v1 seed on
+each breadth pair: C3 measured the seed spread on this problem at 3.74 points,
+and C6 found it larger, so single-seed rows are flagged rather than relied on.
 
 ## Checks that ran before any number was reported
 
@@ -185,4 +186,12 @@ python experiments/c6_strategy_zoo/master_table.py --compare   # baseline vs RL,
 
 and the figures are `docs/assets/c6/{pnl,inventory}-<asset>.png`, with colour
 carrying the strategy and line style the variant: dotted for the published
-parameters, solid for the widened spread, dashed for TD3 on top of it.
+parameters, solid for the widened spread, dashed and dash-dotted for the
+median seed of v1 and v2 on top of it; `plot_c6_summary.py` draws the rest.
+
+| result | held out | value |
+| --- | --- | --- |
+| widening, 33 pairs | median gain, better | +2.25 points, 25 / 33 |
+| v1, 5 seeds, 8 deep pairs | beats widened baseline | 0 / 8 |
+| v2, 5 seeds, 8 deep pairs | beats v1 / widened baseline | 8 / 8 / 3 / 8 |
+| ablation, `glft` XRPUSDC | median: v1 / −residual / −cf / v2 | −2.68 / −1.79 / −1.31 / −0.86% (baseline −1.89%) |

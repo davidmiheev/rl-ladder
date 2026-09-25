@@ -12,7 +12,8 @@ notebook: [`experiments/c7_signals/README.md`](../../experiments/c7_signals/READ
 > - **The book deeper than five ticks and BTCUSDT's book carry almost nothing a
 >   quoter can use.** Held-out R² gains are +0.2 points at 1 s at best, from
 >   deeper own-book levels; BTC adds ≈0 once our own book is known, in a linear
->   model and in LightGBM, even with BTC aligned to 100 ms.
+>   model and in LightGBM, even with BTC aligned to 100 ms. Given to the RL
+>   policy as fourteen extra observations, they change nothing measurable.
 > - **A markout rule — widen the half spread by κ × the recent adverse move of
 >   our own fills — beat C6's widened baseline on held-out data in 6 of 6
 >   (strategy, asset) pairs**, by +0.1 to +7.8 points, and untuned (κ = 2) in
@@ -207,8 +208,10 @@ LightGBM, held-out R² in %:
 - **Our own recent returns help ETH at 30–60 s (+0.44) and hurt XRP**, which
   has four training days to fit on: a small, unstable momentum effect.
 
-For scale: an R² of 3.5% at 1 s on ETH, where σ is about 1 bp per √s, is a
-forecast whose own spread is about 0.2 bp — against a 4 bp half spread. It
+For scale: an R² of 3.5% at 1 s on ETH, where the 1 s return has a standard
+deviation of 0.75 bp (median over the held-out sessions), is a forecast whose
+own spread is about $\sqrt{0.035} \times 0.75 \approx 0.14$ bp — against a
+4 bp half spread. It
 could move a quote by a tick; it cannot change what a quote earns.
 
 ## 6. The markout rule
@@ -295,10 +298,28 @@ not to be relied on.
 
 ## 7. RL with the deeper book and BTCUSDT in the state
 
-*Pending: recipe `v2-deep` — C6's v2 recipe with fourteen more observations
-(own levels 20/50/200 ticks, bands 1/5/25 bp, OFI 1 s/10 s, own returns
-10 s/60 s, BTC returns over 0.5 s/5 s, BTC touch imbalance and OFI) — five
-seeds each of `glft-wide` and `obi-wide` on ETHUSDC, against v2.*
+§5 says the extra information is small. That is a statement about linear and
+boosted-tree forecasts, and a policy is neither, so the direct test was run
+too: recipe **`v2-deep`** is C6's v2 recipe unchanged except for fourteen more
+observations, read per second from the same feature files the regressions
+used — own-book imbalance at 20/50/200 ticks and 1/5/25 bp, OFI over 1 s and
+10 s, own returns over 10 s and 60 s, BTCUSDT's returns over 0.5 s and 5 s (on
+its 100 ms grid), and BTCUSDT's touch imbalance and OFI. Five seeds each of
+`glft-wide` and `obi-wide` on ETHUSDC, the asset with ten training sessions.
+
+![rl-deep](../assets/c7/rl-deep.png)
+
+| strategy | widened baseline | v2, median of 5 | v2-deep, median of 5 | v2-deep seeds |
+| --- | --- | --- | --- | --- |
+| glft-wide | −7.07% | −6.30% | −6.94% | −11.03 to −2.88 |
+| obi-wide | −6.40% | −8.00% | −6.09% | −8.55 to −4.25 |
+
+Worse by 0.6 points on one strategy, better by 1.9 on the other, and both
+differences are inside a seed spread of six to eight points. **The extra
+observations do not measurably change what the policy earns** — which is what
+§5 predicted, now checked on the object that would have used them.
+`obi-wide` with the extra observations does edge past its baseline on median
+(−6.09% against −6.40%); the markout rule on the same pair made −0.62%.
 
 ## 8. Checks with known answers
 

@@ -3,6 +3,22 @@
 Lab notebook:
 [`experiments/c6_strategy_zoo/README.md`](../../experiments/c6_strategy_zoo/README.md).
 
+> **At a glance**
+>
+> - Five published market makers on nine assets, each with its published spread,
+>   a per-asset widened spread, and TD3 on four multipliers on top. Held out:
+>   11 sessions on ETHUSDC and XRPUSDC, 3 on the other seven.
+> - **Widening is the largest effect in Part C**: a median +2.25 points of
+>   cumulative return, better in 25 of 33 (asset, strategy) pairs. The floor an
+>   asset needs is 9–19× its trade-intensity decay $1/k$ on eight of nine.
+> - **RL on top does not beat the widened baselines.** With five seeds, recipe
+>   v1 loses to its baseline in 8 of 8 pairs. Recipe v2 — a residual policy
+>   started on the baseline, five-second decisions, a partly counterfactual
+>   reward — beats v1 in 8 of 8 but its baseline in only 3 of 8, and the seed
+>   spread is larger than any gain.
+> - More orders in the grid does nothing; the policies do not learn to respond
+>   to the alpha signal.
+
 ---
 
 ## 1. The task
@@ -451,9 +467,6 @@ and why it does not set the spread.
 
 ## 8. Results
 
-*In progress. Each subsection appears once its runs have landed; nothing here
-carries a placeholder number.*
-
 ### 8.1 How wide each asset has to be quoted
 
 The floor is chosen per asset by `sweep_spread.py`, on three or four training
@@ -518,13 +531,13 @@ property of the asset's flow and not of its tick.
 
 Across 33 (asset, strategy) pairs on held-out sessions, replacing each
 strategy's published half spread with its asset's calibrated floor is worth a
-**median +2.01 points** of cumulative return, mean +4.05, and helps in
-**25 of 33** cases. The range is -1.70 to +18.36.
+**median +2.25 points** of cumulative return, mean +4.32, and helps in
+**25 of 33** cases. The range is −1.70 to +18.36.
 
 |  | published | widened |
 | --- | --- | --- |
 | pairs profitable, held out | 3 / 33 | 8 / 33 |
-| median cumulative return | -4.55% | -1.65% |
+| median cumulative return | −4.59% | −1.74% |
 
 That is the single largest effect in Part C. It is also, bluntly, a
 correction to C1 rather than a discovery: C1 established that the calibrated
@@ -532,11 +545,12 @@ GLFT spread does not cover adverse selection on ETHUSDC, and the only thing
 C6 adds is that the same holds on eight more assets and for four more
 strategies, and that a per-asset floor recovers most of the loss.
 
-Where widening *doesn't* help is as informative. The eight negative cases are
-concentrated in `hfgrid` (five of them) and in SUIUSDT. `hfgrid` already sets
-its half spread to five times realised volatility, which on these assets is
-usually wider than the floor -- so the floor rarely binds, and when it does it
-is removing fills the strategy was profiting from rather than protecting it.
+Where widening *doesn't* help is as informative. The eight cases where it
+does not are concentrated in `hfgrid` (four of them) and in the two SUI
+pairs (four). `hfgrid` already sets its half spread to five times realised
+volatility, which on these assets is usually wider than the floor -- so the
+floor rarely binds, and when it does it is removing fills the strategy was
+profiting from rather than protecting it.
 `bnbusdc obi` is the clean control: its floor is 2 bp, the strategy already
 quotes 3.7 bp, the floor never binds, and the published and widened rows are
 **identical to the digit** (-1.62%, 296.70 fills/h both). A pipeline that can
@@ -572,77 +586,120 @@ these sessions, at both spreads. The deep orders only fill during sweeps, and
 a sweep is exactly when the fill is most adversely selected. That is four
 training sessions of one asset, so it is a direction to test, not a finding.
 
-### 8.4 What RL adds on top: mostly nothing
+### 8.4 What RL adds on top: v1 never, v2 sometimes
 
 This is the question C6 exists to answer, because C3's version of it was open
-to the objection that GLFT was a losing baseline. It is no longer: the widened
-baselines are a genuinely better starting point, and the answer does not
-change.
+to the objection that GLFT was a losing baseline. The widened baselines answer
+that objection. What follows is the answer to the question itself, first with
+the recipe that C3 used and then with the one built after it lost.
 
-Over all **33** (asset, strategy) pairs, TD3 on the four multipliers is worth
-a **median -1.13 points** against its own widened baseline, positive in
-**14 of 33**.
+Per-asset equity and inventory paths for every strategy, with the median v1
+and v2 seed, are in `docs/assets/c6/` — for example
+[ETHUSDC](../assets/c6/pnl-ethusdc.png) and
+[XRPUSDC](../assets/c6/pnl-xrpusdc.png).
 
-|  | published | widened | learned |
-| --- | --- | --- | --- |
-| pairs profitable, held out | 3 / 33 | **8 / 33** | 7 / 33 |
-| median cumulative return | -4.55% | **-1.65%** | -2.63% |
+![pnl-ethusdc](../assets/c6/pnl-ethusdc.png)
 
-So the C3 result survives the obvious objection. Learned, state-conditioned
-parameters do not beat well-chosen fixed ones here, and that is now a
-statement about five strategies and nine assets rather than one of each. The
-widened baseline is the best column in that table on both counts.
+*Figure — ETHUSDC, eleven held-out sessions: equity per session and the chained
+track record. Colour is the strategy; dotted published, solid widened, dashed
+v1, dash-dotted v2 (the median of five seeds).*
 
-By strategy, the median points RL adds to its own widened baseline:
+**The two deep assets, five seeds each.** Held-out cumulative return over
+eleven sessions; each RL cell is the median over five seeds, with the gain over
+the widened baseline beside it.
 
-| strategy | n | median d RL |
+| asset | strategy | widened | RL v1 | v1 gain | RL v2 | v2 gain |
+| --- | --- | --- | --- | --- | --- | --- |
+| ETHUSDC | glft | −7.07% | −8.34% | −1.27 | −6.30% | **+0.77** |
+| ETHUSDC | hfgrid | −2.11% | −2.99% | −0.87 | −2.20% | −0.08 |
+| ETHUSDC | obi | −6.40% | −8.52% | −2.13 | −8.00% | −1.61 |
+| XRPUSDC | glft | −1.89% | −2.68% | −0.80 | −0.86% | **+1.03** |
+| XRPUSDC | hfgrid | −1.15% | −2.88% | −1.73 | −1.48% | −0.33 |
+| XRPUSDC | apt | +2.00% | −5.49% | −7.49 | −1.66% | −3.66 |
+| XRPUSDC | basis | +0.36% | −6.81% | −7.17 | −2.35% | −2.71 |
+| XRPUSDC | obi | −2.91% | −4.38% | −1.47 | −2.15% | **+0.76** |
+
+![widening-and-rl](../assets/c6/widening-and-rl.png)
+
+*Figure — every (asset, strategy) pair on its held-out sessions: the
+published baseline (×), the widened baseline (◆), and each trained policy, one
+dot per seed (v1 orange, v2 green). The breadth assets have one v1 seed each.*
+
+Three results:
+
+- **v1 loses to its own baseline in all eight.** Five seeds make that
+  unambiguous: the median v1 policy is between 0.8 and 7.5 points worse than
+  simply quoting the widened spread.
+- **v2 beats v1 in all eight**, by a median of +1.9 points, and closes most of
+  the gap to the baseline. It beats the baseline itself in three of eight, by
+  +0.8 to +1.0 points, and loses in five. The median v2 gain is −0.21 points:
+  on these data, v2 is about as good as the baseline it started from, which is
+  what a residual policy that learned little would be.
+- **The seed spread is still larger than any gain.** On `glft` ETHUSDC the
+  five v2 seeds run from −7.66% to −2.18%; on `hfgrid` XRPUSDC from −5.20% to
+  +3.91%. A single-seed number would have reported either a large win or a
+  large loss.
+
+**Which of v2's changes did the work.** The ablations remove one change each,
+five seeds each, on `glft` over XRPUSDC:
+
+![rl-ablation](../assets/c6/rl-ablation.png)
+
+| recipe | median | range over seeds |
 | --- | --- | --- |
-| glft | 9 | **+0.55** |
-| obi | 9 | -1.31 |
-| hfgrid | 9 | -1.34 |
-| apt | 3 | -2.25 |
-| basis | 3 | -5.98 |
+| widened baseline | −1.89% | |
+| v1 | −2.68% | −5.21 to −0.88 |
+| v2 without the residual start | −1.79% | −3.93 to −0.25 |
+| v2 without the counterfactual reward | −1.31% | −2.82 to −0.14 |
+| **v2** | **−0.86%** | −2.97 to −0.73 |
 
-`glft` is the only one where RL roughly breaks even, and it is also the only
-one whose half spread is already a live function of market state -- `A`, `k`
-and sigma, refit every five seconds -- rather than a constant. A plausible
-reading is that state-conditioning helps exactly where the baseline was
-already state-conditioned, and that the multiplier the policy is being handed
-is a cruder version of a knob the formula already turns. That is a hypothesis
-the data here is too thin to test, and it is recorded as one.
+Both help, and they stack. The residual start is worth more: without it the
+median lands on the baseline (−1.79% against −1.89%), which is what one
+would expect if the random first episode fills the replay buffer with the
+losing region and the policy spends the rest of training climbing out. The
+counterfactual reward adds about another half point and narrows the seed
+range slightly (2.68 → 2.24 points). Five-second
+decisions are common to all three v2 variants, so this does not separate their
+effect from v1's one-second steps.
 
-**The seed spread is not a footnote.** C3 measured 3.74 points between the
-best and worst seed, and C6 reproduced the hazard exactly once it had two
-seeds anywhere. On `glft-wide` over XRPUSDC:
+**Over all 33 pairs**, which includes the breadth assets with a single v1 seed
+each:
 
-| seed | held out | spread_mult | fills |
+| | pairs | median gain over widened | positive |
 | --- | --- | --- | --- |
-| 0 | -0.75% | 1.73 | 1,682 |
-| 1 | -3.25% | 1.27 | 5,984 |
+| v1, all pairs | 33 | −1.27 | 12 / 33 |
+| v1, single-seed pairs | 25 | −0.14 | 12 / 25 |
+| v1, five-seed pairs | 8 | −1.60 | 0 / 8 |
+| v2, five-seed pairs | 8 | −0.21 | 3 / 8 |
 
-Read from seed 0 alone the policy looks worth +0.91 points over the -1.65%
-baseline; with both seeds the median is -2.00% and it is 0.35 points *worse*.
-Every single-seed row in the table above is exposed to that, which is why the
-seed count is a column and why the median over seeds is what is reported.
+Single-seed rows are kinder to RL than five-seed rows, which is what one
+expects if a single seed is partly a draw from the spread rather than a
+measurement of it. The five-seed rows are the honest estimate.
 
-The effect shows up in the aggregate too, and it is large enough to change
-the conclusion one would draw:
+By strategy, the median points v1 adds to its own widened baseline:
 
-| | pairs | median d RL | positive |
-| --- | --- | --- | --- |
-| all pairs (mostly one seed) | 33 | -1.13 | 14 / 33 |
-| the eight pairs with two seeds | 8 | **-2.26** | **2 / 8** |
+| strategy | n | median v1 gain |
+| --- | --- | --- |
+| glft | 9 | −0.14 |
+| hfgrid | 9 | −0.87 |
+| obi | 9 | −1.99 |
+| apt | 3 | −2.25 |
+| basis | 3 | −7.17 |
 
-Single-seed rows are systematically kinder to RL than two-seed rows, which is
-what one expects if a single seed is partly a draw from the spread rather
-than a measurement of it. The two-seed subset is the honest estimate; the
-single-seed rows are provisional, and a full answer needs more seeds than
-four cores allowed.
+`glft` is again the one where RL comes closest, and it is also the only one
+whose half spread is already a live function of market state — `A`, `k` and σ,
+refit every five seconds — rather than a constant. The pair strategies are
+the worst. Their alpha term is the only thing separating them from a plain
+grid, so a plausible reading is that a policy scaling it mostly scales noise;
+the probe in §8.5 is consistent with that, not proof of it.
 
-The mechanism is the one thing here that generalises: seed 0 chose to widen
-further (8 bp to 15.5 bp) and lost less; seed 1 stayed near the floor and lost
-more. The policies that do well are the ones that rediscover the finding of
-§8.2, and the variance between seeds is mostly variance in whether they do.
+So the C3 result survives the obvious objection, and a better recipe narrows
+it without reversing it. Learned, state-conditioned multipliers are at best as
+good as well-chosen fixed ones here — on five strategies and nine assets,
+with five seeds where it counts. [C7](c7-signals.md) then asks what
+information the policy was missing, and finds that a three-line rule
+conditioned on the markouts of our own fills beats every recipe here on each
+of the six pairs it was run on.
 
 ### 8.5 Does the policy respond to the alpha signal? (C5's second item)
 
