@@ -1020,3 +1020,19 @@ alpha signals into the state and re-running C3 is exactly what the `apt` and
 `basis` strategies plus the `alpha_mult` action do. They are ticked there, not
 here, only once the evidence for each is in the writeup.
 
+
+<a id="c7"></a>
+## C7. Signals and adaptivity (added, not from the original ladder)
+
+Not one of the 59 items. C7 came from a request after C6's RL results: test
+other volatility estimators, imbalance measured in basis points, deeper book
+levels and BTCUSDT's book as possible hidden information, and a spread rule
+driven by the markouts of our own fills.
+
+Its answer: C6's σ is biased 1.45× low and correcting it pays; the deeper book
+and BTCUSDT carry too little at one-second resolution to change a quote; and
+the markout rule beats C6's widened baselines on held-out data in every pair
+tried.
+
+Writeup: [`writeups/c7-signals.md`](writeups/c7-signals.md).
+Lab notebook: [`../experiments/c7_signals/README.md`](../experiments/c7_signals/README.md).
