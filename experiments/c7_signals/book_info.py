@@ -129,7 +129,8 @@ def group_columns(own: str, levels, bands) -> dict[str, list[str]]:
         "bands": [f"{own}_imb_{b:g}bp" for b in bands],
         "ofi": [f"{own}_ofi_{w}s" for w in (1, 10, 60)] + [f"{own}_flow_60s"],
         "returns": [f"{own}_ret_{w}s" for w in (1, 10, 60)],
-        "btc": [f"ref_ret_{w}s" for w in (1, 5, 10, 60)]
+        "btc": [f"ref_fresh_{w}" for w in ("100ms", "500ms", "1s", "5s", "10s")]
+        + [f"ref_ret_{w}s" for w in (1, 5, 10, 60)]
         + ["ref_imb_l1", "ref_imb_l5", "ref_imb_l50"]
         + [f"ref_imb_{b:g}bp" for b in bands]
         + [f"ref_ofi_{w}s" for w in (1, 10)] + [f"ref_flow_{w}s" for w in (1, 10)],
@@ -151,6 +152,26 @@ def day_table(symbol: str, date: str) -> tuple[dict[str, np.ndarray], dict[str, 
     for k, v in ref.items():
         if not k.startswith("_"):
             x[k] = np.where(ok_ref, v[pos], 0.0)
+    # The per-second reference sample can be up to a second stale, because
+    # the two feeds' one-second grids start at different moments. A lead
+    # shorter than that would be invisible, so the reference *returns* are
+    # also taken on its 100 ms grid, aligned to within 100 ms of our clock.
+    # The replay steps exactly 100 ms, so the 100 ms stamps follow from the
+    # per-second ones.
+    ref_mid = ref_blob["mid100"].astype(np.float64)
+    ref_mid[ref_mid < 0] = np.nan
+    idx = np.where(np.isfinite(ref_mid), np.arange(len(ref_mid)), 0)
+    np.maximum.accumulate(idx, out=idx)
+    ref_log = np.log(ref_mid[idx]) * 1e4
+    n100 = min(len(ref_log), 10 * len(ref["_ts"]))
+    ts100 = np.repeat(ref["_ts"], 10)[:n100] - np.tile(np.arange(9, -1, -1) * 100_000_000,
+                                                       len(ref["_ts"]))[:n100]
+    j = np.searchsorted(ts100, own["_ts"], side="right") - 1
+    for name, steps in (("100ms", 1), ("500ms", 5), ("1s", 10), ("5s", 50), ("10s", 100)):
+        ok = j - steps >= 0
+        jj = np.clip(j, steps, n100 - 1)
+        r = np.where(ok, ref_log[jj] - ref_log[jj - steps], 0.0)
+        x[f"ref_fresh_{name}"] = np.nan_to_num(r)
     lm = own["_log_mid"]
     n = len(lm)
     y = {}
