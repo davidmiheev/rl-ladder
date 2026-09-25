@@ -249,10 +249,26 @@ def extract(symbol: str, date: str, raw: Path) -> Path:
 
 
 def download(symbol: str, date: str) -> Path:
+    """Fetch one raw day into `data/npz/<symbol>_<date>.npz`.
+
+    Most symbols sit at the dataset's root; some (XRPUSDC, XRPUSDT, BTCUSDC)
+    only under `data/<symbol>/`. Try the root first, then the subfolder, and
+    move the file to the flat name every script reads.
+    """
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import EntryNotFoundError
 
     name = f"{symbol}_{date}.npz"
-    return Path(hf_hub_download(DATASET, name, repo_type="dataset", local_dir=DATA))
+    target = DATA / name
+    for remote in (name, f"data/{symbol}/{name}"):
+        try:
+            path = Path(hf_hub_download(DATASET, remote, repo_type="dataset", local_dir=DATA))
+        except EntryNotFoundError:
+            continue
+        if path != target:
+            path.replace(target)
+        return target
+    raise FileNotFoundError(f"{name} is neither at the dataset root nor under data/{symbol}/")
 
 
 def days_for(symbol: str) -> list[str]:
