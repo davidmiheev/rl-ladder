@@ -4,6 +4,7 @@
     heldout.png         every method on every pair, held out
     train-vs-test.png   the overfitting lens: training return against held out
     search-curves.png   GRPO-style against PPO-style search, per iteration
+    frontier.png        PnL against fills over the grid: what volume costs
 
     python experiments/c4_ppo_grpo/plot_c4.py [--only NAME] [--table]
 """
@@ -19,6 +20,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402
 import numpy as np  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -265,7 +267,46 @@ def search_curves() -> None:
     save(fig, "search-curves.png")
 
 
-FIGURES = {"grid-heatmaps": grid_heatmaps, "heldout": heldout,
+def frontier() -> None:
+    """PnL against fills for every grid point: what extra volume costs.
+
+    The upper-left envelope of each panel is the best training return
+    available at each level of trading; a point below it is dominated. The
+    slope of the envelope is what a fill costs (or pays) at the margin.
+    """
+    chosen = grid_search.select()
+    pairs = [p for p in grid_search.PAIRS if p in chosen]
+    cols = 4
+    rows = int(np.ceil(len(pairs) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 2.7 * rows), squeeze=False)
+    for ax, (strategy, symbol) in zip(axes.ravel(), pairs, strict=False):
+        pick = chosen[(strategy, symbol)]
+        points = sorted(pick["grid"], key=lambda r: r["median_fills"])
+        fills = np.array([max(r["median_fills"], 0.5) for r in points])
+        pnl = np.array([r["chained"] for r in points])
+        colours = [ORANGE if r["point"][1] > 0 else BLUE for r in points]
+        ax.scatter(fills, pnl, s=22, c=colours, zorder=3)
+        # The envelope: best return at or above each fill level.
+        best = np.maximum.accumulate(pnl[::-1])[::-1]
+        ax.step(fills, best, where="post", color=MUTED, lw=1, zorder=2)
+        ax.scatter([max(pick["median_fills"], 0.5)], [pick["chained"]], s=90,
+                   facecolors="none", edgecolors=INK, lw=1.3, zorder=4)
+        ax.axvline(grid_search.MIN_FILLS, color=MUTED, ls=":", lw=0.8)
+        ax.axhline(0, color=MUTED, lw=0.6)
+        ax.set_xscale("log")
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.set_title(f"{strategy} {symbol[:3].upper()}")
+        ax.set_xlabel("fills, median session (log)")
+    for ax in axes.ravel()[len(pairs):]:
+        ax.axis("off")
+    axes[0, 0].set_ylabel("training return, %")
+    fig.suptitle("PnL against trading, every grid point (orange: markout rule on, blue: off; "
+                 "ring: chosen; dotted: 20-fill bar; grey: best at or above each fill level)",
+                 fontsize=9)
+    save(fig, "frontier.png")
+
+
+FIGURES = {"grid-heatmaps": grid_heatmaps, "frontier": frontier, "heldout": heldout,
            "train-vs-test": train_vs_test, "search-curves": search_curves}
 
 
