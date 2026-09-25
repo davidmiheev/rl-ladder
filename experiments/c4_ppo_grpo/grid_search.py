@@ -158,7 +158,8 @@ def search_test_jobs() -> list[dict]:
         final = json.loads(summary.read_text())
         point = (final["floor_mult"], final["kappa"], final["skew_mult"])
         strategy, symbol = config["strategy"], config["symbol"]
-        name = f"{config['method']}-{strategy}-{symbol}-s{config['seed']}-test"
+        target = f"-F{config['fill_target']:g}" if config.get("fill_target") else ""
+        name = f"{config['method']}{target}-{strategy}-{symbol}-s{config['seed']}-test"
         jobs.append({"tag": name, "strategy": strategy, "symbol": symbol,
                      "days": assets.test_days(symbol),
                      "sets": point_sets(strategy, symbol, *point)})

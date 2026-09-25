@@ -28,6 +28,17 @@ free answer; C3 found that corner the first time the action space allowed it.
 
 Budget is counted in session replays, the unit the grid search pays in.
 
+`--fill-target F` replaces that penalty with a constraint. The reward becomes
+`return + lambda * fills`, and after every iteration the multiplier moves by
+dual ascent,
+
+    lambda <- max(0, lambda + LAMBDA_LR * (F - mean fills) / F),
+
+so it settles at the smallest per-fill bonus that makes the policy trade F
+fills a session. The final lambda is the result: the bp per fill it costs to
+be made to trade that much. Near zero means the target is free; large means
+the volume is being bought at a loss.
+
     python experiments/c4_ppo_grpo/param_search.py --method grpo --strategy obi \\
         --symbol ethusdc --seed 0
 """
@@ -65,6 +76,8 @@ SIGMA0 = np.array([0.3, 0.5, 1.5])
 MIN_FILLS = grid_search.MIN_FILLS
 NO_TRADE_PENALTY = 10.0
 VALUE_DECAY = 0.3
+#: Dual step, in bp per fill per unit of relative shortfall.
+LAMBDA_LR = 0.01
 
 
 def to_point(theta: np.ndarray) -> tuple[float, float, float]:
@@ -145,6 +158,8 @@ def main() -> None:
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--fill-target", type=float, default=0.0,
+                        help="fills per session to constrain to (Lagrangian); 0 = off")
     parser.add_argument("--iterations", type=int, default=ITERATIONS,
                         help="smoke tests only; the comparison uses the default")
     args = parser.parse_args()
@@ -155,11 +170,15 @@ def main() -> None:
     adam = Adam(LR)
     value = {d: 0.0 for d in days}
     seen = {d: False for d in days}
-    run = Run("c4-search", f"{args.method}-{args.strategy}-{args.symbol}-s{args.seed}", config={
+    lam = 0.0
+    target = f"-F{args.fill_target:g}" if args.fill_target else ""
+    run = Run("c4-search", f"{args.method}{target}-{args.strategy}-{args.symbol}-s{args.seed}",
+              config={
         "method": args.method, "strategy": args.strategy, "symbol": args.symbol,
         "seed": args.seed, "K": K, "iterations": args.iterations, "epochs": EPOCHS, "clip": CLIP,
         "lr": LR, "sigma0": SIGMA0.tolist(), "train_days": days, "min_fills": MIN_FILLS,
-        "no_trade_penalty": NO_TRADE_PENALTY,
+        "no_trade_penalty": NO_TRADE_PENALTY, "fill_target": args.fill_target,
+        "lambda_lr": LAMBDA_LR,
     })
     ctx = mp.get_context("fork")
     with ctx.Pool(args.workers) as pool:
@@ -172,7 +191,13 @@ def main() -> None:
             started = time.time()
             results = pool.map(evaluate, [(args.strategy, args.symbol, d, to_point(t))
                                           for d, t in zip(sessions, thetas, strict=True)])
-            rewards = np.array([reward(r, f) for r, f in results])
+            fills = np.array([f for _, f in results])
+            if args.fill_target:
+                rewards = np.array([r for r, _ in results]) + lam * fills
+                lam = max(0.0, lam + LAMBDA_LR * (args.fill_target - fills.mean())
+                          / args.fill_target)
+            else:
+                rewards = np.array([reward(r, f) for r, f in results])
             if args.method == "grpo":
                 advantages = rewards - rewards.mean()
             else:
@@ -187,14 +212,16 @@ def main() -> None:
             run.log(step=it, mean_reward=float(rewards.mean()), best_reward=float(rewards.max()),
                     floor_mult=f, kappa=k, skew_mult=s, sigma=np.exp(log_sigma).tolist(),
                     sessions=sessions, rewards=rewards.tolist(),
-                    fills=[fl for _, fl in results])
+                    returns=[r for r, _ in results], fills=fills.tolist(), fill_lambda=lam)
             print(f"it {it:2d}  {sessions[0] if args.method == 'grpo' else 'mixed':>10}  "
                   f"mean {rewards.mean():+7.1f} bp  mu: floor x{f:.2f} kappa {k:.2f} "
                   f"skew x{s:.2f}  sigma {np.round(np.exp(log_sigma), 2)}  "
+                  f"fills {fills.mean():.0f}  lambda {lam:.4f}  "
                   f"{time.time() - started:.0f}s", flush=True)
 
     f, k, s = to_point(mu)
     run.finish({"floor_mult": f, "kappa": k, "skew_mult": s, "mu": mu.tolist(),
+                "fill_lambda": lam, "fill_target": args.fill_target,
                 "sigma": np.exp(log_sigma).tolist(), "replays": K * args.iterations})
     print(json.dumps({"floor_mult": f, "kappa": k, "skew_mult": s}))
 
