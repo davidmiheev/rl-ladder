@@ -22,6 +22,10 @@ Two families, both fixed-parameter replays through C6's quoter, written under
     python experiments/c7_signals/run_variants.py --kind vol --shard 0/2
     python experiments/c7_signals/run_variants.py --kind markout-sweep
     python experiments/c7_signals/run_variants.py --kind markout-test
+    python experiments/c7_signals/run_variants.py --kind markout-breadth
+
+`markout-breadth` is the untuned check: kappa = 2 on the seven assets the
+sweep never saw, on their held-out sessions, with nothing searched.
 """
 
 from __future__ import annotations
@@ -135,7 +139,23 @@ def markout_test_jobs() -> list[dict]:
     return jobs
 
 
-KINDS = {"vol": vol_jobs, "markout-sweep": markout_sweep_jobs, "markout-test": markout_test_jobs}
+#: The untuned test: one kappa, picked in advance as the middle of the swept
+#: grid, on every asset the sweep never saw, on their held-out sessions.
+BREADTH_KAPPA = 2.0
+
+
+def markout_breadth_jobs() -> list[dict]:
+    return [
+        {"tag": f"{strategy}-{symbol}-mk{BREADTH_KAPPA:g}", "strategy": strategy,
+         "symbol": symbol, "days": assets.test_days(symbol),
+         "sets": {"markout_kappa": BREADTH_KAPPA}}
+        for symbol in assets.SINGLE_LEG if symbol not in SYMBOLS
+        for strategy in MARKOUT_STRATEGIES
+    ]
+
+
+KINDS = {"vol": vol_jobs, "markout-sweep": markout_sweep_jobs, "markout-test": markout_test_jobs,
+         "markout-breadth": markout_breadth_jobs}
 
 
 def run(job: dict) -> bool:
