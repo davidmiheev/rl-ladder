@@ -27,6 +27,7 @@ python experiments/c7_signals/book_info_gbm.py --symbol ethusdc
 # 4. The markout rule: sweep kappa on training days, then held out
 python experiments/c7_signals/run_variants.py --kind markout-sweep
 python experiments/c7_signals/run_variants.py --kind markout-test
+python experiments/c7_signals/run_variants.py --kind markout-breadth
 
 # 5. RL with the extra observations (C6's queue, recipe v2-deep)
 python experiments/c6_strategy_zoo/run_queue.py --kind train
@@ -49,6 +50,7 @@ reaches any of them.
 | vol in strategy | bias-corrected σ | held-out cumulative, better than C6 | 7 / 8 | `runs/c7/*-volscale__*` |
 | book information | + deeper levels, OFI, returns, BTC | held-out R² added at 1 s, ETH | +0.2 own book, ≈0 BTC | `runs/c7-book/` |
 | markout rule | κ from 4 training days | held-out cumulative, better than C6 | 6 / 6 | `runs/c7/*-mk?__*` |
+| markout rule, untuned | κ = 2, seven unseen assets | held-out, better than C6 (excl. AVAX) | 15 / 21 (13 / 18) | `runs/c7/*-mk2__*` |
 
 ## Findings
 

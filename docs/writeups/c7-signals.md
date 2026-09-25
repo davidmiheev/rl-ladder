@@ -15,7 +15,8 @@ notebook: [`experiments/c7_signals/README.md`](../../experiments/c7_signals/READ
 >   model and in LightGBM, even with BTC aligned to 100 ms.
 > - **A markout rule — widen the half spread by κ × the recent adverse move of
 >   our own fills — beat C6's widened baseline on held-out data in 6 of 6
->   (strategy, asset) pairs**, by +0.1 to +7.8 points. Nothing else in Part C
+>   (strategy, asset) pairs**, by +0.1 to +7.8 points, and untuned (κ = 2) in
+>   13 of 18 on seven assets it was never fitted on (median +0.85). Nothing else in Part C
 >   beats those baselines on held-out data in every pair tried, and it is
 >   three lines of arithmetic.
 
@@ -262,7 +263,35 @@ C6's policies saw inventory, flow and imbalance, never their own markouts.
 
 ### 6.3 Without tuning, on the other seven assets
 
-*Pending: κ = 2 on every other asset, no search, on the held-out sessions.*
+A κ chosen on four sessions of the same asset is a search, however small. So
+the rule was also run with **κ = 2 fixed in advance** — the middle of the
+swept grid — on the seven assets the sweep never saw, on their three held-out
+sessions each, with nothing searched at all.
+
+![markout-breadth](../assets/c7/markout-breadth.png)
+
+*Figure — held-out points gained over C6's widened baseline, κ = 2 (symlog
+scale).*
+
+| strategy | better | median gain | worst | best |
+| --- | --- | --- | --- | --- |
+| obi-wide | **6 / 7** | **+3.43** | −0.89 (SUIUSDT) | +13.57 (AVAXUSDC) |
+| hfgrid-wide | 5 / 7 | +1.18 | −1.76 (SUIUSDT) | +12.78 (AVAXUSDC) |
+| glft-wide | 4 / 7 | +0.03 | −1.05 (BNBUSDC) | +1.45 (XRPUSDT) |
+| all | **15 / 21** | **+1.18** | | |
+| all but AVAXUSDC | 13 / 18 | +0.85 | | |
+
+The two AVAX gains are one session: on 2025-09-22 the rule made +11.2%
+(`hfgrid`) and +12.2% (`obi`) where C6 made +0.1% and +0.3% — the same session
+on which C6's single v1 policy made +8.6%. That is a large directional move
+caught by whichever variant happened to be positioned for it, not market
+making, so the row without AVAX is the one to quote.
+
+It generalises where the strategy trades a lot and the fills are toxic —
+`obi`, the highest-turnover strategy — and it is a coin flip for `glft-wide`,
+whose floor already binds and whose fills are few. Three sessions per asset
+is thin; the direction agrees with the eleven-session results, the sizes are
+not to be relied on.
 
 ## 7. RL with the deeper book and BTCUSDT in the state
 

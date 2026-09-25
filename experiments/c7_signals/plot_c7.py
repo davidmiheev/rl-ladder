@@ -3,6 +3,7 @@
     vol-forecast.png     QLIKE of each volatility estimator, held out
     vol-in-strategy.png  what swapping sigma did to held-out returns
     markout.png          C6's widened baseline against the markout rule
+    markout-breadth.png  the rule untuned, on the seven other assets
     book-info.png        held-out R^2 each feature group adds
 
     python experiments/c7_signals/plot_c7.py [--only NAME]
@@ -138,6 +139,30 @@ def markout() -> None:
     save(fig, "markout.png")
 
 
+def markout_breadth() -> None:
+    strategies = ("glft-wide", "hfgrid-wide", "obi-wide")
+    symbols = sorted({p.parent.name.split("__")[0].rsplit("-", 2)[1]
+                      for p in (RUNS / "c7").glob("*-mk2__*/summary.json")} - set(SYMBOLS))
+    fig, ax = plt.subplots(figsize=(8.4, 3.4))
+    x = np.arange(len(symbols))
+    for i, (strategy, colour) in enumerate(zip(strategies, (BLUE, ORANGE, AQUA), strict=True)):
+        gains = []
+        for symbol in symbols:
+            test = c7_run(f"{strategy}-{symbol}-mk2")
+            ref = c6_reference(strategy, symbol, [d["date"] for d in test]) if test else None
+            gains.append(chained(test) - chained(ref) if ref else np.nan)
+        ax.bar(x + (i - 1) * 0.27, gains, width=0.25, color=colour, label=strategy)
+    ax.axhline(0, color=MUTED, lw=0.8)
+    ax.set_xticks(x, [s.upper() for s in symbols], fontsize=8)
+    ax.set_ylabel("held-out points vs C6 widened")
+    ax.set_yscale("symlog", linthresh=2)
+    ax.legend(ncol=3, loc="upper right")
+    ax.set_title("The markout rule untuned (kappa = 2) on seven assets the sweep never saw, "
+                 "three held-out sessions each")
+    ax.grid(axis="x", visible=False)
+    save(fig, "markout-breadth.png")
+
+
 def book_info() -> None:
     groups = ("c2", "levels", "bands", "ofi", "returns", "btc")
     fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.4), sharey=True)
@@ -164,7 +189,7 @@ def book_info() -> None:
 
 
 FIGURES = {"vol-forecast": vol_forecast, "vol-in-strategy": vol_in_strategy,
-           "markout": markout, "book-info": book_info}
+           "markout": markout, "markout-breadth": markout_breadth, "book-info": book_info}
 
 
 def main() -> None:
