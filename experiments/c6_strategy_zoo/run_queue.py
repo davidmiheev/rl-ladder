@@ -52,6 +52,10 @@ DEEP_SEEDS = (0, 1, 2, 3, 4)
 #: v2 with one of its changes removed, each run on one pair only.
 ABLATIONS = ("v2-no-cf", "v2-no-residual")
 ABLATION_PAIR = ("glft", "xrpusdc")
+#: C7's `v2-deep` recipe: v2 plus the deeper-book and BTCUSDT observations,
+#: on ETHUSDC (the asset with ten training sessions) for the two strategies
+#: whose v2 policies are the comparison.
+DEEP_FEATURE_JOBS = (("glft", "ethusdc"), ("obi", "ethusdc"))
 
 
 def strategies_for(symbol: str) -> tuple[str, ...]:
@@ -120,6 +124,9 @@ def jobs() -> list[dict]:
     for symbol in breadth:
         for strategy in strategies_for(symbol):
             out.append(train_job(f"{strategy}-wide", symbol, 0, "v1"))
+    for strategy, symbol in DEEP_FEATURE_JOBS:
+        for seed in DEEP_SEEDS:
+            out.append(train_job(f"{strategy}-wide", symbol, seed, "v2-deep"))
     return out
 
 

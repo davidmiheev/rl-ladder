@@ -106,6 +106,13 @@ RECIPES = {
                      deviation_penalty=0.001, explore_episodes=0, participation="residual"),
     "v2-no-residual": dict(step_seconds=5, residual=0.0, reward="counterfactual", cf_coef=0.5,
                            deviation_penalty=0.0, explore_episodes=1, participation="forced"),
+    # C7: v2 with fourteen more observations -- deeper book, OFI, own returns
+    # and BTCUSDT's book (`env.EXTRA_FEATURES`). The one question it asks is
+    # whether the policy can use information C7's regressions found to be
+    # small but real; everything else is v2's.
+    "v2-deep": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                    deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                    extra_features=True),
 }
 
 
@@ -209,7 +216,8 @@ def main() -> None:
                       step_interval_ns=int(recipe["step_seconds"] * 1e9),
                       residual=recipe["residual"], reward_mode=recipe["reward"],
                       cf_coef=recipe["cf_coef"],
-                      deviation_penalty=recipe["deviation_penalty"])
+                      deviation_penalty=recipe["deviation_penalty"],
+                      extra_features=recipe.get("extra_features", False))
 
     config = Config(buffer_size=500_000, learning_starts=0,
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo])

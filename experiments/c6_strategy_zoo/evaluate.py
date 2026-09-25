@@ -65,7 +65,8 @@ def load_policy(path: Path):
     overrides = {"grid_num": cfg["grid_num"]} if cfg.get("grid_num") else {}
     env = ZooEnv(date=train_days(symbol)[0], strategy=strategy, symbol=symbol,
                  overrides=overrides, beta=cfg.get("beta", 1.0),
-                 residual=blob.get("recipe_params", {}).get("residual", 0.0))
+                 residual=blob.get("recipe_params", {}).get("residual", 0.0),
+                 extra_features=blob.get("recipe_params", {}).get("extra_features", False))
     obs_dim = int(np.prod(env.observation_space.shape))
     env.close()
     # The actor's action space is the learnable multipliers only; pinned ones
@@ -88,6 +89,7 @@ def load_policy(path: Path):
         "recipe": recipe,
         "step_seconds": params.get("step_seconds", 1),
         "residual": params.get("residual", 0.0),
+        "extra_features": params.get("extra_features", False),
         "agent": agent,
         "baseline": np.asarray(blob["baseline"], dtype=np.float32),
         "mask": list(blob["mask"]),
@@ -115,9 +117,11 @@ def run_session(date: str, policy: dict | None, strategy: str, symbol: str,
     ranges = ZooEnv.FORCED_PARTICIPATION if participation == "forced" else None
     step_seconds = policy["step_seconds"] if policy else 1
     residual = policy["residual"] if policy else 0.0
+    extra_features = policy["extra_features"] if policy else False
     env = ZooEnv(date=date, strategy=strategy, symbol=symbol, allow_held_out=True,
                  action_ranges=ranges, overrides=overrides, beta=beta,
-                 step_interval_ns=int(step_seconds * 1e9), residual=residual)
+                 step_interval_ns=int(step_seconds * 1e9), residual=residual,
+                 extra_features=extra_features)
     obs, _ = env.reset(seed=0)
     baseline_action = env.baseline_action()
     multipliers, inventories = [], []

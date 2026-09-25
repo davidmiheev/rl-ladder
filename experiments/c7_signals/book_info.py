@@ -137,8 +137,12 @@ def group_columns(own: str, levels, bands) -> dict[str, list[str]]:
     }
 
 
-def day_table(symbol: str, date: str) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Features and forward returns for one day, on the thinned evaluation grid."""
+def day_features(symbol: str, date: str) -> tuple[dict[str, np.ndarray], np.ndarray, np.ndarray]:
+    """Every feature at every second of one day, with the log mid and the clock.
+
+    Also what C7's RL environment reads its extra observations from, so the
+    policy sees exactly what the regressions were run on.
+    """
     own_blob = np.load(snapshots.feature_path(symbol, date))
     ref_blob = np.load(snapshots.feature_path(REFERENCE, date))
     own = book_features(own_blob, "own")
@@ -172,7 +176,12 @@ def day_table(symbol: str, date: str) -> tuple[dict[str, np.ndarray], dict[str, 
         jj = np.clip(j, steps, n100 - 1)
         r = np.where(ok, ref_log[jj] - ref_log[jj - steps], 0.0)
         x[f"ref_fresh_{name}"] = np.nan_to_num(r)
-    lm = own["_log_mid"]
+    return x, own["_log_mid"], own["_ts"]
+
+
+def day_table(symbol: str, date: str) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Features and forward returns for one day, on the thinned evaluation grid."""
+    x, lm, _ = day_features(symbol, date)
     n = len(lm)
     y = {}
     for h in HORIZONS_S:

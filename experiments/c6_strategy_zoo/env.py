@@ -54,6 +54,10 @@ import precompute  # noqa: E402
 import strategies  # noqa: E402
 import zoo  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c7_signals"))
+
+import book_info  # noqa: E402
+
 #: How often the policy chooses multipliers.  One second, as in C2: the
 #: analytic model refits A, k and sigma every 5 s, so acting much faster is
 #: mostly repeating yourself, and 1 s keeps an episode at 86,400 steps.
@@ -71,6 +75,20 @@ FEATURES = (
     "model_half_spread",  # where the strategy wants to quote, in bp
     "signal",             # the strategy's own fair-price offset, in bp
     "time_of_day",        # fraction of the session elapsed
+)
+
+#: C7's extra observations (recipe `v2-deep`): deeper book imbalance in ticks
+#: and in bp, order-flow imbalance, our own recent returns, and BTCUSDT's
+#: returns (on its 100 ms grid), touch imbalance and OFI -- each with the
+#: fixed scale it is divided by. Read per second from `data/features/`, the
+#: second in force at each step, so nothing from the future is visible.
+EXTRA_FEATURES = (
+    ("own_imb_l20", 1.0), ("own_imb_l50", 1.0), ("own_imb_l200", 1.0),
+    ("own_imb_1bp", 1.0), ("own_imb_5bp", 1.0), ("own_imb_25bp", 1.0),
+    ("own_ofi_1s", 1.0), ("own_ofi_10s", 1.0),
+    ("own_ret_10s", 5.0), ("own_ret_60s", 10.0),
+    ("ref_fresh_500ms", 2.0), ("ref_fresh_5s", 5.0),
+    ("ref_imb_l1", 1.0), ("ref_ofi_10s", 1.0),
 )
 
 #: Fixed scalings, not running statistics: running normalisation leaks state
@@ -171,6 +189,7 @@ class ZooEnv(gym.Env):
         reward_mode: str = "absolute",
         deviation_penalty: float = 0.0,
         cf_coef: float = 1.0,
+        extra_features: bool = False,
     ) -> None:
         super().__init__()
         if reward_mode not in ("absolute", "counterfactual"):
@@ -229,7 +248,11 @@ class ZooEnv(gym.Env):
         self._beta = beta
         self._baseline_trace = None
         self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.action_ranges),), dtype=np.float32)
-        self.observation_space = spaces.Box(-10.0, 10.0, shape=(len(FEATURES),), dtype=np.float32)
+        self.extra_features = bool(extra_features)
+        n_obs = len(FEATURES) + (len(EXTRA_FEATURES) if extra_features else 0)
+        self.observation_space = spaces.Box(-10.0, 10.0, shape=(n_obs,), dtype=np.float32)
+        self._extra_ts = None
+        self._extra = None
 
         self._hbt = None
         self._recorder = None
@@ -294,6 +317,12 @@ class ZooEnv(gym.Env):
                 self._overrides, self._beta,
             )
         self._reference = self.baseline_action()
+        if self.extra_features and self._extra is None:
+            x, _, ts = book_info.day_features(self.symbol, self.date)
+            self._extra_ts = ts
+            self._extra = np.column_stack(
+                [np.nan_to_num(x[name]) / scale for name, scale in EXTRA_FEATURES]
+            ).astype(np.float32)
         return self._observe(), {"warmup_steps": warmup}
 
     def step(self, action):
@@ -400,6 +429,10 @@ class ZooEnv(gym.Env):
             ],
             dtype=np.float32,
         )
+        if self.extra_features:
+            row = np.searchsorted(self._extra_ts, self._hbt.current_timestamp, side="right") - 1
+            extra = self._extra[row] if row >= 0 else np.zeros(len(EXTRA_FEATURES), np.float32)
+            obs = np.concatenate([obs, extra])
         return np.clip(obs, -10.0, 10.0)
 
 
