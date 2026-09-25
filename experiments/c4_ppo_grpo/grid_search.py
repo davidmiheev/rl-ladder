@@ -24,6 +24,9 @@ point once on the held-out sessions. Nothing is ever chosen on held-out data.
     python experiments/c4_ppo_grpo/grid_search.py --kind select
     python experiments/c4_ppo_grpo/grid_search.py --kind test
     python experiments/c4_ppo_grpo/grid_search.py --kind search-test   # GRPO/PPO finals
+
+`--train-set train20` repeats the grid and the choice on all twenty pre-split
+days (after `fetch_train20.py`), instead of C6's ten (ETH) and four (XRP).
 """
 
 from __future__ import annotations
@@ -45,6 +48,9 @@ sys.path.insert(0, str(REPO / "experiments" / "c1_glft_baseline"))
 import assets  # noqa: E402
 import strategies  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fetch_train20 import TRAIN20  # noqa: E402
+
 RUNS = REPO / "runs"
 PAIRS = (
     ("glft", "ethusdc"), ("hfgrid", "ethusdc"), ("obi", "ethusdc"),
@@ -58,6 +64,11 @@ SKEW_MULTS = (1.0, 2.0)
 #: scores; C6's floor sweep used 50 a day, which the widened `glft` on XRPUSDC
 #: already fails (10 a day), so the bar here is lower and reported.
 MIN_FILLS = 20
+
+#: Which training sessions the grid is scored on. `c6` is C6's split (ten
+#: ETHUSDC days, four XRPUSDC); `train20` is every pre-split day for both
+#: (`fetch_train20.py`). Run tags carry the set so the two never mix.
+TRAIN_SETS = {"c6": ("train", assets.train_days), "train20": ("train20", lambda _: TRAIN20)}
 
 
 def sigma_users(strategy: str) -> bool:
@@ -93,12 +104,13 @@ def finished(prefix: str, days: list[str]) -> Path | None:
     return None
 
 
-def grid_jobs() -> list[dict]:
+def grid_jobs(train_set: str = "c6") -> list[dict]:
+    suffix, days_for = TRAIN_SETS[train_set]
     jobs = []
     for strategy, symbol in PAIRS:
-        days = assets.train_days(symbol)
+        days = days_for(symbol)
         for f, k, s in itertools.product(FLOOR_MULTS, KAPPAS, SKEW_MULTS):
-            jobs.append({"tag": tag(strategy, symbol, f, k, s) + "-train",
+            jobs.append({"tag": tag(strategy, symbol, f, k, s) + f"-{suffix}",
                          "strategy": strategy, "symbol": symbol, "days": days,
                          "sets": point_sets(strategy, symbol, f, k, s)})
     return jobs
@@ -112,14 +124,15 @@ def summarise(path: Path) -> dict:
             "days_up": int((returns > 0).sum()), "n": len(returns)}
 
 
-def select() -> dict[tuple[str, str], dict]:
+def select(train_set: str = "c6") -> dict[tuple[str, str], dict]:
     """The chosen point per (strategy, asset), from training sessions only."""
+    suffix, days_for = TRAIN_SETS[train_set]
     chosen = {}
     for strategy, symbol in PAIRS:
-        days = assets.train_days(symbol)
+        days = days_for(symbol)
         scored = []
         for f, k, s in itertools.product(FLOOR_MULTS, KAPPAS, SKEW_MULTS):
-            path = finished(tag(strategy, symbol, f, k, s) + "-train", days)
+            path = finished(tag(strategy, symbol, f, k, s) + f"-{suffix}", days)
             if path is not None:
                 scored.append({"point": (f, k, s), **summarise(path)})
         eligible = [r for r in scored if r["median_fills"] >= MIN_FILLS]
@@ -132,9 +145,11 @@ def select() -> dict[tuple[str, str], dict]:
     return chosen
 
 
-def test_jobs() -> list[dict]:
+def test_jobs(train_set: str = "c6") -> list[dict]:
+    # A point chosen under either training set runs under the same `-test`
+    # tag: the same parameters on the same held-out days is the same run.
     jobs = []
-    for (strategy, symbol), pick in select().items():
+    for (strategy, symbol), pick in select(train_set).items():
         if pick["scored"] < len(FLOOR_MULTS) * len(KAPPAS) * len(SKEW_MULTS):
             continue  # choose only once the whole grid is in
         f, k, s = pick["point"]
@@ -185,11 +200,12 @@ def main() -> None:
     parser.add_argument("--kind", required=True,
                         choices=["grid", "select", "test", "search-test"])
     parser.add_argument("--shard", default="0/1")
+    parser.add_argument("--train-set", default="c6", choices=sorted(TRAIN_SETS))
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
 
     if args.kind == "select":
-        for (strategy, symbol), pick in select().items():
+        for (strategy, symbol), pick in select(args.train_set).items():
             f, k, s = pick["point"]
             flag = "" if pick["eligible"] else "  (no point took enough fills)"
             print(f"{strategy:<7}{symbol:<9} floor x{f:g} kappa {k:g} skew x{s:g}  "
@@ -198,7 +214,9 @@ def main() -> None:
         return
 
     index, count = (int(x) for x in args.shard.split("/"))
-    make = {"grid": grid_jobs, "test": test_jobs, "search-test": search_test_jobs}[args.kind]
+    make = {"grid": lambda: grid_jobs(args.train_set),
+            "test": lambda: test_jobs(args.train_set),
+            "search-test": search_test_jobs}[args.kind]
     jobs = make()[index::count]
     pending = [j for j in jobs if finished(j["tag"], j["days"]) is None]
     if args.list:

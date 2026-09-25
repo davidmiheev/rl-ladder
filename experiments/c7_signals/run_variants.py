@@ -24,6 +24,10 @@ Two families, both fixed-parameter replays through C6's quoter, written under
     python experiments/c7_signals/run_variants.py --kind markout-test
     python experiments/c7_signals/run_variants.py --kind markout-breadth
 
+`markout-sweep20` / `markout-test20` repeat the sweep on all twenty pre-split
+days (C4's `fetch_train20.py`), kappa = 0 included, and run the new choice
+held out.
+
 `markout-breadth` is the untuned check: kappa = 2 on the seven assets the
 sweep never saw, on their held-out sessions, with nothing searched.
 """
@@ -50,6 +54,9 @@ VOL_STRATEGIES = ("glft", "glft-wide", "hfgrid", "hfgrid-wide")
 MARKOUT_STRATEGIES = ("glft-wide", "hfgrid-wide", "obi-wide")
 KAPPAS = (1.0, 2.0, 4.0)
 SWEEP_DAYS = config.PAIR_TRAIN_DAYS
+#: Every pre-split day, for the repeat of the sweep on more data (C4).
+sys.path.insert(0, str(REPO / "experiments" / "c4_ppo_grpo"))
+from fetch_train20 import TRAIN20  # noqa: E402
 
 
 def finished(prefix: str, days: list[str]) -> Path | None:
@@ -83,11 +90,12 @@ def vol_jobs() -> list[dict]:
     return jobs
 
 
-def markout_sweep_jobs() -> list[dict]:
+def markout_sweep_jobs(days: list[str] = SWEEP_DAYS, suffix: str = "sweep") -> list[dict]:
+    kappas = KAPPAS if days is SWEEP_DAYS else (0.0,) + KAPPAS
     return [
-        {"tag": f"{strategy}-{symbol}-mk{kappa:g}-sweep", "strategy": strategy,
-         "symbol": symbol, "days": SWEEP_DAYS, "sets": {"markout_kappa": kappa}}
-        for kappa in KAPPAS for symbol in SYMBOLS for strategy in MARKOUT_STRATEGIES
+        {"tag": f"{strategy}-{symbol}-mk{kappa:g}-{suffix}", "strategy": strategy,
+         "symbol": symbol, "days": days, "sets": {"markout_kappa": kappa}}
+        for kappa in kappas for symbol in SYMBOLS for strategy in MARKOUT_STRATEGIES
     ]
 
 
@@ -114,10 +122,18 @@ def chained(path: Path) -> float:
     return total - 1.0
 
 
-def best_kappa(strategy: str, symbol: str) -> tuple[float, dict[float, float]] | None:
-    scores = {0.0: reference_return(strategy, symbol, SWEEP_DAYS)}
+def best_kappa(strategy: str, symbol: str, days: list[str] = SWEEP_DAYS,
+               suffix: str = "sweep") -> tuple[float, dict[float, float]] | None:
+    if days is SWEEP_DAYS:
+        scores = {0.0: reference_return(strategy, symbol, SWEEP_DAYS)}
+    else:
+        # C6 never replayed the extra days, so kappa = 0 is run like the rest.
+        path = finished(f"{strategy}-{symbol}-mk0-{suffix}", days)
+        if path is None:
+            return None
+        scores = {0.0: chained(path)}
     for kappa in KAPPAS:
-        path = finished(f"{strategy}-{symbol}-mk{kappa:g}-sweep", SWEEP_DAYS)
+        path = finished(f"{strategy}-{symbol}-mk{kappa:g}-{suffix}", days)
         if path is None:
             return None
         scores[kappa] = chained(path)
@@ -126,11 +142,11 @@ def best_kappa(strategy: str, symbol: str) -> tuple[float, dict[float, float]] |
     return max(scores, key=scores.get), scores
 
 
-def markout_test_jobs() -> list[dict]:
+def markout_test_jobs(days: list[str] = SWEEP_DAYS, suffix: str = "sweep") -> list[dict]:
     jobs = []
     for symbol in SYMBOLS:
         for strategy in MARKOUT_STRATEGIES:
-            pick = best_kappa(strategy, symbol)
+            pick = best_kappa(strategy, symbol, days, suffix)
             if pick is None or pick[0] == 0.0:
                 continue
             jobs.append({"tag": f"{strategy}-{symbol}-mk{pick[0]:g}", "strategy": strategy,
@@ -155,7 +171,9 @@ def markout_breadth_jobs() -> list[dict]:
 
 
 KINDS = {"vol": vol_jobs, "markout-sweep": markout_sweep_jobs, "markout-test": markout_test_jobs,
-         "markout-breadth": markout_breadth_jobs}
+         "markout-breadth": markout_breadth_jobs,
+         "markout-sweep20": lambda: markout_sweep_jobs(TRAIN20, "sweep20"),
+         "markout-test20": lambda: markout_test_jobs(TRAIN20, "sweep20")}
 
 
 def run(job: dict) -> bool:
