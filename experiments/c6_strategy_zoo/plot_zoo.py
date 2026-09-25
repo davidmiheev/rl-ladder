@@ -232,7 +232,7 @@ def symbols_with_runs() -> list[str]:
 #: How each line style reads in a caption.  Derived from `STYLES` rather than
 #: written beside it, because the two drifted apart the moment a third
 #: variant appeared and a figure with a wrong key is worse than no key.
-STYLE_WORDS = {":": "dotted", "-": "solid", "--": "dashed"}
+STYLE_WORDS = {":": "dotted", "-": "solid", "--": "dashed", "-.": "dash-dotted"}
 VARIANT_WORDS = {
     "published": "the published parameters",
     "wide": "the widened spread",
@@ -304,12 +304,19 @@ def plot(entries: list[dict], key: str, ylabel: str, title: str, out: Path,
         ax.set_title("all sessions, chained")
         ax.set_xlabel("sessions elapsed")
         ax.set_ylabel("cumulative, % of book")
-        ax.legend(fontsize=6, loc="best")
 
     for ax in flat[n_panels:]:
         ax.axis("off")
     fig.suptitle(title)
     fig.tight_layout()
+    if cumulative_panel:
+        # Below the grid rather than inside the chained panel: with two
+        # recipes and five strategies there are up to eighteen entries, and
+        # inside the panel they covered the lines they label.
+        handles, labels = flat[len(days)].get_legend_handles_labels()
+        rows_needed = int(np.ceil(len(labels) / 4))
+        fig.subplots_adjust(bottom=(0.17 * rows_needed + 0.65) / fig.get_figheight())
+        fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=7, frameon=False)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=130)
     plt.close(fig)

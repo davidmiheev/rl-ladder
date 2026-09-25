@@ -183,7 +183,10 @@ def widening_and_rl(out: Path) -> None:
     rows = [r for r in master_table.baseline_rows() + master_table.eval_rows() if r["days"] == "test"]
     pairs = sorted({(r["symbol"], r["strategy"]) for r in rows},
                    key=lambda p: (p[0] not in assets.DEEP, p[0], p[1]))
-    recipes = sorted({r["recipe"] for r in rows if r["policy"] != "baseline"})
+    # C6's two recipes only: the ablations run on one pair and C7's v2-deep on
+    # two, and each has its own figure; five offsets per row would collide.
+    recipes = [rec for rec in ("v1", "v2") if any(r["recipe"] == rec for r in rows)]
+    rows = [r for r in rows if r["policy"] == "baseline" or r["recipe"] in recipes]
     fig, ax = plt.subplots(figsize=(11, 0.34 * len(pairs) + 1.6))
     offsets = {"published": -0.3, "wide": -0.1}
     offsets |= {rec: 0.1 + 0.2 * i for i, rec in enumerate(recipes)}
@@ -219,6 +222,36 @@ def widening_and_rl(out: Path) -> None:
     print(f"wrote {out / 'widening-and-rl.png'}")
 
 
+def rl_ablation(out: Path) -> None:
+    """v2 against its two ablations and v1, one dot per seed, on `glft` XRPUSDC."""
+    rows = [r for r in master_table.baseline_rows() + master_table.eval_rows()
+            if r["days"] == "test" and r["symbol"] == "xrpusdc" and r["strategy"] == "glft"
+            and r["spread"] == "wide"]
+    wide = [r["cumulative"] for r in rows if r["policy"] == "baseline"]
+    order = ("v1", "v2-no-residual", "v2-no-cf", "v2")
+    labels = {"v1": "v1", "v2-no-residual": "v2 without the residual start",
+              "v2-no-cf": "v2 without the counterfactual reward", "v2": "v2"}
+    fig, ax = plt.subplots(figsize=(7.4, 2.8))
+    for i, rec in enumerate(order):
+        values = sorted(r["cumulative"] for r in rows if r["recipe"] == rec)
+        if not values:
+            continue
+        ax.scatter(values, [i] * len(values), s=30, color="tab:blue", alpha=0.8, zorder=3)
+        ax.scatter([np.median(values)], [i], marker="|", s=400, color="black", zorder=4)
+        ax.text(max(values) + 0.1, i, f"median {np.median(values):+.2f}", va="center", fontsize=8)
+    if wide:
+        ax.axvline(wide[-1], color="0.3", ls="--", lw=1)
+        ax.text(wide[-1], len(order) - 0.45, f" widened baseline {wide[-1]:+.2f}", fontsize=8)
+    ax.set_yticks(range(len(order)), [labels[r] for r in order], fontsize=8)
+    ax.set_xlabel("held-out cumulative return, % of book (11 sessions)")
+    ax.set_title("glft-wide on XRPUSDC: five seeds per recipe; bar = median")
+    ax.set_ylim(-0.6, len(order) - 0.2)
+    fig.tight_layout()
+    fig.savefig(out / "rl-ablation.png", dpi=130)
+    plt.close(fig)
+    print(f"wrote {out / 'rl-ablation.png'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="docs/assets/c6")
@@ -228,7 +261,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     figures = {"spread-sweep": spread_sweep, "floor-vs-intensity": floor_vs_intensity,
                "adverse-selection": adverse_selection, "grid-depth": grid_depth,
-               "widening-and-rl": widening_and_rl}
+               "widening-and-rl": widening_and_rl, "rl-ablation": rl_ablation}
     for name, draw in figures.items():
         if args.only is None or args.only == name:
             draw(out)

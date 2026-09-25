@@ -5,6 +5,7 @@
     markout.png          C6's widened baseline against the markout rule
     markout-breadth.png  the rule untuned, on the seven other assets
     book-info.png        held-out R^2 each feature group adds
+    rl-deep.png          C6's v2 policies against v2-deep, five seeds each
 
     python experiments/c7_signals/plot_c7.py [--only NAME]
 """
@@ -163,6 +164,35 @@ def markout_breadth() -> None:
     save(fig, "markout-breadth.png")
 
 
+def rl_deep() -> None:
+    """C6's v2 against v2-deep, one dot per seed, on the two ETHUSDC strategies."""
+    import sys
+    sys.path.insert(0, str(REPO / "experiments" / "c6_strategy_zoo"))
+    import master_table
+
+    rows = [r for r in master_table.baseline_rows() + master_table.eval_rows()
+            if r["days"] == "test" and r["symbol"] == "ethusdc" and r["spread"] == "wide"
+            and r["strategy"] in ("glft", "obi")]
+    fig, axes = plt.subplots(1, 2, figsize=(8.4, 2.6), sharey=True)
+    for ax, strategy in zip(axes, ("glft", "obi"), strict=True):
+        wide = [r["cumulative"] for r in rows if r["strategy"] == strategy
+                and r["policy"] == "baseline"]
+        for i, (recipe, colour) in enumerate((("v2", BLUE), ("v2-deep", ORANGE))):
+            values = [r["cumulative"] for r in rows
+                      if r["strategy"] == strategy and r["recipe"] == recipe]
+            ax.scatter(values, [i] * len(values), s=34, color=colour, zorder=3)
+            ax.scatter([np.median(values)], [i], marker="|", s=420, color=INK, zorder=4)
+        if wide:
+            ax.axvline(wide[-1], color=MUTED, ls="--", lw=1)
+        ax.set_title(f"{strategy}-wide, ETHUSDC (dashed: widened baseline)")
+        ax.set_xlabel("held-out cumulative return, %")
+        ax.grid(axis="y", visible=False)
+    axes[0].set_yticks([0, 1], ["v2", "v2 + deep book\n+ BTCUSDT"])
+    axes[0].set_ylim(-0.6, 1.6)
+    fig.suptitle("Five seeds each; bar = median", fontsize=9)
+    save(fig, "rl-deep.png")
+
+
 def book_info() -> None:
     groups = ("c2", "levels", "bands", "ofi", "returns", "btc")
     fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.4), sharey=True)
@@ -189,7 +219,8 @@ def book_info() -> None:
 
 
 FIGURES = {"vol-forecast": vol_forecast, "vol-in-strategy": vol_in_strategy,
-           "markout": markout, "markout-breadth": markout_breadth, "book-info": book_info}
+           "markout": markout, "markout-breadth": markout_breadth, "book-info": book_info,
+           "rl-deep": rl_deep}
 
 
 def main() -> None:
