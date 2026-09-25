@@ -140,6 +140,12 @@ const files = fs.readdirSync(writeups)
   .filter((f) => f.endsWith(".md"))
   .filter((f) => wanted.length === 0 || wanted.includes(f))
   .sort();
+// A name that matches nothing used to build nothing and say nothing.
+const unknown = wanted.filter((w) => !files.includes(w));
+if (unknown.length) {
+  console.error(`no such writeup: ${unknown.join(", ")} (pass bare names, e.g. c7-signals.md)`);
+  process.exit(1);
+}
 
 const problems = files.flatMap((f) => validate(f, fs.readFileSync(path.join(writeups, f), "utf8")));
 if (problems.length) {
