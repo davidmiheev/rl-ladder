@@ -23,6 +23,7 @@ point once on the held-out sessions. Nothing is ever chosen on held-out data.
     python experiments/c4_ppo_grpo/grid_search.py --kind grid --shard 0/3
     python experiments/c4_ppo_grpo/grid_search.py --kind select
     python experiments/c4_ppo_grpo/grid_search.py --kind test
+    python experiments/c4_ppo_grpo/grid_search.py --kind search-test   # GRPO/PPO finals
 """
 
 from __future__ import annotations
@@ -143,6 +144,27 @@ def test_jobs() -> list[dict]:
     return jobs
 
 
+def search_test_jobs() -> list[dict]:
+    """Held-out runs of every finished GRPO/PPO search's final point, one per seed."""
+    jobs = []
+    root = RUNS / "c4-search"
+    for path in sorted(root.glob("*__*")) if root.exists() else []:
+        summary = path / "summary.json"
+        if not summary.exists():
+            continue
+        config = json.loads((path / "config.json").read_text())
+        if config["iterations"] < 20:
+            continue  # smoke tests
+        final = json.loads(summary.read_text())
+        point = (final["floor_mult"], final["kappa"], final["skew_mult"])
+        strategy, symbol = config["strategy"], config["symbol"]
+        name = f"{config['method']}-{strategy}-{symbol}-s{config['seed']}-test"
+        jobs.append({"tag": name, "strategy": strategy, "symbol": symbol,
+                     "days": assets.test_days(symbol),
+                     "sets": point_sets(strategy, symbol, *point)})
+    return jobs
+
+
 def run(job: dict) -> None:
     cmd = [sys.executable, str(REPO / "experiments" / "c6_strategy_zoo" / "run_baseline.py"),
            "--strategy", f"{job['strategy']}-wide", "--symbol", job["symbol"],
@@ -159,7 +181,8 @@ def run(job: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--kind", required=True, choices=["grid", "select", "test"])
+    parser.add_argument("--kind", required=True,
+                        choices=["grid", "select", "test", "search-test"])
     parser.add_argument("--shard", default="0/1")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
@@ -174,7 +197,8 @@ def main() -> None:
         return
 
     index, count = (int(x) for x in args.shard.split("/"))
-    jobs = (grid_jobs() if args.kind == "grid" else test_jobs())[index::count]
+    make = {"grid": grid_jobs, "test": test_jobs, "search-test": search_test_jobs}[args.kind]
+    jobs = make()[index::count]
     pending = [j for j in jobs if finished(j["tag"], j["days"]) is None]
     if args.list:
         for job in pending:
