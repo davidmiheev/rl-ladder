@@ -16,8 +16,8 @@ the summary; each phase has its own writeup, linked in §4.
 >   per-asset spread floor (C6) and widening after toxic fills (C7).
 > - **Learning did not beat them.** TD3 on C6's widened strategies (two recipes,
 >   five seeds), GRPO- and PPO-style parameter search, extra order-book and
->   BTCUSDT inputs, fill targets and a reward that discounts inventory PnL all
->   lose to the best fixed rule held out.
+>   BTCUSDT inputs, fill targets, a reward that discounts inventory PnL and
+>   networks twelve times larger all lose to the best fixed rule held out.
 
 ---
 
@@ -78,7 +78,7 @@ the number is one crash session, not market making.*
 | [C3](c3-continuous-control.md) | Do DDPG/TD3/SAC beat the fixed formula? | They lose less than it, never make money; seed spread is large. |
 | [C6](c6-strategy-zoo.md) | Is that just GLFT being a bad baseline? | No. On five strategies and nine assets, a per-asset wider spread is the largest single gain (+2.25 points median); TD3 on top of it does not beat it. |
 | [C7](c7-signals.md) | What information is the policy missing? | Not the deep book or BTCUSDT. The toxicity of its own recent fills: a markout rule beats C6 in 6 of 6 pairs and 13 of 18 untuned. |
-| [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets and an inventory-discounted reward do not. |
+| [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets, an inventory-discounted reward and larger networks do not. |
 
 ## 5. Lessons that held up
 

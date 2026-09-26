@@ -5,6 +5,7 @@
     train-vs-test.png   the overfitting lens: training return against held out
     search-curves.png   GRPO-style against PPO-style search, per iteration
     frontier.png        PnL against fills over the grid: what volume costs
+    net-scaling.png     TD3 v2 at 64x64, 256x256 and 256x256 with 4x updates
 
     python experiments/c4_ppo_grpo/plot_c4.py [--only NAME] [--table]
 """
@@ -377,6 +378,43 @@ def fill_target() -> None:
     save(fig, "fill-target.png")
 
 
+def net_scaling() -> None:
+    """TD3 v2 with larger networks: return on the training pass against held out, per seed."""
+    recipes = [("v2", "64×64 (v2)", BLUE), ("v2-w256", "256×256", ORANGE),
+               ("v2-w256-utd4", "256×256, 4× updates", AQUA)]
+    test_days = assets.test_days("ethusdc")
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.8))
+    for ax, strategy in zip(axes, ("glft", "obi"), strict=True):
+        for recipe, label, color in recipes:
+            points = []
+            for seed in range(3):
+                test = sorted((RUNS / "c6-eval").glob(
+                    f"{strategy}-wide-ethusdc-td3-{recipe}-s{seed}__*/summary.json"))
+                if not test:
+                    continue
+                history = json.loads(sorted((RUNS / "c6").glob(
+                    f"{strategy}-wide-ethusdc-td3-{recipe}-s{seed}__*/summary.json"))[-1]
+                    .read_text())["history"]
+                train = (np.prod([1.0 + h["pnl_pct_of_book"] / 100 for h in history]) - 1.0) * 100
+                points.append((train, chained(json.loads(test[-1].read_text())["per_day"])))
+            if points:
+                x, y = zip(*points, strict=True)
+                ax.scatter(x, y, s=38, color=color, label=label, zorder=3)
+        base = c6_wide(strategy, "ethusdc", test_days)
+        if base:
+            ax.axhline(chained(base), color=MUTED, ls="--", lw=0.8, label="C6 widened, no RL")
+        ax.set_title(f"{strategy} ETHUSDC")
+        ax.set_xlabel("training pass, chained %")
+    axes[0].set_ylabel("held out, chained %")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=7.5)
+    fig.suptitle("Bigger networks fit the training days better, not the held-out ones", fontsize=10)
+    fig.tight_layout(rect=(0, 0.08, 1, 0.95))
+    fig.savefig(OUT / "net-scaling.png", dpi=150)
+    plt.close(fig)
+    print(f"wrote {OUT / 'net-scaling.png'}")
+
+
 def track_record() -> None:
     """Part C in one picture: held-out track records, baseline to best rule.
 
@@ -420,7 +458,7 @@ def track_record() -> None:
 
 FIGURES = {"grid-heatmaps": grid_heatmaps, "track-record": track_record, "frontier": frontier,
            "fill-target": fill_target, "heldout": heldout, "train-vs-test": train_vs_test,
-           "search-curves": search_curves}
+           "search-curves": search_curves, "net-scaling": net_scaling}
 
 
 def main() -> None:

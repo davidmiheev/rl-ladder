@@ -31,7 +31,8 @@ python experiments/c4_ppo_grpo/param_search.py --method grpo --strategy obi --sy
     --seed 0 --fill-target 1500          # Lagrangian fill target
 python experiments/c4_ppo_grpo/grid_search.py --kind search-test
 
-# 3. RL with the trading/holding reward split (recipe v2-edge, C6's queue)
+# 3. RL with the trading/holding reward split (recipe v2-edge) and with larger
+#    networks (v2-w256, v2-w256-utd4; v2-resln wants a GPU), all in C6's queue
 python experiments/c6_strategy_zoo/run_queue.py --kind trace
 python experiments/c6_strategy_zoo/run_queue.py --kind train
 python experiments/c6_strategy_zoo/run_queue.py --kind eval
@@ -52,6 +53,7 @@ Everything is resumable: each queue skips runs that already have a
 | GRPO vs PPO | 120 replays, 2 seeds, glft/obi ETH | held-out median | glft −1.89 / −2.75, obi −2.91 / −2.54 | `runs/c4-search/` |
 | fill target | GRPO, obi ETH, F = 1,500 / 3,000 | held out | worse at every target; λ 0.02–0.08 bp/fill | `runs/c4-search/grpo-F*` |
 | RL v2-edge | holding PnL × 0.25, 5 seeds | held-out median vs v2 | glft −9.27 vs −6.30, obi −9.40 vs −8.00 | `runs/c6/*-v2-edge-*` |
+| RL, larger nets | 256×256, and 256×256 with 4× updates, 3 seeds | held-out median vs v2, same seeds | glft −6.68 / −6.53 vs −6.30, obi −7.60 / −5.07 vs −5.58 | `runs/c6/*-v2-w256*` |
 | best overall | OBI XRPUSDC, C7 markout κ = 1 | held out / without 09-22 / days up | +4.91% / +1.38% / 9 of 11 | `runs/c7/obi-wide-xrpusdc-mk1__*` |
 
 ## Findings
@@ -62,7 +64,10 @@ Everything is resumable: each queue skips runs that already have a
   critic here, and neither search beats the grid on OBI.
 - Forcing volume costs money; so does a reward that discounts holding PnL,
   because adverse selection *is* holding PnL.
+- Larger TD3 networks fit the training pass better and held out no better;
+  4× updates stay within the seed spread. Size is not the bottleneck.
 - XRP selection on four days was unreliable, and several positive XRP numbers
   are one crash session (2025-09-22) or no trading at all.
 - Operational: a trace built inside a training job doubles its memory; build
-  traces as their own jobs (`--kind trace`).
+  traces as their own jobs (`--kind trace`). Three ETH evals at once also
+  run out of memory on 16 GB; two is the limit.

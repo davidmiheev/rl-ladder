@@ -20,6 +20,10 @@ Lab notebook:
 >   twenty pre-split days instead of ten leaves every ETH choice unchanged; on
 >   XRP the choices move, and several "wins" turn out to be one crash day or no
 >   trading at all.
+> - **Bigger networks do not help.** TD3 with 256×256 networks, with or
+>   without four times the gradient updates, lands within the seed spread of
+>   the 64×64 original held out; the wider net fits the training days better
+>   and the held-out days worse.
 
 ---
 
@@ -37,8 +41,9 @@ Lab notebook:
   - [5.3 Rewarding the market making, not the direction (`v2-edge`)](#53-rewarding-the-market-making-not-the-direction-v2-edge)
 - [6. Does the tuning overfit? (C4's third item)](#6-does-the-tuning-overfit-c4s-third-item)
 - [7. So what makes money?](#7-so-what-makes-money)
-- [8. What would push further](#8-what-would-push-further)
-- [9. Sources](#9-sources)
+- [8. Would a bigger network help?](#8-would-a-bigger-network-help)
+- [9. What would push further](#9-what-would-push-further)
+- [10. Sources](#10-sources)
 
 ## 1. The task
 
@@ -292,7 +297,78 @@ It is positive with the crash day removed, positive on most sessions, and it
 trades hundreds of times a day. That is the result worth building on. On
 ETHUSDC the same rule brings OBI to break-even and no further.
 
-## 8. What would push further
+## 8. Would a bigger network help?
+
+C6's TD3 uses two 64×64 layers for both actor and critic. Before paying for
+larger ones, three things argued that network size is not what limits it:
+
+- **There is little left for a flexible model to find.** In C7, LightGBM
+  predicted the next move no better than a linear model held out, from the
+  same features the policy sees plus the deep book and BTCUSDT.
+- **The trained policies barely use their state** (C6 §8.5), and the seed
+  spread (6–8 points) is larger than any recipe difference.
+- **Training is short.** One pass over ten sessions is about 170,000
+  transitions and, at one update every eight steps, about 21,000 gradient
+  updates. If anything is starved, it is updates, not parameters.
+
+So the probe separates the two: a 256×256 network for actor and critic
+(`v2-w256`, 12× the parameters), and the same with four times the updates
+(`v2-w256-utd4`, one every two steps). Everything else is v2. Three seeds
+each on the two ETHUSDC strategies where RL was trained, compared with v2 on
+the same three seeds.
+
+![net-scaling](../assets/c4/net-scaling.png)
+
+*Figure — one point per seed: return on the training pass (the policy's own
+online returns during its single pass over the training days, exploration
+included) against held-out return. Dashed: C6's widened strategy without RL.*
+
+| ETHUSDC, seeds 0–2 | 64×64 (v2) | 256×256 | 256×256, 4× updates |
+| --- | --- | --- | --- |
+| glft, held out | −6.30 (−7.66 … −3.84) | −6.68 (−7.09 … −4.20) | −6.53 (−6.97 … −3.35) |
+| glft, training pass | +0.17 | **+1.42** | −1.10 |
+| obi, held out | −5.58 (−8.04 … −4.16) | −7.60 (−9.68 … −5.69) | **−5.07** (−7.27 … −4.87) |
+| obi, training pass | −8.24 | **−0.06** | −2.81 |
+
+*Chained return, % of book; median over three seeds, range in brackets. v2's
+five-seed medians in §7 (−6.30, −8.00) include two more seeds; here every
+column uses the same three. For reference, the widened strategies without RL
+are at −7.07 and −6.40 and the best fixed rules at −3.01 and −0.62.*
+
+Two readings, both negative for size:
+
+1. **Width buys training return, not held-out return.** The 256×256 policy
+   improves the training pass on both strategies (+1.3 points on `glft`, +8.2
+   on `obi`) and is worse held out on both. That is the signature of a model
+   fitting sessions, not the market.
+2. **More updates move nothing outside the noise.** The 4× variant is
+   0.5 points better than v2 on `obi` and 0.2 worse on `glft`, against a
+   seed range of three to four points. The extra updates do not even buy a
+   better training pass than the wide net at 1× updates, and the critic's TD
+   loss shows no consistent decline across the ten sessions in any variant.
+
+Neither comes close to the fixed rules in §7.
+
+**Cost.** One TD3 update on a batch of 256, twin critic, measured on this
+machine's CPU and on a Colab T4:
+
+| critic | parameters, per critic | CPU, 1 thread | CPU, 4 threads | T4 |
+| --- | --- | --- | --- | --- |
+| MLP 64×64 (v2) | 6 k | 4.0 ms | 3.3 ms | 4.1 ms |
+| MLP 256×256 | 74 k | 8.2 ms | 5.3 ms | 4.0 ms |
+| MLP 512×512×512 | 541 k | 36 ms | 16 ms | 4.8 ms |
+| residual + LayerNorm, width 256, 2 blocks | 1.06 M | 71 ms | 28 ms | 6.9 ms |
+| residual + LayerNorm, width 512, 2 blocks | 4.2 M | 241 ms | 80 ms | 9.5 ms |
+
+The market replay, not the network, dominates a job up to 256×256, which is
+why both probes ran on CPU (10–14 minutes a job at 1× updates, 22–24 at 4×).
+Beyond that the network takes over, and a GPU pays: a residual-LayerNorm
+critic of the kind recent work uses to scale off-policy RL
+(`v2-resln`, built, not run) would take about 1.7 hours a job on CPU and
+15–20 minutes on a T4. Given the two readings above, it is not expected to
+change the conclusion, and it is not a priority.
+
+## 9. What would push further
 
 - **A circuit breaker.** Most remaining ETH losses are a few sessions with a
   sharp move (09-15, 09-17 and 09-25 for OBI, each about −0.7%). Pausing quotes when short-horizon
@@ -306,7 +382,7 @@ ETHUSDC the same rule brings OBI to break-even and no further.
   the state and the rule as the residual baseline — rather than on top of C6's
   widened presets.
 
-## 9. Sources
+## 10. Sources
 
 | what | source |
 | --- | --- |
