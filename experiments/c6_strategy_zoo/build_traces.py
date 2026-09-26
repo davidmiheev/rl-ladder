@@ -4,7 +4,9 @@
 
 One replay of each training session at the baseline action, cached under
 `data/precompute/`. Training builds a missing trace on first use anyway; this
-exists so that five seeds starting at once do not all build the same one.
+exists so that five seeds starting at once do not all build the same one --
+and because a trace built inside a training job is a second full replay in
+the same process, which doubled its memory and got two v2-edge jobs killed.
 """
 
 from __future__ import annotations
@@ -24,19 +26,23 @@ STEP_NS = 5_000_000_000
 ETA = 0.015
 
 
-def trace_path(strategy: str, symbol: str, date: str) -> Path:
+def trace_path(strategy: str, symbol: str, date: str, inventory_weight: float = 1.0) -> Path:
+    weight = f"_w{inventory_weight:g}" if inventory_weight != 1.0 else ""
     return (zoo_env.precompute.PRECOMP /
-            f"cf_{strategy}_{symbol}_{date}_{STEP_NS / 1e9:g}s_eta{ETA:g}_b1_none.npy")
+            f"cf_{strategy}_{symbol}_{date}_{STEP_NS / 1e9:g}s_eta{ETA:g}_b1_none{weight}.npy")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strategy", required=True)
     parser.add_argument("--symbol", required=True)
+    parser.add_argument("--inventory-weight", type=float, default=1.0,
+                        help="the holding-PnL weight of the recipe the trace is for (v2-edge: 0.25)")
     args = parser.parse_args()
     assets.ensure_registered(args.symbol)
     for date in assets.train_days(args.symbol):
-        trace = zoo_env.baseline_trace(args.strategy, args.symbol, date, STEP_NS, ETA, {}, 1.0)
+        trace = zoo_env.baseline_trace(args.strategy, args.symbol, date, STEP_NS, ETA, {}, 1.0,
+                                       args.inventory_weight)
         print(f"{args.strategy} {args.symbol} {date}: {len(trace)} steps, "
               f"session baseline reward {trace.sum():+.2f} bp", flush=True)
 

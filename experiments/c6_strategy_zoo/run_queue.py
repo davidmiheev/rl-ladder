@@ -105,6 +105,16 @@ def jobs() -> list[dict]:
                 "cmd": [PYTHON, str(HERE / "build_traces.py"), "--strategy", name,
                         "--symbol", symbol],
             })
+    # The same for v2-edge, whose traces count holding PnL at its weight.
+    for strategy, symbol in DEEP_FEATURE_JOBS:
+        name, weight = f"{strategy}-wide", 0.25
+        out.append({
+            "kind": "trace", "id": f"trace-{name}-{symbol}-w{weight:g}",
+            "done": lambda n=name, s=symbol, w=weight: all(
+                build_traces.trace_path(n, s, d, w).exists() for d in assets.train_days(s)),
+            "cmd": [PYTHON, str(HERE / "build_traces.py"), "--strategy", name,
+                    "--symbol", symbol, "--inventory-weight", str(weight)],
+        })
 
     # 3. Learned policies, on the widened variant: the point of C6 is whether
     #    RL adds anything once the spread is already sensible.
