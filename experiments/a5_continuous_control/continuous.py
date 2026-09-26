@@ -38,6 +38,11 @@ class Config:
     alpha: float = 0.2                  # entropy temperature
     eval_every: int = 2_000
     eval_episodes: int = 5
+    # Network shape, for scaling experiments (C4). `None` means `hidden`, and
+    # `critic_arch = "mlp"` is the plain network everything before used.
+    actor_hidden: tuple[int, ...] | None = None
+    critic_hidden: tuple[int, ...] | None = None
+    critic_arch: str = "mlp"            # mlp | resln
 
 
 def mlp(sizes: tuple[int, ...], out_dim: int, out_activation=None) -> nn.Sequential:
@@ -95,13 +100,43 @@ class GaussianActor(nn.Module):
         return self.act_limit * action, log_prob
 
 
+class ResLN(nn.Module):
+    """A residual MLP with pre-LayerNorm blocks, the shape recent work scales
+    RL critics with (SimBa, BRO): `x + W2 relu(W1 LN(x))`, 4x inner width,
+    then a final LayerNorm before the head. `hidden = (width,) * blocks`."""
+
+    def __init__(self, in_dim: int, hidden: tuple[int, ...], out_dim: int):
+        super().__init__()
+        width = hidden[0]
+        self.inp = nn.Linear(in_dim, width)
+        self.blocks = nn.ModuleList(
+            nn.Sequential(nn.LayerNorm(width), nn.Linear(width, 4 * width), nn.ReLU(),
+                          nn.Linear(4 * width, width))
+            for _ in hidden
+        )
+        self.out = nn.Sequential(nn.LayerNorm(width), nn.Linear(width, out_dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.inp(x)
+        for block in self.blocks:
+            x = x + block(x)
+        return self.out(x)
+
+
 class Critic(nn.Module):
     """One or two Q(s, a) heads. Two is TD3's and SAC's overestimation fix."""
 
-    def __init__(self, obs_dim: int, act_dim: int, hidden: tuple[int, ...], twin: bool):
+    def __init__(self, obs_dim: int, act_dim: int, hidden: tuple[int, ...], twin: bool,
+                 arch: str = "mlp"):
         super().__init__()
-        self.q1 = mlp((obs_dim + act_dim,) + hidden, 1)
-        self.q2 = mlp((obs_dim + act_dim,) + hidden, 1) if twin else None
+
+        def head() -> nn.Module:
+            if arch == "resln":
+                return ResLN(obs_dim + act_dim, hidden, 1)
+            return mlp((obs_dim + act_dim,) + hidden, 1)
+
+        self.q1 = head()
+        self.q2 = head() if twin else None
 
     def forward(self, obs: torch.Tensor, act: torch.Tensor):
         x = torch.cat([obs, act], dim=-1)
@@ -155,10 +190,13 @@ class Agent:
 def build_agent(config: Config, obs_dim: int, act_dim: int, act_limit: float) -> Agent:
     is_sac = config.algo == "sac"
     actor_cls = GaussianActor if is_sac else DeterministicActor
-    actor = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
-    critic = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
-    actor_target = actor_cls(obs_dim, act_dim, config.hidden, act_limit)
-    critic_target = Critic(obs_dim, act_dim, config.hidden, config.twin_critics)
+    actor_hidden = config.actor_hidden or config.hidden
+    critic_hidden = config.critic_hidden or config.hidden
+    actor = actor_cls(obs_dim, act_dim, actor_hidden, act_limit)
+    critic = Critic(obs_dim, act_dim, critic_hidden, config.twin_critics, config.critic_arch)
+    actor_target = actor_cls(obs_dim, act_dim, actor_hidden, act_limit)
+    critic_target = Critic(obs_dim, act_dim, critic_hidden, config.twin_critics,
+                           config.critic_arch)
     actor_target.load_state_dict(actor.state_dict())
     critic_target.load_state_dict(critic.state_dict())
     return Agent(

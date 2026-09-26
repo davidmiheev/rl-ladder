@@ -57,6 +57,7 @@ ABLATION_PAIR = ("glft", "xrpusdc")
 #: on ETHUSDC -- the asset with ten training sessions -- for the two
 #: strategies whose v2 policies are the comparison.
 DEEP_FEATURE_JOBS = (("glft", "ethusdc"), ("obi", "ethusdc"))
+NET_RECIPES = ("v2-w256", "v2-w256-utd4")
 
 
 def strategies_for(symbol: str) -> tuple[str, ...]:
@@ -141,6 +142,13 @@ def jobs() -> list[dict]:
     for strategy, symbol in DEEP_FEATURE_JOBS:
         for seed in DEEP_SEEDS:
             out.append(train_job(f"{strategy}-wide", symbol, seed, "v2-edge"))
+    # C4's network-scaling probes that a CPU can afford; v2-resln is GPU-only
+    # and not queued here. Three seeds: a first read on whether width or
+    # update count moves anything before the GPU is spent on it.
+    for recipe in NET_RECIPES:
+        for strategy, symbol in DEEP_FEATURE_JOBS:
+            for seed in (0, 1, 2):
+                out.append(train_job(f"{strategy}-wide", symbol, seed, recipe))
     return out
 
 

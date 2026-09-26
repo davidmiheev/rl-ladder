@@ -119,6 +119,20 @@ RECIPES = {
     "v2-edge": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
                     deviation_penalty=0.001, explore_episodes=0, participation="residual",
                     inventory_weight=0.25),
+    # C4's network-scaling probes: v2 with a wider actor and critic, then the
+    # same with four times as many gradient updates per environment step
+    # (update-to-data 1/2 instead of 1/8), then a residual LayerNorm critic
+    # (GPU only: ~70 ms an update on one CPU thread against ~7 ms on a T4).
+    "v2-w256": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                    deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                    actor_hidden=(256, 256), critic_hidden=(256, 256)),
+    "v2-w256-utd4": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                         deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                         actor_hidden=(256, 256), critic_hidden=(256, 256), update_every=2),
+    "v2-resln": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                     deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                     actor_hidden=(256, 256), critic_hidden=(256, 256), critic_arch="resln",
+                     update_every=2),
 }
 
 
@@ -145,7 +159,7 @@ def episode(env, agent, config, buffer, rng, act_dim, baseline, mask, explore,
             updates_from, update_every):
     """One trading session. Returns its summary; fills the buffer as it goes."""
     obs, _ = env.reset(seed=int(rng.integers(1 << 30)))
-    total_reward, pnl_bp, actions, inventories = 0.0, 0.0, [], []
+    total_reward, pnl_bp, actions, inventories, losses = 0.0, 0.0, [], [], []
     step = 0
     truncated = False
     while not truncated:
@@ -172,11 +186,12 @@ def episode(env, agent, config, buffer, rng, act_dim, baseline, mask, explore,
         inventories.append(info["inventory"])
 
         if buffer.size >= updates_from and step % update_every == 0:
-            update_step(config, agent, buffer.sample(config.batch_size, rng), step)
+            losses.append(update_step(config, agent, buffer.sample(config.batch_size, rng), step))
 
     multipliers = np.mean([env.to_multipliers(a) for a in actions], axis=0)
     summary = {
         "steps": step,
+        "critic_loss": float(np.mean(losses)) if losses else float("nan"),
         "return": float(total_reward),
         "pnl_bp": float(pnl_bp),
         "pnl_pct_of_book": float(info["equity"] / env.book_size * 100),
@@ -209,6 +224,7 @@ def main() -> None:
     recipe = dict(RECIPES[args.recipe])
     args.explore_episodes = recipe["explore_episodes"]
     args.participation = recipe["participation"]
+    args.update_every = recipe.get("update_every", args.update_every)
 
     torch.set_num_threads(1)
     torch.manual_seed(args.seed)
@@ -227,7 +243,10 @@ def main() -> None:
                       inventory_weight=recipe.get("inventory_weight", 1.0))
 
     config = Config(buffer_size=500_000, learning_starts=0,
-                    hidden=(args.hidden, args.hidden), **ALGOS[args.algo])
+                    hidden=(args.hidden, args.hidden), **ALGOS[args.algo],
+                    actor_hidden=recipe.get("actor_hidden"),
+                    critic_hidden=recipe.get("critic_hidden"),
+                    critic_arch=recipe.get("critic_arch", "mlp"))
     env = ZooEnv(date=days[0], **env_kwargs)
     obs_dim = int(np.prod(env.observation_space.shape))
     baseline = env.baseline_action()

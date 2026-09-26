@@ -59,7 +59,9 @@ def load_policy(path: Path):
     blob = torch.load(path, weights_only=False)
     cfg = blob["config"]
     width = cfg.get("hidden", 64)
-    config = Config(hidden=(width, width), **ALGOS[blob["algo"]])
+    shape = blob.get("recipe_params", {})
+    config = Config(hidden=(width, width), **ALGOS[blob["algo"]],
+                    actor_hidden=shape.get("actor_hidden"))
     strategy = blob.get("strategy", cfg["strategy"])
     symbol = blob.get("symbol", cfg["symbol"])
     overrides = {"grid_num": cfg["grid_num"]} if cfg.get("grid_num") else {}
