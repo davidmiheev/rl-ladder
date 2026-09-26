@@ -943,21 +943,21 @@ for the low-dimensional continuous-control side; no off-the-shelf library does
 GRPO outside LM tooling, so the group-relative-advantage update here is genuinely
 from-scratch code
 
-- [ ] Since the action here is a low-dimensional continuous vector, compare PPO (B1) directly against a GRPO-style approach: sample K coefficient sets per episode, rank by realized PnL, apply a group-relative-advantage update as in B3
+- [x] Since the action here is a low-dimensional continuous vector, compare PPO (B1) directly against a GRPO-style approach: sample K coefficient sets per episode, rank by realized PnL, apply a group-relative-advantage update as in B3
 
   A direct test of whether GRPO's central trick survives outside language
   modelling. Sample `K` coefficient sets per episode, rank them by realised
   PnL, and apply a group-relative advantage update — the group mean replaces
   the value network exactly as it does in B3.
 
-- [ ] Check whether GRPO's group-baseline idea (no value network) transfers outside language modeling to this much lower-dimensional control problem
+- [x] Check whether GRPO's group-baseline idea (no value network) transfers outside language modeling to this much lower-dimensional control problem
 
   The question behind the previous item. GRPO's baseline works partly because
   LLM value functions are expensive and hard to fit; in a three-dimensional
   continuous action space a critic is cheap and easy, so the trade may simply
   not pay. A negative result here is informative.
 
-- [ ] Apply the B4 reward-hacking lens: check whether RL-tuned coefficients overfit to microstructure quirks of the training days (e.g. only widening spread around a few known volatility spikes) rather than learning a generalizable policy — validate strictly out-of-sample
+- [x] Apply the B4 reward-hacking lens: check whether RL-tuned coefficients overfit to microstructure quirks of the training days (e.g. only widening spread around a few known volatility spikes) rather than learning a generalizable policy — validate strictly out-of-sample
 
   Backtests are the easiest place in this whole ladder to fool yourself. The
   specific failure to look for: coefficients that encode "widen the spread at
@@ -966,6 +966,12 @@ from-scratch code
   strictly out of sample, and treat an implausibly good result as a bug report.
 
 <a id="c5"></a>
+
+Done in [`writeups/c4-ppo-grpo.md`](writeups/c4-ppo-grpo.md). The PPO and GRPO
+updates there are written from scratch for a three-parameter Gaussian policy,
+not reused from B1/B3, which are not built yet; the comparison is still like
+for like, since both share the same clipped update and differ only in the
+baseline.
 
 ## C5. Multi-Signal Extension
 
