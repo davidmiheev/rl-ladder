@@ -23,6 +23,26 @@ notebook: [`experiments/c7_signals/README.md`](../../experiments/c7_signals/READ
 
 ---
 
+**Contents**
+
+- [1. The task](#1-the-task)
+- [2. The goal](#2-the-goal)
+- [3. The data: per-second book snapshots](#3-the-data-per-second-book-snapshots)
+- [4. Volatility](#4-volatility)
+  - [4.1 Which estimator forecasts best](#41-which-estimator-forecasts-best)
+  - [4.2 What it does inside the strategies](#42-what-it-does-inside-the-strategies)
+- [5. Is there information deeper in the book, or in BTCUSDT's?](#5-is-there-information-deeper-in-the-book-or-in-btcusdts)
+  - [5.1 The test](#51-the-test)
+  - [5.2 What it found](#52-what-it-found)
+- [6. The markout rule](#6-the-markout-rule)
+  - [6.1 The rule](#61-the-rule)
+  - [6.2 Chosen on training days, scored on held-out ones](#62-chosen-on-training-days-scored-on-held-out-ones)
+  - [6.3 Without tuning, on the other seven assets](#63-without-tuning-on-the-other-seven-assets)
+- [7. RL with the deeper book and BTCUSDT in the state](#7-rl-with-the-deeper-book-and-btcusdt-in-the-state)
+- [8. Checks with known answers](#8-checks-with-known-answers)
+- [9. What this changes](#9-what-this-changes)
+- [10. Sources](#10-sources)
+
 ## 1. The task
 
 The request, after C6's RL answer came back "mostly nothing":
@@ -258,6 +278,13 @@ assets, with fills in the hundreds or thousands a day. The `glft` and
 and the widened `glft` and `hfgrid` on XRP trade a handful of times on a
 median day, so their +1.3 and +3.1 points are the least trustworthy numbers
 in the table.
+
+**Does κ survive more training data?** C4 repeated the sweep on all twenty
+pre-split sessions (κ = 0 replayed too). The choice is unchanged for `glft`
+and `obi` on both assets — including OBI XRPUSDC's κ = 1, the best held-out
+result in Part C — and moves for `hfgrid` (ETH 1 → 2, XRP 2 → 1), whose
+fills are few enough that its sweep was always the least trustworthy. See
+[C4 §6](c4-ppo-grpo.md#6-does-the-tuning-overfit-c4s-third-item).
 
 Why this works when RL did not: the rule conditions on the one piece of state
 that measures the thing the spread is paying for — how toxic *our* fills have

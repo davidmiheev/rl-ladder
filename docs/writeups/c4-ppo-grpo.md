@@ -23,6 +23,23 @@ Lab notebook:
 
 ---
 
+**Contents**
+
+- [1. The task](#1-the-task)
+- [2. What is searched](#2-what-is-searched)
+- [3. The grid: the baseline any learner must beat](#3-the-grid-the-baseline-any-learner-must-beat)
+- [4. GRPO-style against PPO-style search](#4-grpo-style-against-ppo-style-search)
+  - [4.1 The two methods](#41-the-two-methods)
+  - [4.2 What they found](#42-what-they-found)
+- [5. Putting fills into the objective](#5-putting-fills-into-the-objective)
+  - [5.1 What volume costs: the frontier](#51-what-volume-costs-the-frontier)
+  - [5.2 A fill target with a learned price](#52-a-fill-target-with-a-learned-price)
+  - [5.3 Rewarding the market making, not the direction (`v2-edge`)](#53-rewarding-the-market-making-not-the-direction-v2-edge)
+- [6. Does the tuning overfit? (C4's third item)](#6-does-the-tuning-overfit-c4s-third-item)
+- [7. So what makes money?](#7-so-what-makes-money)
+- [8. What would push further](#8-what-would-push-further)
+- [9. Sources](#9-sources)
+
 ## 1. The task
 
 [`ladder.md`](../ladder.md#c4) asks for three things, and a direct request

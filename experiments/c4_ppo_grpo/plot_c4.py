@@ -377,8 +377,50 @@ def fill_target() -> None:
     save(fig, "fill-target.png")
 
 
-FIGURES = {"grid-heatmaps": grid_heatmaps, "frontier": frontier, "fill-target": fill_target,
-           "heldout": heldout, "train-vs-test": train_vs_test, "search-curves": search_curves}
+def track_record() -> None:
+    """Part C in one picture: held-out track records, baseline to best rule.
+
+    Saved to docs/assets/partc/ for the overview page.
+    """
+    panels = [
+        ("OBI, XRPUSDC", "obi", "xrpusdc", ("obi-wide-xrpusdc-mk1", "C7 markout κ = 1")),
+        ("OBI, ETHUSDC", "obi", "ethusdc", ("obi-wide-ethusdc-mk4", "C7 markout κ = 4")),
+        ("GLFT, ETHUSDC", "glft", "ethusdc", ("glft-wide-ethusdc-mk1", "C7 markout κ = 1")),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.4), sharey=False)
+    for ax, (title, strategy, symbol, (tag7, label7)) in zip(axes, panels, strict=True):
+        days = assets.test_days(symbol)
+        lines = [
+            (newest(RUNS / "c6", f"base-{strategy}-{symbol}", days), "published parameters",
+             MUTED, ":"),
+            (c6_wide(strategy, symbol, days), "C6 widened floor", BLUE, "-"),
+            (newest(RUNS / "c7", tag7, days), label7, ORANGE, "-"),
+        ]
+        for per_day, label, colour, style in lines:
+            if not per_day:
+                continue
+            path = (np.cumprod([1.0 + d["Return"] for d in per_day]) - 1.0) * 100
+            ax.plot(range(1, len(path) + 1), path, color=colour, ls=style, lw=1.8, marker="o",
+                    ms=3, label=f"{label} ({path[-1]:+.2f}%)")
+        crash = days.index("2025-09-22") + 1
+        ax.axvline(crash, color=MUTED, lw=0.8, ls="--")
+        ax.text(crash + 0.1, ax.get_ylim()[1], " 09-22", va="top", fontsize=7, color=MUTED)
+        ax.axhline(0, color=MUTED, lw=0.6)
+        ax.set_title(title)
+        ax.set_xlabel("held-out session (2025-09-15 → 09-25)")
+        ax.legend(fontsize=7, loc="lower left")
+    axes[0].set_ylabel("cumulative return, % of book")
+    out = REPO / "docs" / "assets" / "partc"
+    out.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out / "track-record.png", dpi=150)
+    plt.close(fig)
+    print(f"wrote {out / 'track-record.png'}")
+
+
+FIGURES = {"grid-heatmaps": grid_heatmaps, "track-record": track_record, "frontier": frontier,
+           "fill-target": fill_target, "heldout": heldout, "train-vs-test": train_vs_test,
+           "search-curves": search_curves}
 
 
 def main() -> None:

@@ -21,6 +21,32 @@ Lab notebook:
 
 ---
 
+**Contents**
+
+- [1. The task](#1-the-task)
+- [2. The goal, and the objection it answers](#2-the-goal-and-the-objection-it-answers)
+- [3. The five strategies, in one set of units](#3-the-five-strategies-in-one-set-of-units)
+  - [3.1 What they share](#31-what-they-share)
+  - [3.2 Where each one gets its numbers](#32-where-each-one-gets-its-numbers)
+  - [3.3 Everything in basis points](#33-everything-in-basis-points)
+- [4. The data](#4-the-data)
+  - [4.1 Widening the split, not re-picking it](#41-widening-the-split-not-re-picking-it)
+  - [4.2 What tier the data is, and what that costs](#42-what-tier-the-data-is-and-what-that-costs)
+  - [4.3 The substitution APT and basis need](#43-the-substitution-apt-and-basis-need)
+- [5. How wide should the quotes be?](#5-how-wide-should-the-quotes-be)
+  - [5.1 From the tape](#51-from-the-tape)
+  - [5.2 From the simulator, and why the two disagree](#52-from-the-simulator-and-why-the-two-disagree)
+- [6. The RL modification](#6-the-rl-modification)
+  - [6.1 Recipe v2: what changed after v1 lost to its baseline](#61-recipe-v2-what-changed-after-v1-lost-to-its-baseline)
+- [7. Checks with known answers](#7-checks-with-known-answers)
+- [8. Results](#8-results)
+  - [8.1 How wide each asset has to be quoted](#81-how-wide-each-asset-has-to-be-quoted)
+  - [8.2 Widening the spread is worth a lot](#82-widening-the-spread-is-worth-a-lot)
+  - [8.3 More orders in the grid does nothing](#83-more-orders-in-the-grid-does-nothing)
+  - [8.4 What RL adds on top: v1 never, v2 sometimes](#84-what-rl-adds-on-top-v1-never-v2-sometimes)
+  - [8.5 Does the policy respond to the alpha signal? (C5's second item)](#85-does-the-policy-respond-to-the-alpha-signal-c5s-second-item)
+- [9. Where these items come from](#9-where-these-items-come-from)
+
 ## 1. The task
 
 Not a ladder phase. This one comes from a direct request after C3 landed:

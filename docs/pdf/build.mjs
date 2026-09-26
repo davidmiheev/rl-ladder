@@ -72,7 +72,12 @@ function renderer() {
     delimiters: "dollars",
     katexOptions: { throwOnError: false, strict: "ignore", output: "html" },
   });
-  md.use(anchor, { slugify: (s) => s.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") });
+  // GitHub's heading slugs, so a contents list works on GitHub and in the PDF:
+  // lowercase, drop everything but word characters, spaces and hyphens, then
+  // spaces to hyphens ("3.1 What they share" -> "31-what-they-share").
+  md.use(anchor, {
+    slugify: (s) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}_\- ]/gu, "").replace(/ /g, "-"),
+  });
 
   // Links: another writeup becomes its PDF; anything else in the repo
   // becomes a GitHub link, since a relative path is dead inside a PDF.

@@ -775,6 +775,8 @@ abstractions is a good proxy for the survey's unifying framework
 
 # Part C — Quant Research: Market-Making Parameter RL
 
+Results so far, in one page: [`writeups/c0-part-c-overview.md`](writeups/c0-part-c-overview.md).
+
 hftbacktest as the environment (Rust-backed, replays real order-book data). CPU
 is enough for calibration; a small GPU helps once you are running many parallel
 episodes for PPO/GRPO-style rollouts.
