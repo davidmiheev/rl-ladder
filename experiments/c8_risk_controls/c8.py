@@ -23,6 +23,8 @@ Stages, each on top of the previous stage's choice per (strategy, asset):
     D  combination      greedy forward selection over the best of each family
     E  stress           maker fee without the rebate, latency, queue model,
                         order size, parameter neighbourhood
+    breadth             the seven other assets on the same month split:
+                        floor x markout kappa per strategy (skew at preset)
 
     python experiments/c8_risk_controls/c8.py run --stage A --shard 0/3
     python experiments/c8_risk_controls/c8.py status
@@ -49,7 +51,9 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "experiments" / "c6_strategy_zoo"))
 sys.path.insert(0, str(REPO / "experiments" / "c4_ppo_grpo"))
 
+import assets  # noqa: E402
 import grid_search  # noqa: E402
+import strategies  # noqa: E402
 
 CACHE = REPO / "runs" / "c8" / "days"
 
@@ -75,6 +79,19 @@ FLOOR_MULTS = (1.0, 1.5, 2.0)
 KAPPAS = (0.0, 1.0, 2.0, 4.0)
 SKEW_MULTS = (1.0, 2.0)
 MIN_FILLS = grid_search.MIN_FILLS
+
+#: The breadth tier: every other asset C6 measured, on the full month split.
+BREADTH = ("xrpusdt", "suiusdc", "suiusdt", "enausdc", "enausdt", "avaxusdc", "bnbusdc")
+BREADTH_PAIRS = tuple(
+    (strategy, symbol)
+    for symbol in BREADTH if symbol in os.environ.get("C8_SYMBOLS", symbol).split(",")
+    for strategy in ("glft", "hfgrid", "obi")
+    + (("apt", "basis") if symbol in ("suiusdc", "enausdc") else ())
+)
+#: C7 measured the sigma estimator's variance bias on ETHUSDC and XRPUSDC
+#: only (training days, x1.45 and x1.44); the breadth assets get their mean,
+#: transferred rather than measured, and labelled so.
+TRANSFER_VOL_SCALE = 1.445
 
 #: Stress variants: what each changes, applied to a chosen configuration.
 STRESS = {
@@ -120,6 +137,19 @@ def score(per_day: list[dict]) -> dict:
 def stage_a(strategy: str, symbol: str) -> list[dict]:
     return [config(f"{strategy}-wide", symbol, grid_search.point_sets(strategy, symbol, f, k, s))
             for f, k, s in itertools.product(FLOOR_MULTS, KAPPAS, SKEW_MULTS)]
+
+
+def breadth_grid(strategy: str, symbol: str) -> list[dict]:
+    assets.ensure_registered(symbol)
+    kwargs = {"beta": 1.0} if strategy == "apt" else {}
+    base = strategies.describe(strategies.build(f"{strategy}-wide", symbol, **kwargs))
+    out = []
+    for f, k in itertools.product(FLOOR_MULTS, KAPPAS):
+        sets = {"half_spread_bp": base["half_spread_bp"] * f, "markout_kappa": k}
+        if grid_search.sigma_users(strategy):
+            sets["vol_scale"] = TRANSFER_VOL_SCALE
+        out.append(config(f"{strategy}-wide", symbol, sets))
+    return out
 
 
 def choose(cfgs: list[dict], days: list[str] = TRAIN) -> dict | None:
@@ -267,6 +297,9 @@ def final_choices(strategy: str, symbol: str) -> dict[str, dict]:
 
 def jobs_for(stage: str) -> list[tuple[dict, list[str]]]:
     jobs = []
+    if stage == "breadth":
+        return [(c, DAYS) for strategy, symbol in BREADTH_PAIRS
+                for c in breadth_grid(strategy, symbol)]
     for strategy, symbol in PAIRS:
         if stage == "A":
             jobs += [(c, DAYS) for c in stage_a(strategy, symbol)]
@@ -347,7 +380,7 @@ def cmd_run(stage: str, shard: str) -> None:
 
 
 def cmd_status() -> None:
-    for stage in ("A", "B", "C", "D", "D-test", "E"):
+    for stage in ("A", "B", "C", "D", "D-test", "E", "breadth"):
         print(f"{stage:7s} pending {len(pending_units(stage))}")
 
 
@@ -356,7 +389,8 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run")
-    run.add_argument("--stage", required=True, choices=["A", "B", "C", "D", "D-test", "E"])
+    run.add_argument("--stage", required=True,
+                     choices=["A", "B", "C", "D", "D-test", "E", "breadth"])
     run.add_argument("--shard", default="0/1")
     sub.add_parser("status")
     args = parser.parse_args()
