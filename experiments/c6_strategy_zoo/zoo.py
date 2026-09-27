@@ -58,6 +58,7 @@ from pathlib import Path
 
 import numpy as np
 from hftbacktest import BUY, BUY_EVENT, GTX, LIMIT, SELL
+from hftbacktest.order import IOC
 from numba import njit
 from numba.typed import Dict
 
@@ -80,8 +81,12 @@ STRATEGY_NAMES = {v: k for k, v in STRATEGY_IDS.items()}
     Z_DEEPBIDQ, Z_DEEPASKQ, Z_HALF_PX, Z_SKEW_PX, Z_SIGNAL_PX, Z_FAIR_PX,
     Z_DATA_I, Z_REF_A, Z_REF_B, Z_OBI_SUM, Z_OBI_SUMSQ, Z_OBI_N, Z_OBI_RAW,
     Z_ALPHA, Z_ORDER_QTY, Z_NORM_POS, Z_TOX,
-) = range(26)
-STATE_SIZE = 26
+    # C8's risk controls, denoising and quoting ideas; all idle at defaults.
+    Z_TOX_BUY, Z_TOX_SELL, Z_VAR_FAST, Z_VAR_SLOW, Z_FLOW_S, Z_FLOW_A,
+    Z_FLOW_A_SLOW, Z_HALT_UNTIL, Z_HALT_SIDE, Z_PEAK_PNL, Z_LOSS_HALT_UNTIL,
+    Z_SIG_S, Z_MOM, Z_BID_ANCHOR, Z_ASK_ANCHOR, Z_LAST_FLATTEN,
+) = range(42)
+STATE_SIZE = 42
 
 #: Slots in the `params` vector, which carries the union of every strategy's
 #: knobs.  A vector rather than a dozen keyword arguments because numba
@@ -94,8 +99,13 @@ STATE_SIZE = 26
     P_OBI_DEPTH, P_OBI_WINDOW, P_ROI_LB_TICK, P_ROI_UB_TICK,
     P_VOL_SCALE, P_HAR_B0, P_HAR_B1, P_HAR_B2, P_HAR_B3,
     P_MARKOUT_KAPPA, P_MARKOUT_STEPS, P_MARKOUT_HALFLIFE,
-) = range(25)
-PARAM_SIZE = 25
+    P_CB_MODE, P_CB_VOL, P_CB_FLOW, P_CB_FAST_HL, P_CB_COOLDOWN,
+    P_LOSS_LIMIT_BP, P_LOSS_MODE, P_LOSS_COOLDOWN, P_BOOK_DOLLAR,
+    P_SIGNAL_HL, P_ALPHA_CLIP, P_MOM_COEF, P_MOM_HL,
+    P_MARKOUT_SIDED, P_REQUOTE_STEPS, P_TOX_SIZE, P_INV_FLATTEN,
+    P_TOD0, P_TOD1, P_TOD2, P_TOD3, P_TOD4, P_TOD5,
+) = range(48)
+PARAM_SIZE = 48
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
@@ -104,7 +114,19 @@ PARAM_NAMES = (
     "obi_depth", "obi_window", "roi_lb_tick", "roi_ub_tick",
     "vol_scale", "har_b0", "har_b1", "har_b2", "har_b3",
     "markout_kappa", "markout_steps", "markout_halflife",
+    "cb_mode", "cb_vol", "cb_flow", "cb_fast_hl", "cb_cooldown",
+    "loss_limit_bp", "loss_mode", "loss_cooldown", "book_dollar",
+    "signal_hl", "alpha_clip", "mom_coef", "mom_hl",
+    "markout_sided", "requote_steps", "tox_size", "inv_flatten",
+    "tod0", "tod1", "tod2", "tod3", "tod4", "tod5",
 )
+
+#: Half-life, in quoting steps, of the slow averages the circuit breaker
+#: compares its fast ones against: thirty minutes at 100 ms.
+CB_SLOW_HL = 18_000.0
+#: No breaker decision before this many steps (ten minutes): the slow
+#: averages need data before a ratio against them means anything.
+CB_WARMUP = 6_000
 
 #: Price levels each side that the deep-imbalance feature sums over, as in C2.
 DEPTH_LEVELS = 5
@@ -121,6 +143,9 @@ out_dtype = np.dtype(
         ("k", "f8"),
         ("position", "f8"),
         ("mid", "f8"),
+        # 0 quoting normally; 1 breaker, both sides; 2 breaker, one side;
+        # 3 loss limit (reduce-only).
+        ("paused", "f8"),
     ]
 )
 
@@ -205,6 +230,34 @@ def quote_once(
     mid_price_tick = (best_bid_tick + best_ask_tick) / 2.0 if two_sided else np.nan
     state[Z_MID] = mid_price_tick
     buf_midchg[t] = mid_price_tick - state[Z_PREV_MID]
+
+    # C8: fast and slow exponential averages of squared mid changes and of
+    # signed and absolute aggressive flow, for the circuit breaker. Averages,
+    # not raw per-step values, so that one large print does not trip it.
+    if params[P_CB_MODE] > 0.0:
+        a_fast = 1.0 - 0.5 ** (1.0 / max(params[P_CB_FAST_HL], 1.0))
+        a_slow = 1.0 - 0.5 ** (1.0 / CB_SLOW_HL)
+        move = buf_midchg[t]
+        if np.isfinite(move):
+            state[Z_VAR_FAST] += a_fast * (move * move - state[Z_VAR_FAST])
+            state[Z_VAR_SLOW] += a_slow * (move * move - state[Z_VAR_SLOW])
+        state[Z_FLOW_S] += a_fast * (signed_flow - state[Z_FLOW_S])
+        state[Z_FLOW_A] += a_fast * (abs(signed_flow) - state[Z_FLOW_A])
+        state[Z_FLOW_A_SLOW] += a_slow * (abs(signed_flow) - state[Z_FLOW_A_SLOW])
+        if t >= CB_WARMUP:
+            vol_trip = (params[P_CB_VOL] > 0.0 and state[Z_VAR_SLOW] > 0.0
+                        and state[Z_VAR_FAST] > params[P_CB_VOL] ** 2 * state[Z_VAR_SLOW])
+            imbalance = state[Z_FLOW_S] / state[Z_FLOW_A] if state[Z_FLOW_A] > 0.0 else 0.0
+            flow_trip = (params[P_CB_FLOW] > 0.0 and abs(imbalance) > params[P_CB_FLOW]
+                         and state[Z_FLOW_A] > state[Z_FLOW_A_SLOW])
+            if vol_trip or flow_trip:
+                state[Z_HALT_UNTIL] = t + params[P_CB_COOLDOWN]
+                # One-sided mode pulls the side the flow is hitting; a
+                # volatility trip has no side and pulls both.
+                state[Z_HALT_SIDE] = 0.0 if vol_trip else np.sign(imbalance)
+    if params[P_MOM_COEF] != 0.0 and np.isfinite(buf_midchg[t]):
+        a_mom = 1.0 - 0.5 ** (1.0 / max(params[P_MOM_HL], 1.0))
+        state[Z_MOM] += a_mom * (buf_midchg[t] * tick_size - state[Z_MOM])
 
     bid_qty = np.nan
     ask_qty = np.nan
@@ -308,6 +361,8 @@ def quote_once(
             mean = state[Z_OBI_SUM] / n
             var = state[Z_OBI_SUMSQ] / n - mean * mean
             alpha = (raw - mean) / np.sqrt(var) if var > 0.0 else np.nan
+        if params[P_ALPHA_CLIP] > 0.0 and np.isfinite(alpha):
+            alpha = min(max(alpha, -params[P_ALPHA_CLIP]), params[P_ALPHA_CLIP])
         state[Z_ALPHA] = alpha
         if np.isfinite(alpha):
             signal_px = params[P_ALPHA_BP] * 1e-4 * mid_price * alpha
@@ -334,6 +389,17 @@ def quote_once(
             fair = state[Z_REF_A] + state[Z_REF_B]
         if np.isfinite(fair):
             signal_px = fair - mid_price
+    # C8 denoising: an exponential average of the strategy's signal, in
+    # price units, `signal_hl` steps long; zero keeps the raw signal.
+    if params[P_SIGNAL_HL] > 0.0:
+        a_sig = 1.0 - 0.5 ** (1.0 / params[P_SIGNAL_HL])
+        state[Z_SIG_S] += a_sig * (signal_px - state[Z_SIG_S])
+        signal_px = state[Z_SIG_S]
+    # C8: short-horizon momentum. C7 measured a positive lag-1
+    # autocorrelation of 100 ms mid changes; this leans the fair price along
+    # the recent drift, `mom_coef` times the average change over `mom_hl`.
+    if params[P_MOM_COEF] != 0.0:
+        signal_px += params[P_MOM_COEF] * state[Z_MOM] * params[P_MOM_HL]
     state[Z_SIGNAL_PX] = signal_px
     fair_px = mid_price + alpha_mult * signal_px
     state[Z_FAIR_PX] = fair_px
@@ -357,6 +423,12 @@ def quote_once(
         model_half_px = state[Z_VOL] * params[P_VOL_TO_HALF_SPREAD] * tick_size
 
     floor_half_px = params[P_HALF_SPREAD_BP] * 1e-4 * mid_price
+    # C8: a time-of-day floor schedule, one multiplier per four-hour UTC
+    # block; zero means 1.
+    hour_block = int((hbt.current_timestamp // 3_600_000_000_000) % 24) // 4
+    tod = params[P_TOD0 + hour_block]
+    if tod > 0.0:
+        floor_half_px *= tod
     half_px = spread_mult * max(model_half_px, floor_half_px)
 
     # C7's markout rule: each fill is marked `markout_steps` later against the
@@ -365,7 +437,12 @@ def quote_once(
     # average over fills, `markout_halflife` fills long, is added to the half
     # spread times `markout_kappa`: quote wider for as long as recent fills
     # have been adversely selected. Zero kappa is C6's quoter exactly.
-    if params[P_MARKOUT_KAPPA] > 0.0:
+    # C8: `markout_sided` keeps one average per side (fills on our bids,
+    # fills on our asks) and widens each side by its own; `tox_size` shrinks
+    # the order size as toxicity rises instead of, or as well as, widening.
+    half_bid_px = half_px
+    half_ask_px = half_px
+    if params[P_MARKOUT_KAPPA] > 0.0 or params[P_TOX_SIZE] > 0.0:
         lag = int(params[P_MARKOUT_STEPS])
         if t > lag:
             filled = out[t - lag].position - out[t - lag - 1].position
@@ -375,7 +452,18 @@ def quote_once(
                 weight = abs(filled) / order_qty
                 step = 1.0 - 0.5 ** (weight / params[P_MARKOUT_HALFLIFE])
                 state[Z_TOX] += step * (loss_bp - state[Z_TOX])
-        half_px += params[P_MARKOUT_KAPPA] * max(state[Z_TOX], 0.0) * 1e-4 * mid_price
+                side = Z_TOX_BUY if filled > 0.0 else Z_TOX_SELL
+                state[side] += step * (loss_bp - state[side])
+        if params[P_MARKOUT_SIDED] > 0.0:
+            half_bid_px += params[P_MARKOUT_KAPPA] * max(state[Z_TOX_BUY], 0.0) * 1e-4 * mid_price
+            half_ask_px += params[P_MARKOUT_KAPPA] * max(state[Z_TOX_SELL], 0.0) * 1e-4 * mid_price
+        else:
+            half_px += params[P_MARKOUT_KAPPA] * max(state[Z_TOX], 0.0) * 1e-4 * mid_price
+            half_bid_px = half_px
+            half_ask_px = half_px
+        if params[P_TOX_SIZE] > 0.0:
+            shrink = 1.0 / (1.0 + params[P_TOX_SIZE] * max(state[Z_TOX], 0.0))
+            order_qty = max(round(order_qty * shrink / lot_size) * lot_size, lot_size)
     if strat == HFGRID:
         # The notebook skews hfgrid multiplicatively on the half spread, so its
         # skew scales with volatility too; keep that, but express the result in
@@ -388,8 +476,8 @@ def quote_once(
     reservation_px = fair_px - skew_px * norm_pos
 
     if two_sided and np.isfinite(reservation_px) and np.isfinite(half_px):
-        bid_price = min(reservation_px - half_px, best_bid_tick * tick_size)
-        ask_price = max(reservation_px + half_px, best_ask_tick * tick_size)
+        bid_price = min(reservation_px - half_bid_px, best_bid_tick * tick_size)
+        ask_price = max(reservation_px + half_ask_px, best_ask_tick * tick_size)
     else:
         bid_price = np.nan
         ask_price = np.nan
@@ -401,6 +489,60 @@ def quote_once(
     grid_interval = np.round(grid_interval / tick_size) * tick_size
     bid_price = np.floor(bid_price / grid_interval) * grid_interval
     ask_price = np.ceil(ask_price / grid_interval) * grid_interval
+
+    # C8: requote hysteresis. Keep the previous quote while the new one is
+    # within `requote_steps` grid steps of it, so the order keeps its queue
+    # position instead of being cancelled and re-queued for a one-step move.
+    # In grid steps, not ticks: quotes already move only in whole steps.
+    if params[P_REQUOTE_STEPS] > 0.0:
+        band = (params[P_REQUOTE_STEPS] + 0.5) * grid_interval
+        if (np.isfinite(bid_price) and np.isfinite(state[Z_BID_ANCHOR])
+                and abs(bid_price - state[Z_BID_ANCHOR]) < band
+                and state[Z_BID_ANCHOR] <= best_bid_tick * tick_size):
+            bid_price = state[Z_BID_ANCHOR]
+        if (np.isfinite(ask_price) and np.isfinite(state[Z_ASK_ANCHOR])
+                and abs(ask_price - state[Z_ASK_ANCHOR]) < band
+                and state[Z_ASK_ANCHOR] >= best_ask_tick * tick_size):
+            ask_price = state[Z_ASK_ANCHOR]
+        state[Z_BID_ANCHOR] = bid_price
+        state[Z_ASK_ANCHOR] = ask_price
+
+    # C8: circuit breaker and loss limit. Both only ever remove quotes.
+    paused = 0.0
+    if params[P_CB_MODE] > 0.0 and t < state[Z_HALT_UNTIL]:
+        side = state[Z_HALT_SIDE]
+        if params[P_CB_MODE] == 1.0 or side == 0.0:
+            bid_price = np.nan
+            ask_price = np.nan
+            paused = 1.0
+        elif side > 0.0:
+            ask_price = np.nan  # buyers are lifting offers: stop selling to them
+            paused = 2.0
+        else:
+            bid_price = np.nan
+            paused = 2.0
+    if params[P_LOSS_LIMIT_BP] > 0.0:
+        values = hbt.state_values(0)
+        pnl_bp = (values.balance + position * mid_price - values.fee) / params[P_BOOK_DOLLAR] * 1e4
+        if params[P_LOSS_MODE] == 1.0:
+            # A hard daily stop: below the limit, reduce-only until the end.
+            if pnl_bp < -params[P_LOSS_LIMIT_BP]:
+                state[Z_LOSS_HALT_UNTIL] = np.inf
+        else:
+            # A trailing stop from the session's peak, for `loss_cooldown`
+            # steps, after which the peak restarts from where PnL stands.
+            if t >= state[Z_LOSS_HALT_UNTIL] and state[Z_LOSS_HALT_UNTIL] > 0.0:
+                state[Z_PEAK_PNL] = pnl_bp
+                state[Z_LOSS_HALT_UNTIL] = 0.0
+            state[Z_PEAK_PNL] = max(state[Z_PEAK_PNL], pnl_bp)
+            if pnl_bp < state[Z_PEAK_PNL] - params[P_LOSS_LIMIT_BP] and state[Z_LOSS_HALT_UNTIL] == 0.0:
+                state[Z_LOSS_HALT_UNTIL] = t + params[P_LOSS_COOLDOWN]
+        if t < state[Z_LOSS_HALT_UNTIL]:
+            if position >= 0.0:
+                bid_price = np.nan
+            if position <= 0.0:
+                ask_price = np.nan
+            paused = 3.0
 
     # ------------------------------------------------------------- quoting
     grid_num = int(params[P_GRID_NUM])
@@ -434,6 +576,21 @@ def quote_once(
         if order_id not in orders:
             hbt.submit_sell_order(0, order_id, order_price, order_qty, GTX, LIMIT, False)
 
+    # C8: cut inventory past `inv_flatten` of the cap back to half of it
+    # with an immediate-or-cancel order at the opposite touch, paying the
+    # taker fee, at most once a second. Submitted after the quote refresh so
+    # the cancel pass above cannot catch it in flight.
+    if (params[P_INV_FLATTEN] > 0.0 and two_sided and abs(norm_pos) > params[P_INV_FLATTEN]
+            and t - state[Z_LAST_FLATTEN] >= 10):
+        excess = (abs(norm_pos) - 0.5 * params[P_INV_FLATTEN]) * params[P_MAX_POSITION_DOLLAR] / mid_price
+        qty = max(round(excess / lot_size) * lot_size, lot_size)
+        flatten_id = np.uint64(1 << 40) + np.uint64(t)
+        if position > 0.0:
+            hbt.submit_sell_order(0, flatten_id, best_bid_tick * tick_size, qty, IOC, LIMIT, False)
+        else:
+            hbt.submit_buy_order(0, flatten_id, best_ask_tick * tick_size, qty, IOC, LIMIT, False)
+        state[Z_LAST_FLATTEN] = t
+
     out[t].half_spread_bp = half_px / mid_price * 1e4
     out[t].skew_bp = skew_px / mid_price * 1e4
     out[t].signal_bp = alpha_mult * signal_px / mid_price * 1e4
@@ -442,6 +599,7 @@ def quote_once(
     out[t].k = state[Z_K]
     out[t].position = position
     out[t].mid = mid_price
+    out[t].paused = paused
 
     state[Z_T] = t + 1
     return 0

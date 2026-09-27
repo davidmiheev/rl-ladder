@@ -94,8 +94,14 @@ def run_day(
             params[zoo.PARAM_NAMES.index(name)] = value
 
     table = table_for(strategy, symbol, date)
-    config.ensure_latency(date)
-    hbt = config.build_backtest(date, queue_model=overrides.get("queue_model", config.DEFAULT_QUEUE_MODEL))
+    # C8's stress tests: order latency as a multiple of the calibrated
+    # model, and the maker fee (negative is the rebate the default assumes).
+    latency_mul = float(overrides.get("latency_mul", 1.0))
+    config.ensure_latency(date, config.MUL_ENTRY * latency_mul, config.MUL_RESP * latency_mul)
+    hbt = config.build_backtest(
+        date, queue_model=overrides.get("queue_model", config.DEFAULT_QUEUE_MODEL),
+        maker_fee=float(overrides.get("maker_fee", config.MAKER_FEE)), latency_mul=latency_mul,
+    )
     recorder = Recorder(1, 1_000_000)
     interval_ns = int(overrides.get("interval_ns", strategies.INTERVAL_NS))
     record_every = max(1, round(strategies.RECORD_EVERY_NS / interval_ns))
@@ -144,6 +150,9 @@ def quoter_stats(out: np.ndarray, interval_ns: int, max_position_dollar: float) 
         "max_abs_norm_pos": float(
             np.nanmax(np.abs(out["position"] * out["mid"])) / max_position_dollar
         ),
+        # C8: share of the session a circuit breaker or loss limit held
+        # quotes back (either side).
+        "paused_frac": float(np.mean(out["paused"] > 0)),
         "steps": int(len(out)),
         "hours": float(len(out) * interval_ns / 3.6e12),
     }

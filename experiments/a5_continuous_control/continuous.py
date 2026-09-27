@@ -43,6 +43,7 @@ class Config:
     actor_hidden: tuple[int, ...] | None = None
     critic_hidden: tuple[int, ...] | None = None
     critic_arch: str = "mlp"            # mlp | resln
+    device: str = "cpu"                 # where the networks live and update
 
 
 def mlp(sizes: tuple[int, ...], out_dim: int, out_activation=None) -> nn.Sequential:
@@ -160,9 +161,9 @@ class ReplayBuffer:
         self.position = (self.position + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self, batch_size: int, rng: np.random.Generator):
+    def sample(self, batch_size: int, rng: np.random.Generator, device: str = "cpu"):
         idx = rng.integers(self.size, size=batch_size)
-        return tuple(torch.as_tensor(x[idx]) for x in
+        return tuple(torch.as_tensor(x[idx], device=device) for x in
                      (self.obs, self.actions, self.rewards, self.next_obs, self.terminated))
 
 
@@ -199,6 +200,8 @@ def build_agent(config: Config, obs_dim: int, act_dim: int, act_limit: float) ->
                            config.critic_arch)
     actor_target.load_state_dict(actor.state_dict())
     critic_target.load_state_dict(critic.state_dict())
+    for net in (actor, critic, actor_target, critic_target):
+        net.to(config.device)
     return Agent(
         actor=actor,
         critic=critic,
@@ -214,11 +217,11 @@ def build_agent(config: Config, obs_dim: int, act_dim: int, act_limit: float) ->
 def select_action(agent: Agent, obs, config: Config, rng: np.random.Generator, act_dim: int):
     """The behaviour policy: SAC samples, DDPG and TD3 add Gaussian noise."""
     with torch.no_grad():
-        obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=config.device).unsqueeze(0)
         if agent.is_sac:
             action, _ = agent.actor(obs_t)
-            return action.squeeze(0).numpy()
-        action = agent.actor(obs_t).squeeze(0).numpy()
+            return action.squeeze(0).cpu().numpy()
+        action = agent.actor(obs_t).squeeze(0).cpu().numpy()
     noisy = action + config.exploration_noise * agent.act_limit * rng.normal(size=act_dim)
     return np.clip(noisy, -agent.act_limit, agent.act_limit)
 

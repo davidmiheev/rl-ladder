@@ -82,6 +82,8 @@ def _base() -> np.ndarray:
     params[zoo.P_VOL_SCALE] = 1.0
     params[zoo.P_MARKOUT_STEPS] = 50  # 5 s at the 100 ms quoting interval
     params[zoo.P_MARKOUT_HALFLIFE] = 20.0  # fills
+    # C8's loss limit measures PnL against the book the statistics use.
+    params[zoo.P_BOOK_DOLLAR] = BOOK_SIZE
     return params
 
 

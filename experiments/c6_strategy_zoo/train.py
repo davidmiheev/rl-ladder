@@ -186,7 +186,8 @@ def episode(env, agent, config, buffer, rng, act_dim, baseline, mask, explore,
         inventories.append(info["inventory"])
 
         if buffer.size >= updates_from and step % update_every == 0:
-            losses.append(update_step(config, agent, buffer.sample(config.batch_size, rng), step))
+            batch = buffer.sample(config.batch_size, rng, config.device)
+            losses.append(update_step(config, agent, batch, step))
 
     multipliers = np.mean([env.to_multipliers(a) for a in actions], axis=0)
     summary = {
@@ -220,6 +221,7 @@ def main() -> None:
     parser.add_argument("--participation", default="forced", choices=["free", "forced"])
     parser.add_argument("--max-steps", type=int, default=0, help="smoke tests only")
     parser.add_argument("--recipe", default="v1", choices=sorted(RECIPES))
+    parser.add_argument("--device", default="cpu", help="cpu or cuda; cuda pays off for v2-resln")
     args = parser.parse_args()
     recipe = dict(RECIPES[args.recipe])
     args.explore_episodes = recipe["explore_episodes"]
@@ -246,7 +248,7 @@ def main() -> None:
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo],
                     actor_hidden=recipe.get("actor_hidden"),
                     critic_hidden=recipe.get("critic_hidden"),
-                    critic_arch=recipe.get("critic_arch", "mlp"))
+                    critic_arch=recipe.get("critic_arch", "mlp"), device=args.device)
     env = ZooEnv(date=days[0], **env_kwargs)
     obs_dim = int(np.prod(env.observation_space.shape))
     baseline = env.baseline_action()
@@ -300,7 +302,8 @@ def main() -> None:
                   f"{summary['seconds']:6.0f}", flush=True)
             index += 1
 
-    torch.save({"actor": agent.actor.state_dict(), "config": vars(args),
+    torch.save({"actor": {k: v.cpu() for k, v in agent.actor.state_dict().items()},
+                "config": vars(args),
                 "baseline": baseline, "mask": mask, "algo": args.algo,
                 "act_dim": act_dim, "participation": args.participation,
                 "strategy": args.strategy, "symbol": args.symbol,
