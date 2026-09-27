@@ -129,6 +129,12 @@ RECIPES = {
     "v2-w256-utd4": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
                          deviation_penalty=0.001, explore_episodes=0, participation="residual",
                          actor_hidden=(256, 256), critic_hidden=(256, 256), update_every=2),
+    # C8: RL on top of the markout rule. The baseline is whatever `--set`
+    # makes it (a C8 choice: floor, kappa, skew, vol scale), and the policy
+    # also sees the rule's running toxicity.
+    "v2-mk": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
+                  deviation_penalty=0.001, explore_episodes=0, participation="residual",
+                  toxicity_feature=True),
     "v2-resln": dict(step_seconds=5, residual=2.0, reward="counterfactual", cf_coef=0.5,
                      deviation_penalty=0.001, explore_episodes=0, participation="residual",
                      actor_hidden=(256, 256), critic_hidden=(256, 256), critic_arch="resln",
@@ -150,8 +156,13 @@ def zero_final_layer(actor) -> None:
         final.bias.zero_()
 
 
-def training_days(symbol: str) -> list[str]:
+def training_days(symbol: str, train_set: str = "c6") -> list[str]:
     assets.ensure_registered(symbol)
+    if train_set == "c8":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c8_risk_controls"))
+        import c8
+
+        return c8.TRAIN
     return assets.train_days(symbol)
 
 
@@ -222,6 +233,10 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=0, help="smoke tests only")
     parser.add_argument("--recipe", default="v1", choices=sorted(RECIPES))
     parser.add_argument("--device", default="cpu", help="cpu or cuda; cuda pays off for v2-resln")
+    parser.add_argument("--train-set", default="c6", choices=["c6", "c8"],
+                        help="c8: C8's 24 training sessions (08-26 to 09-18)")
+    parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
+                        help="quoter parameter overrides for the baseline, e.g. markout_kappa=1")
     args = parser.parse_args()
     recipe = dict(RECIPES[args.recipe])
     args.explore_episodes = recipe["explore_episodes"]
@@ -232,8 +247,11 @@ def main() -> None:
     torch.manual_seed(args.seed)
     rng = np.random.default_rng(args.seed)
 
-    days = training_days(args.symbol)
+    days = training_days(args.symbol, args.train_set)
     overrides = {"grid_num": args.grid_num} if args.grid_num else {}
+    for item in args.set:
+        name, _, value = item.partition("=")
+        overrides[name] = float(value)
     ranges = ZooEnv.FORCED_PARTICIPATION if args.participation == "forced" else None
     env_kwargs = dict(strategy=args.strategy, symbol=args.symbol, max_steps=args.max_steps,
                       action_ranges=ranges, overrides=overrides, beta=args.beta,
@@ -242,7 +260,10 @@ def main() -> None:
                       cf_coef=recipe["cf_coef"],
                       deviation_penalty=recipe["deviation_penalty"],
                       extra_features=recipe.get("extra_features", False),
-                      inventory_weight=recipe.get("inventory_weight", 1.0))
+                      inventory_weight=recipe.get("inventory_weight", 1.0),
+                      toxicity_feature=recipe.get("toxicity_feature", False),
+                      # C8's training set includes 09-15..09-18, held out under C6's split.
+                      allow_held_out=args.train_set == "c8")
 
     config = Config(buffer_size=500_000, learning_starts=0,
                     hidden=(args.hidden, args.hidden), **ALGOS[args.algo],
@@ -263,6 +284,7 @@ def main() -> None:
     buffer = ReplayBuffer(config.buffer_size, obs_dim, act_dim)
 
     tag = f"{args.participation}-{args.learnable}" if args.recipe == "v1" else args.recipe
+    tag += "-c8" if args.train_set == "c8" else ""
     name = f"{args.strategy}-{args.symbol}-{args.algo}-{tag}-s{args.seed}"
     run = Run(phase="c6", name=name, config={
         "strategy": args.strategy, "symbol": args.symbol, "algo": args.algo, "seed": args.seed,

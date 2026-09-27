@@ -44,8 +44,13 @@ REPORTED = ["SR", "Sortino", "Return", "MaxDrawdown", "ReturnOverMDD",
             "ReturnOverTrade", "MaxPositionValue", "DailyNumberOfTrades"]
 
 
-def held_out_days(symbol: str) -> list[str]:
+def held_out_days(symbol: str, train_set: str = "c6") -> list[str]:
     assets.ensure_registered(symbol)
+    if train_set == "c8":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "c8_risk_controls"))
+        import c8
+
+        return c8.TEST
     return assets.test_days(symbol)
 
 
@@ -65,10 +70,14 @@ def load_policy(path: Path):
     strategy = blob.get("strategy", cfg["strategy"])
     symbol = blob.get("symbol", cfg["symbol"])
     overrides = {"grid_num": cfg["grid_num"]} if cfg.get("grid_num") else {}
+    for item in cfg.get("set", []):
+        name, _, value = item.partition("=")
+        overrides[name] = float(value)
     env = ZooEnv(date=train_days(symbol)[0], strategy=strategy, symbol=symbol,
                  overrides=overrides, beta=cfg.get("beta", 1.0),
                  residual=blob.get("recipe_params", {}).get("residual", 0.0),
-                 extra_features=blob.get("recipe_params", {}).get("extra_features", False))
+                 extra_features=blob.get("recipe_params", {}).get("extra_features", False),
+                 toxicity_feature=blob.get("recipe_params", {}).get("toxicity_feature", False))
     obs_dim = int(np.prod(env.observation_space.shape))
     env.close()
     # The actor's action space is the learnable multipliers only; pinned ones
@@ -92,6 +101,8 @@ def load_policy(path: Path):
         "step_seconds": params.get("step_seconds", 1),
         "residual": params.get("residual", 0.0),
         "extra_features": params.get("extra_features", False),
+        "toxicity_feature": params.get("toxicity_feature", False),
+        "train_set": cfg.get("train_set", "c6"),
         "agent": agent,
         "baseline": np.asarray(blob["baseline"], dtype=np.float32),
         "mask": list(blob["mask"]),
@@ -123,7 +134,8 @@ def run_session(date: str, policy: dict | None, strategy: str, symbol: str,
     env = ZooEnv(date=date, strategy=strategy, symbol=symbol, allow_held_out=True,
                  action_ranges=ranges, overrides=overrides, beta=beta,
                  step_interval_ns=int(step_seconds * 1e9), residual=residual,
-                 extra_features=extra_features)
+                 extra_features=extra_features,
+                 toxicity_feature=policy["toxicity_feature"] if policy else False)
     obs, _ = env.reset(seed=0)
     baseline_action = env.baseline_action()
     multipliers, inventories = [], []
@@ -193,7 +205,8 @@ def main() -> None:
         participation = policy["participation"]
         name = Path(args.policy).parent.name
 
-    days = held_out_days(symbol) if args.days == "test" else train_days(symbol)
+    train_set = policy["train_set"] if policy else "c6"
+    days = held_out_days(symbol, train_set) if args.days == "test" else train_days(symbol)
     run = Run(phase="c6-eval", name=args.tag or name, config={
         "policy": args.policy, "strategy": strategy, "symbol": symbol,
         "recipe": policy["recipe"] if policy else "baseline",

@@ -98,6 +98,8 @@ SCALE_SPREAD_TICKS = 4.0
 SCALE_HALF_SPREAD_BP = 4.0
 SCALE_SIGNAL_BP = 2.0
 SCALE_LOG_K = 2.0
+#: C8: the markout rule's average toxicity, in bp of adverse move per fill.
+SCALE_TOX_BP = 5.0
 
 
 @njit
@@ -191,6 +193,7 @@ class ZooEnv(gym.Env):
         cf_coef: float = 1.0,
         extra_features: bool = False,
         inventory_weight: float = 1.0,
+        toxicity_feature: bool = False,
     ) -> None:
         super().__init__()
         if reward_mode not in ("absolute", "counterfactual"):
@@ -258,7 +261,11 @@ class ZooEnv(gym.Env):
         self._baseline_trace = None
         self.action_space = spaces.Box(-1.0, 1.0, shape=(len(self.action_ranges),), dtype=np.float32)
         self.extra_features = bool(extra_features)
-        n_obs = len(FEATURES) + (len(EXTRA_FEATURES) if extra_features else 0)
+        # C8 (recipe v2-mk): the markout rule's running toxicity as one more
+        # input, so a policy on top of the rule can see what the rule sees.
+        self.toxicity_feature = bool(toxicity_feature)
+        n_obs = (len(FEATURES) + (len(EXTRA_FEATURES) if extra_features else 0)
+                 + int(self.toxicity_feature))
         self.observation_space = spaces.Box(-10.0, 10.0, shape=(n_obs,), dtype=np.float32)
         self._extra_ts = None
         self._extra = None
@@ -450,6 +457,8 @@ class ZooEnv(gym.Env):
             row = np.searchsorted(self._extra_ts, self._hbt.current_timestamp, side="right") - 1
             extra = self._extra[row] if row >= 0 else np.zeros(len(EXTRA_FEATURES), np.float32)
             obs = np.concatenate([obs, extra])
+        if self.toxicity_feature:
+            obs = np.append(obs, np.float32(np.tanh(state[zoo.Z_TOX] / SCALE_TOX_BP)))
         return np.clip(obs, -10.0, 10.0)
 
 
