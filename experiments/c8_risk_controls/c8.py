@@ -37,6 +37,7 @@ import gc
 import hashlib
 import itertools
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -65,7 +66,11 @@ TEST = _days("2025-09-19", "2025-09-25")
 DAYS = TRAIN + TEST
 CRASH = "2025-09-22"
 
-PAIRS = grid_search.PAIRS
+#: `C8_SYMBOLS=xrpusdc` restricts every stage to one asset, so two machines
+#: can each run the whole pipeline for their own assets: an asset's choices
+#: only ever read that asset's results.
+PAIRS = tuple(p for p in grid_search.PAIRS
+              if p[1] in os.environ.get("C8_SYMBOLS", p[1]).split(","))
 FLOOR_MULTS = (1.0, 1.5, 2.0)
 KAPPAS = (0.0, 1.0, 2.0, 4.0)
 SKEW_MULTS = (1.0, 2.0)
@@ -323,7 +328,13 @@ def cmd_run(stage: str, shard: str) -> None:
     index, count = (int(x) for x in shard.split("/"))
     units = pending_units(stage)[index::count]
     print(f"### stage {stage} shard {shard}: {len(units)} session replays", flush=True)
+    # `C8_DEADLINE` (epoch seconds): take no new session after it, so a
+    # time-limited host (a Kaggle session) finishes cleanly and keeps its cache.
+    deadline = float(os.environ.get("C8_DEADLINE", "inf"))
     for i, (cfg, date) in enumerate(units):
+        if time.time() > deadline:
+            print("### deadline reached", flush=True)
+            break
         start = time.time()
         try:
             run_one(cfg, date)
