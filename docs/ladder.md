@@ -1044,3 +1044,24 @@ tried.
 
 Writeup: [`writeups/c7-signals.md`](writeups/c7-signals.md).
 Lab notebook: [`../experiments/c7_signals/README.md`](../experiments/c7_signals/README.md).
+
+
+<a id="c8"></a>
+## C8. Risk controls, denoising and stress tests (added, not from the original ladder)
+
+Not one of the 59 items. C8 did the Part C follow-ups after C4 except the
+forward test: a circuit breaker, daily and trailing loss limits, stress tests
+of every configuration that made money, the breadth assets on seven held-out
+sessions, and RL on top of the markout rule — plus three denoisers and six
+new quoting ideas, each run through the full backtest. The month is re-split
+into 24 training and 7 held-out sessions.
+
+Its answer: OBI with the markout rule makes money held out on five of nine
+assets, and on SUIUSDC it survives removing the crash, the best session and
+the maker rebate, a 1 bp fee and 4× latency (+2.52% held out, +1.13% at a
+1 bp fee). XRP's gain is the crash session and ETH's the rebate. A circuit
+breaker helps the losing ETH strategies; no denoiser, combination of controls
+or RL policy improves OBI.
+
+Writeup: [`writeups/c8-risk-controls.md`](writeups/c8-risk-controls.md).
+Lab notebook: [`../experiments/c8_risk_controls/README.md`](../experiments/c8_risk_controls/README.md).

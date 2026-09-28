@@ -75,8 +75,55 @@ the order size; the floor ×0.8 and ×1.25; κ ×0.5 and ×2.
 
 ## Results
 
-To be filled in from `report.py` as the stages finish.
+Held-out cumulative return, % of book, over the seven sessions 09-19 to
+09-25; full tables and figures in the writeup (`report.py` prints them).
+
+**Stage A (grid on 24 training sessions) and stage D (greedy combination):**
+
+| asset | strategy | C7 markout | A: grid | D: final | D adds | fills/day (A) |
+| --- | --- | --- | --- | --- | --- | --- |
+| ETH | glft | −4.17 | −3.25 | −0.72 | breaker, markout over 50 fills, time of day | 27 |
+| ETH | hfgrid | −1.55 | −1.60 | −1.05 | time of day, daily loss limit 25 bp | 22 |
+| ETH | obi | +0.38 | +0.85 | +0.48 | inventory flatten 80% | 369 |
+| XRP | glft | −0.42 | −1.53 | −0.64 | toxicity sizing, per-side markout | 4 |
+| XRP | hfgrid | +1.44 | +2.02 | +2.02 | nothing | 1 |
+| XRP | obi | +4.31 | +2.84 | +1.49 | momentum, toxicity sizing, trailing loss | 106 |
+| XRP | apt | – | −2.09 | −2.09 | nothing | 0 |
+| XRP | basis | – | +0.98 | −2.40 | requote hysteresis, signal smoothing | 4 |
+
+**Stress tests of what makes money (stage E and breadth-E):**
+
+| configuration | held out | ex 09-22 | ex best day | fee 0 | fee +1 bp | fee +2 bp | latency ×4 | queue risk-averse | κ ×0.5 | fills/day |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUIUSDC obi | +2.52 | +1.77 | +1.52 | +2.05 | +1.13 | +0.21 | +1.30 | +2.46 | −0.90 | 175 |
+| XRPUSDC obi (A) | +2.84 | +0.09 | +0.09 | +2.61 | +2.14 | +1.68 | +1.17 | +2.27 | +3.57 | 106 |
+| XRPUSDT obi | +3.53 | +0.48 | +0.48 | +3.17 | +2.45 | +1.74 | +2.84 | +2.67 | +2.63 | 189 |
+| AVAXUSDC obi | +2.68 | +2.34 | −0.37 | +2.35 | +1.69 | +1.04 | +3.14 | +2.63 | – | 150 |
+| ETHUSDC obi (A) | +0.85 | +0.14 | +0.14 | +0.09 | −1.42 | −2.92 | −0.48 | +0.91 | −0.58 | 369 |
+| BNBUSDC glft | +1.72 | +1.53 | +1.23 | +0.75 | −1.17 | −3.05 | +1.71 | +1.53 | +1.56 | 489 |
+
+**RL on top of the markout rule (v2-mk, median of 5 seeds):** ETH glft −3.76
+(rule −3.25), ETH hfgrid −2.75 (−1.60), ETH obi −0.67 (+0.85), XRP obi +2.83
+(+2.84).
+
+**Walk-forward** (grid point re-chosen each session on all earlier ones, 21
+sessions): XRP obi +3.82 (14/21 up), ETH obi +1.14 (15/21).
 
 ## Findings
 
-To be filled in.
+- OBI with a wide per-asset floor and the markout rule is the only strategy
+  that makes money held out while trading: on five of nine assets.
+- SUIUSDC OBI is the one configuration that stays positive without the crash,
+  without its best session, without the rebate, with a 1 bp fee, at 4×
+  latency and under the pessimistic queue model. Halving κ breaks it.
+- XRP OBI (both quote currencies) is robust to costs and latency, but its
+  held-out gain is the 09-22 crash. ETH OBI's gain is the maker rebate.
+- The circuit breaker is the one control that pays on ETH (+0.9 to +2.8
+  points on all three strategies); it costs OBI XRP 2.3 points, which is the
+  crash session. Loss limits are mostly neutral.
+- None of the three denoisers (signal smoothing, alpha clipping, markout
+  window) improves any trading strategy on both training and held-out
+  sessions.
+- The greedy combination fixes losers and damages winners: more parameters
+  chosen on 24 sessions fit the training month.
+- RL on top of the markout rule never beats the rule.

@@ -9,7 +9,13 @@ the summary; each phase has its own writeup, linked in §4.
 > - **Best held-out result:** OBI on XRPUSDC with a markout-driven spread,
 >   **+4.91%** over eleven held-out sessions, **+1.38% without the crash day**,
 >   positive on **9 of 11** sessions at ~500 fills a day.
-> - **Everything on ETHUSDC still loses held out.** The best, the same rule on
+> - **Most robust held-out result:** OBI on SUIUSDC (C8, seven held-out
+>   sessions on a 24/7 split), **+2.52%** at 175 fills a day, and still
+>   positive without the crash (+1.77%), without its best session (+1.52%),
+>   without the maker rebate (+2.05%), with a 1 bp maker fee (+1.13%) and at
+>   4× order latency (+1.30%). XRP's OBI gain, by the same stress tests, is
+>   the crash session.
+> - **Everything on ETHUSDC still loses held out**, bar the rebate. The best, the same rule on
 >   OBI, is at −0.62%, against −6.40% for the widened baseline and −7.14% for
 >   the published parameters.
 > - **The two things that helped were both hand-written rules:** a wider,
@@ -17,7 +23,9 @@ the summary; each phase has its own writeup, linked in §4.
 > - **Learning did not beat them.** TD3 on C6's widened strategies (two recipes,
 >   five seeds), GRPO- and PPO-style parameter search, extra order-book and
 >   BTCUSDT inputs, fill targets, a reward that discounts inventory PnL and
->   networks up to 170 times larger all lose to the best fixed rule held out.
+>   networks up to 170 times larger all lose to the best fixed rule held out;
+>   so does RL on top of that rule (C8). A circuit breaker helps the losing
+>   strategies on ETH; extra controls chosen on training data hurt OBI.
 
 ---
 
@@ -27,7 +35,9 @@ the summary; each phase has its own writeup, linked in §4.
   2025-09-25, replayed tick by tick in hftbacktest with queue position and
   synthesised order latency.
 - **Split:** everything is chosen on sessions before 2025-09-15 and reported on
-  the eleven sessions from 09-15 to 09-25. Nothing is chosen on held-out data.
+  the eleven sessions from 09-15 to 09-25 (C1–C7, C4). C8 re-splits the same
+  month into 24 training and 7 held-out sessions (09-19 to 09-25). Nothing is
+  chosen on held-out data.
 - **Deep assets:** ETHUSDC and XRPUSDC, 11 held-out sessions each. Seven more
   assets with 3 held-out sessions each.
 - **Strategies:** the five market makers hftbacktest publishes — GLFT, a
@@ -69,6 +79,29 @@ is also quoted with 09-22 removed.
 medians over seeds. † trades a handful of fills or none on a median session;
 the number is one crash session, not market making.*
 
+### 3.1 On C8's split, with stress tests
+
+C8 moved to 24 training sessions and kept the last seven held out, then
+stress-tested everything that made money: maker fee without the rebate,
+higher latency, pessimistic queue models, neighbouring parameters, and
+without the crash or the best session.
+
+![stress](../assets/c8/stress.png)
+
+*Figure — from [C8](c8-risk-controls.md) §6: held-out return of each chosen
+configuration under each stress.*
+
+| configuration | held out | ex 09-22 | ex best day | fee 0 | fee +2 bp | latency ×4 | fills/day | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **SUIUSDC OBI** (floor 8 bp, κ 4) | **+2.52** | **+1.77** | **+1.52** | **+2.05** | +0.21 | **+1.30** | 175 | makes money on ordinary sessions, robust to costs; sensitive to κ |
+| XRPUSDC OBI (floor 12 bp, κ 2, skew ×2) | +2.84 | +0.09 | +0.09 | +2.61 | +1.68 | +1.17 | 106 | robust to costs; the gain is the crash |
+| XRPUSDT OBI (floor 8 bp, κ 2) | +3.53 | +0.48 | +0.48 | +3.17 | +1.74 | +2.84 | 189 | as XRPUSDC |
+| AVAXUSDC OBI (floor 16 bp, κ 0) | +2.68 | +2.34 | −0.37 | +2.35 | +1.04 | +3.14 | 150 | one session |
+| ETHUSDC OBI (floor 6 bp, κ 4) | +0.85 | +0.14 | +0.14 | +0.09 | −2.92 | −0.48 | 369 | the rebate |
+| BNBUSDC GLFT (floor 2 bp, κ 1) | +1.72 | +1.53 | +1.23 | +0.75 | −3.05 | +1.71 | 489 | the rebate at higher fees |
+
+*Held-out cumulative return, % of book, seven sessions (09-19 to 09-25).*
+
 ## 4. What each phase contributed
 
 | phase | question | answer, held out |
@@ -79,6 +112,7 @@ the number is one crash session, not market making.*
 | [C6](c6-strategy-zoo.md) | Is that just GLFT being a bad baseline? | No. On five strategies and nine assets, a per-asset wider spread is the largest single gain (+2.25 points median); TD3 on top of it does not beat it. |
 | [C7](c7-signals.md) | What information is the policy missing? | Not the deep book or BTCUSDT. The toxicity of its own recent fills: a markout rule beats C6 in 6 of 6 pairs and 13 of 18 untuned. |
 | [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets, an inventory-discounted reward and larger networks do not. |
+| [C8](c8-risk-controls.md) | Do risk controls, denoising or RL on top of the markout rule help, and does what makes money survive stress? | A circuit breaker helps the losers on ETH; no denoiser, combination of controls or RL policy improves OBI. SUIUSDC OBI survives every cost, latency and session stress but κ ×0.5; XRP's gain is the crash, ETH's the rebate. |
 
 ## 5. Lessons that held up
 
@@ -94,12 +128,24 @@ the number is one crash session, not market making.*
    strategy that barely trades look like the best in the table.
 5. **Fills are not free.** Both forcing volume and rewarding it cost money on
    this venue, at every level tried.
+6. **Stress-test before believing a gain.** Of six configurations that made
+   money held out in C8, one survives removing the crash, the best session
+   and the rebate; the others were one session or the rebate.
+7. **More knobs fit the training month.** Adding controls chosen on 24
+   sessions helped strategies that lose and hurt the one that works.
 
 ## 6. What next
 
-- A **circuit breaker** (pause quoting on volatility or one-sided-flow spikes)
-  and a **daily loss limit**, as grid dimensions on top of the markout rule.
-- The **breadth assets** on eleven held-out sessions, not three, starting with
-  OBI, where the markout rule already generalised to six of seven.
-- **RL on top of the markout rule** — its average in the state, the rule as the
-  residual baseline — as the one learning experiment still worth its compute.
+C8 did the follow-ups listed here before it (circuit breaker, loss limits,
+stress tests, breadth assets on more held-out sessions, RL on top of the
+markout rule). What remains:
+
+- **The forward test:** the frozen SUIUSDC and XRP OBI choices on sessions
+  after 2025-09-25, with no re-selection. Seven held-out sessions cannot tell
+  a +2.5% edge from luck.
+- **OBI on more assets**, since it is the only strategy that generalises.
+- **A crash-aware breaker** that does not pause when the position is already
+  on the right side of the move — the breaker's cost on OBI XRP is exactly
+  the crash session.
+- **κ from the asset's markout**, since SUIUSDC OBI depends on κ = 4 and only
+  the grid chooses κ today.
