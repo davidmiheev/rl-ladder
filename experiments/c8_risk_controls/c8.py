@@ -300,6 +300,19 @@ def jobs_for(stage: str) -> list[tuple[dict, list[str]]]:
     if stage == "breadth":
         return [(c, DAYS) for strategy, symbol in BREADTH_PAIRS
                 for c in breadth_grid(strategy, symbol)]
+    if stage == "breadth-E":
+        # Stress tests of the breadth choices that would be reported as a
+        # result: positive held out while trading. On held-out sessions only,
+        # which is all a stress row reports.
+        for strategy, symbol in BREADTH_PAIRS:
+            pick = choose(breadth_grid(strategy, symbol))
+            test = results(pick, TEST) if pick is not None else None
+            if test is None:
+                continue
+            sc = score(test)
+            if sc["chained"] > 0 and sc["median_fills"] >= MIN_FILLS:
+                jobs += [(c, TEST) for c in stress_configs(pick).values()]
+        return jobs
     for strategy, symbol in PAIRS:
         if stage == "A":
             jobs += [(c, DAYS) for c in stage_a(strategy, symbol)]
@@ -406,7 +419,7 @@ def cmd_export(stages: list[str], out: str) -> None:
 
 
 def cmd_status() -> None:
-    for stage in ("A", "B", "C", "D", "D-test", "E", "breadth"):
+    for stage in ("A", "B", "C", "D", "D-test", "E", "breadth", "breadth-E"):
         print(f"{stage:7s} pending {len(pending_units(stage))}")
 
 
@@ -416,7 +429,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run")
     run.add_argument("--stage", required=True,
-                     choices=["A", "B", "C", "D", "D-test", "E", "breadth"])
+                     choices=["A", "B", "C", "D", "D-test", "E", "breadth", "breadth-E"])
     run.add_argument("--shard", default="0/1")
     run.add_argument("--units", default=None, help="a JSON list exported by `export`")
     export = sub.add_parser("export")
