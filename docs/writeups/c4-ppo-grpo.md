@@ -21,9 +21,10 @@ Lab notebook:
 >   XRP the choices move, and several "wins" turn out to be one crash day or no
 >   trading at all.
 > - **Bigger networks do not help.** TD3 with 256×256 networks, with or
->   without four times the gradient updates, lands within the seed spread of
->   the 64×64 original held out; the wider net fits the training days better
->   and the held-out days worse.
+>   without four times the gradient updates, and with a 1-million-parameter
+>   residual-LayerNorm critic trained on a GPU, lands within the seed spread
+>   of the 64×64 original held out. The wider net fits the training days
+>   better and the held-out days worse; the largest is the noisiest.
 
 ---
 
@@ -313,9 +314,12 @@ larger ones, three things argued that network size is not what limits it:
 
 So the probe separates the two: a 256×256 network for actor and critic
 (`v2-w256`, 12× the parameters), and the same with four times the updates
-(`v2-w256-utd4`, one every two steps). Everything else is v2. Three seeds
-each on the two ETHUSDC strategies where RL was trained, compared with v2 on
-the same three seeds.
+(`v2-w256-utd4`, one every two steps). A third arm goes further on both: a
+residual critic with LayerNorm (two blocks of width 256, 1.06 M parameters
+per critic, 170× v2's), the architecture recent work uses to scale
+off-policy RL, at four times the updates (`v2-resln`, trained on a Colab T4).
+Everything else is v2. Three seeds each on the two ETHUSDC strategies where
+RL was trained, compared with v2 on the same three seeds.
 
 ![net-scaling](../assets/c4/net-scaling.png)
 
@@ -323,19 +327,19 @@ the same three seeds.
 online returns during its single pass over the training days, exploration
 included) against held-out return. Dashed: C6's widened strategy without RL.*
 
-| ETHUSDC, seeds 0–2 | 64×64 (v2) | 256×256 | 256×256, 4× updates |
-| --- | --- | --- | --- |
-| glft, held out | −6.30 (−7.66 … −3.84) | −6.68 (−7.09 … −4.20) | −6.53 (−6.97 … −3.35) |
-| glft, training pass | +0.17 | **+1.42** | −1.10 |
-| obi, held out | −5.58 (−8.04 … −4.16) | −7.60 (−9.68 … −5.69) | **−5.07** (−7.27 … −4.87) |
-| obi, training pass | −8.24 | **−0.06** | −2.81 |
+| ETHUSDC, seeds 0–2 | 64×64 (v2) | 256×256 | 256×256, 4× updates | residual-LN critic, 4× updates |
+| --- | --- | --- | --- | --- |
+| glft, held out | −6.30 (−7.66 … −3.84) | −6.68 (−7.09 … −4.20) | −6.53 (−6.97 … −3.35) | **−6.14** (−8.27 … −1.06) |
+| glft, training pass | +0.17 | **+1.42** | −1.10 | −2.64 |
+| obi, held out | −5.58 (−8.04 … −4.16) | −7.60 (−9.68 … −5.69) | **−5.07** (−7.27 … −4.87) | −8.76 (−11.47 … −7.56) |
+| obi, training pass | −8.24 | **−0.06** | −2.81 | −5.61 |
 
 *Chained return, % of book; median over three seeds, range in brackets. v2's
 five-seed medians in §7 (−6.30, −8.00) include two more seeds; here every
 column uses the same three. For reference, the widened strategies without RL
 are at −7.07 and −6.40 and the best fixed rules at −3.01 and −0.62.*
 
-Two readings, both negative for size:
+Three readings, all negative for size:
 
 1. **Width buys training return, not held-out return.** The 256×256 policy
    improves the training pass on both strategies (+1.3 points on `glft`, +8.2
@@ -346,8 +350,15 @@ Two readings, both negative for size:
    seed range of three to four points. The extra updates do not even buy a
    better training pass than the wide net at 1× updates, and the critic's TD
    loss shows no consistent decline across the ten sessions in any variant.
+3. **The largest network is the noisiest, not the best.** The residual-LN
+   critic lands level with v2 on `glft` (−6.14 against −6.30) with the widest
+   seed range of any arm: its best seed, −1.06, is the best single ETH `glft`
+   RL run in Part C, and its worst, −8.27, is among the worst. On `obi` it is
+   the worst arm, three points below v2. It does not fit the training pass
+   better either (−2.64 and −5.61), so it is not overfitting. It is not
+   learning anything more that transfers.
 
-Neither comes close to the fixed rules in §7.
+None comes close to the fixed rules in §7.
 
 **Cost.** One TD3 update on a batch of 256, twin critic, measured on this
 machine's CPU and on a Colab T4:
@@ -361,12 +372,12 @@ machine's CPU and on a Colab T4:
 | residual + LayerNorm, width 512, 2 blocks | 4.2 M | 241 ms | 80 ms | 9.5 ms |
 
 The market replay, not the network, dominates a job up to 256×256, which is
-why both probes ran on CPU (10–14 minutes a job at 1× updates, 22–24 at 4×).
-Beyond that the network takes over, and a GPU pays: a residual-LayerNorm
-critic of the kind recent work uses to scale off-policy RL
-(`v2-resln`, built, not run) would take about 1.7 hours a job on CPU and
-15–20 minutes on a T4. Given the two readings above, it is not expected to
-change the conclusion, and it is not a priority.
+why the first two probes ran on CPU (10–14 minutes a job at 1× updates, 22–24
+at 4×). Beyond that the network takes over: the residual-LN critic would take
+about 1.7 hours a job on this CPU. On the T4 it took about 43 minutes, two
+jobs at a time. That is not the 15–20 minutes the per-update benchmark
+predicted: with the network on the GPU, the replay on the Colab runtime's two
+CPU cores set the pace, at about 255 seconds a session.
 
 ## 9. What would push further
 

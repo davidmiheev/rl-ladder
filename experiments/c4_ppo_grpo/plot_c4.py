@@ -5,7 +5,7 @@
     train-vs-test.png   the overfitting lens: training return against held out
     search-curves.png   GRPO-style against PPO-style search, per iteration
     frontier.png        PnL against fills over the grid: what volume costs
-    net-scaling.png     TD3 v2 at 64x64, 256x256 and 256x256 with 4x updates
+    net-scaling.png     TD3 v2 at 64x64, 256x256, 256x256 with 4x updates, residual-LN critic
 
     python experiments/c4_ppo_grpo/plot_c4.py [--only NAME] [--table]
 """
@@ -381,7 +381,8 @@ def fill_target() -> None:
 def net_scaling() -> None:
     """TD3 v2 with larger networks: return on the training pass against held out, per seed."""
     recipes = [("v2", "64×64 (v2)", BLUE), ("v2-w256", "256×256", ORANGE),
-               ("v2-w256-utd4", "256×256, 4× updates", AQUA)]
+               ("v2-w256-utd4", "256×256, 4× updates", AQUA),
+               ("v2-resln", "residual-LN critic, 4× updates (T4)", YELLOW)]
     test_days = assets.test_days("ethusdc")
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.8))
     for ax, strategy in zip(axes, ("glft", "obi"), strict=True):
@@ -407,8 +408,8 @@ def net_scaling() -> None:
         ax.set_xlabel("training pass, chained %")
     axes[0].set_ylabel("held out, chained %")
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=7.5)
-    fig.suptitle("Bigger networks fit the training days better, not the held-out ones", fontsize=10)
+    fig.legend(handles, labels, loc="lower center", ncol=3, fontsize=7.5)
+    fig.suptitle("No network size improves the held-out days", fontsize=10)
     fig.tight_layout(rect=(0, 0.08, 1, 0.95))
     fig.savefig(OUT / "net-scaling.png", dpi=150)
     plt.close(fig)

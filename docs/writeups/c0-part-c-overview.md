@@ -17,7 +17,7 @@ the summary; each phase has its own writeup, linked in §4.
 > - **Learning did not beat them.** TD3 on C6's widened strategies (two recipes,
 >   five seeds), GRPO- and PPO-style parameter search, extra order-book and
 >   BTCUSDT inputs, fill targets, a reward that discounts inventory PnL and
->   networks twelve times larger all lose to the best fixed rule held out.
+>   networks up to 170 times larger all lose to the best fixed rule held out.
 
 ---
 

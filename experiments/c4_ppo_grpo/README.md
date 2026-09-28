@@ -53,7 +53,7 @@ Everything is resumable: each queue skips runs that already have a
 | GRPO vs PPO | 120 replays, 2 seeds, glft/obi ETH | held-out median | glft −1.89 / −2.75, obi −2.91 / −2.54 | `runs/c4-search/` |
 | fill target | GRPO, obi ETH, F = 1,500 / 3,000 | held out | worse at every target; λ 0.02–0.08 bp/fill | `runs/c4-search/grpo-F*` |
 | RL v2-edge | holding PnL × 0.25, 5 seeds | held-out median vs v2 | glft −9.27 vs −6.30, obi −9.40 vs −8.00 | `runs/c6/*-v2-edge-*` |
-| RL, larger nets | 256×256, and 256×256 with 4× updates, 3 seeds | held-out median vs v2, same seeds | glft −6.68 / −6.53 vs −6.30, obi −7.60 / −5.07 vs −5.58 | `runs/c6/*-v2-w256*` |
+| RL, larger nets | 256×256, 256×256 with 4× updates, residual-LN critic (T4), 3 seeds | held-out median vs v2, same seeds | glft −6.68 / −6.53 / −6.14 vs −6.30, obi −7.60 / −5.07 / −8.76 vs −5.58 | `runs/c6/*-v2-w256*`, `runs/c6/*-v2-resln*` |
 | best overall | OBI XRPUSDC, C7 markout κ = 1 | held out / without 09-22 / days up | +4.91% / +1.38% / 9 of 11 | `runs/c7/obi-wide-xrpusdc-mk1__*` |
 
 ## Findings
@@ -65,7 +65,8 @@ Everything is resumable: each queue skips runs that already have a
 - Forcing volume costs money; so does a reward that discounts holding PnL,
   because adverse selection *is* holding PnL.
 - Larger TD3 networks fit the training pass better and held out no better;
-  4× updates stay within the seed spread. Size is not the bottleneck.
+  4× updates stay within the seed spread; a 170× larger residual-LN critic
+  on a T4 is the noisiest arm. Size is not the bottleneck.
 - XRP selection on four days was unreliable, and several positive XRP numbers
   are one crash session (2025-09-22) or no trading at all.
 - Operational: a trace built inside a training job doubles its memory; build
