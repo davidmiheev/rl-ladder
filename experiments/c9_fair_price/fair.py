@@ -11,6 +11,12 @@ its series with `fair_src`:
                           white noise (so it is as autocorrelated as the move
                           itself), scaled to make the R^2 r2; seeded by date
     pred:<model>:<k>      a causal model's prediction (see `predict.py`)
+    gate:<q>:<src>        <src> where its size is in the top (1-q) of the training
+                          sessions' values, zero elsewhere: act on large
+                          moves only (the threshold is fitted on training
+                          sessions and cached in runs/c9/gates.json)
+    dag:<strategy>:<round> the DAgger student's per-side market scores (`dagger.py`),
+                          columns 1 and 2 of the kernel's series
     feat:<name>           one raw feature from `predict.py`, e.g. `feat:micro_bp`,
                           the micro-price's offset: quoting around the
                           micro-price instead of the mid
@@ -21,6 +27,7 @@ second is worth, and the noisy oracles map a predictor's R^2 to return.
 
 from __future__ import annotations
 
+import os
 import sys
 import zlib
 from pathlib import Path
@@ -57,8 +64,43 @@ def noisy(move: np.ndarray, k: int, r2: float, seed: int) -> np.ndarray:
     return out
 
 
+GATES = HERE.parents[1] / "runs" / "c9" / "gates.json"
+
+
+QUANTILES = (0.9, 0.95, 0.99, 0.999)
+
+
+def gate_threshold(q: float, src: str, symbol: str) -> float:
+    """The q-quantile of |src| over the training sessions, cached (every
+    quantile in `QUANTILES` from one pass, since a forecast's pass is slow)."""
+    import json
+
+    import c8
+
+    key = f"{symbol}|{q:g}|{src}"
+    table = json.loads(GATES.read_text()) if GATES.exists() else {}
+    if key not in table:
+        vals = []
+        for date in c8.TRAIN:
+            x = np.abs(series(src, symbol, date))
+            vals.append(x[np.isfinite(x)][::7])
+        vals = np.concatenate(vals)
+        table = json.loads(GATES.read_text()) if GATES.exists() else {}
+        for qq in sorted(set(QUANTILES) | {q}):
+            table[f"{symbol}|{qq:g}|{src}"] = float(np.quantile(vals, qq))
+        GATES.parent.mkdir(parents=True, exist_ok=True)
+        tmp = GATES.with_name(f"gates.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(table, indent=1, sort_keys=True))
+        os.replace(tmp, GATES)
+    return table[key]
+
+
 def series(src: str, symbol: str, date: str) -> np.ndarray:
     kind, *args = src.split(":")
+    if kind == "gate":
+        q, inner = float(args[0]), ":".join(args[1:])
+        x = series(inner, symbol, date)
+        return np.where(np.abs(x) >= gate_threshold(q, inner, symbol), x, 0.0)
     f = features.load(symbol, date)
     if kind == "oracle":
         return future_move_bp(mid_of(f), int(args[0]))
@@ -71,6 +113,10 @@ def series(src: str, symbol: str, date: str) -> np.ndarray:
 
         x, _ = predict.build(f)
         return x[:, predict.FEATURES.index(args[0])].astype(np.float64)
+    if kind == "dag":
+        import dagger
+
+        return dagger.series(args[0], int(args[1]), symbol, date, f)
     if kind == "pred":
         import predict
 

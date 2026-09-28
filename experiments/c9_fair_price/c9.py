@@ -86,6 +86,63 @@ def oracle_variants(strategy: str) -> dict[str, dict]:
 PRED_K = int(os.environ.get("C9_PRED_K", "10"))
 
 
+#: The large-move check: ETH GLFT and OBI (the largest oracle gaps) and XRP OBI.
+LARGE_TARGETS = tuple(t for t in ORACLE_TARGETS
+                      if t in (("glft", "ethusdc"), ("obi", "ethusdc"), ("obi", "xrpusdc")))
+
+
+def large_oracle_variants() -> dict[str, dict]:
+    """Oracle versions of 'act only on the large moves' (diagnostic, all sessions).
+
+    Mode 3 widens only the side the coming move would run over, by the move;
+    mode 4 pulls that side. `gate:q` keeps the top (1-q) of moves.
+    """
+    v = {"widen endangered side by the 1 s move": {"fair_src": "oracle:10", "fair_mode": 3.0}}
+    for q in (0.9, 0.99):
+        v[f"widen, top {100 * (1 - q):g}% of 1 s moves"] = {
+            "fair_src": f"gate:{q:g}:oracle:10", "fair_mode": 3.0}
+        v[f"pull, top {100 * (1 - q):g}% of 1 s moves"] = {
+            "fair_src": f"gate:{q:g}:oracle:10", "fair_mode": 4.0}
+    v["pull, top 1% of 3 s moves"] = {"fair_src": "gate:0.99:oracle:30", "fair_mode": 4.0}
+    return {k: {**x, "fair_coef": 1.0} for k, x in v.items()}
+
+
+def large_forecast_variants() -> list[dict]:
+    """The same with the boosted-tree forecast: chosen on training sessions."""
+    out = []
+    for k in (10, 30):
+        for q in (0.95, 0.99):
+            src = f"gate:{q:g}:pred:gbm:{k}"
+            out.append({"fair_src": src, "fair_mode": 4.0, "fair_coef": 1.0})
+            if k == 10:
+                out.append({"fair_src": src, "fair_mode": 3.0, "fair_coef": 2.0})
+    out.append({"fair_src": "gate:0.99:pred:gbm:10", "fair_mode": 1.0, "fair_coef": 1.0})
+    return out
+
+
+def large_choice(strategy: str, symbol: str) -> dict | None:
+    base = base_choice(strategy, symbol)
+    return None if base is None else c8.choose(
+        [c8.on_top(base, v) for v in large_forecast_variants()])
+
+
+#: The DAgger student's final round, and the actions its threshold and size
+#: are chosen from on training sessions.
+DAGGER_ROUND = int(os.environ.get("C9_DAGGER_ROUND", "2"))
+DAGGER_ACTIONS = [{"dag_thr": thr, "dag_widen_bp": w}
+                  for thr in (0.4, 0.5, 0.6, 0.7) for w in (0.0, 2.0, 5.0)]
+
+
+def dagger_configs(strategy: str, symbol: str) -> list[dict] | None:
+    import dagger
+
+    base = base_choice(strategy, symbol)
+    if base is None or not (dagger.ROOT / f"{strategy}_{symbol}_r{DAGGER_ROUND}.json").exists():
+        return None
+    return [c8.on_top(base, dagger.student_sets(strategy, symbol, DAGGER_ROUND, a))
+            for a in DAGGER_ACTIONS]
+
+
 def fair_families(strategy: str) -> dict[str, list[dict]]:
     """Fair-price candidates: name -> overrides. Chosen on training sessions.
 
@@ -188,6 +245,33 @@ def jobs_for(stage: str) -> list[tuple[dict, list[str]]]:
             if base is not None:
                 jobs += [(c8.on_top(base, v), DAYS) for v in oracle_variants(strategy).values()]
         return jobs
+    if stage in ("dagger", "dagger-E"):
+        import dagger
+
+        for strategy, symbol in dagger.TARGETS:
+            cfgs = dagger_configs(strategy, symbol)
+            if cfgs is None:
+                continue
+            if stage == "dagger":
+                jobs += [(c, TRAIN) for c in cfgs]
+                continue
+            pick = c8.choose(cfgs)
+            if pick is not None:
+                jobs += [(pick, TEST)] + [(c, TEST) for c in c8.stress_configs(pick).values()]
+        return jobs
+    if stage in ("largemove", "largemove-E"):
+        for strategy, symbol in LARGE_TARGETS:
+            base = base_choice(strategy, symbol)
+            if base is None:
+                continue
+            if stage == "largemove":
+                jobs += [(c8.on_top(base, v), DAYS) for v in large_oracle_variants().values()]
+                jobs += [(c8.on_top(base, v), TRAIN) for v in large_forecast_variants()]
+                continue
+            pick = large_choice(strategy, symbol)
+            if pick is not None:
+                jobs += [(pick, TEST)] + [(c, TEST) for c in c8.stress_configs(pick).values()]
+        return jobs
     if stage in ("predict", "predict-E"):
         for strategy, symbol in ORACLE_TARGETS:
             if stage == "predict":
@@ -234,10 +318,13 @@ def pending_units(stage: str) -> list[tuple[dict, str]]:
     return units
 
 
-def run_one(cfg: dict, date: str) -> None:
-    """`c8.run_one`, plus the fair-price series a `fair_src` names."""
+def run_one(cfg: dict, date: str, keep_out: bool = False):
+    """`c8.run_one`, plus the fair-price series a `fair_src` names.
+
+    With `keep_out` the quoter's per-step log is returned (DAgger's rollouts).
+    """
     src = cfg["sets"].get("fair_src")
-    if src is None:
+    if src is None and not keep_out:
         return c8.run_one(cfg, date)
     import gc
 
@@ -246,7 +333,7 @@ def run_one(cfg: dict, date: str) -> None:
     import strategies
 
     overrides = {"beta": 1.0, "queue_model": "power2", **cfg["sets"]}
-    series = fair.series(src, cfg["symbol"], date)
+    series = None if src is None else fair.series(src, cfg["symbol"], date)
     stats, _, out = run_baseline.run_day(cfg["strategy"], cfg["symbol"], date, overrides,
                                          fair=series)
     stats.update(run_baseline.quoter_stats(out, strategies.INTERVAL_NS,
@@ -258,7 +345,10 @@ def run_one(cfg: dict, date: str) -> None:
     tmp = folder / f"{date}.json.tmp"
     tmp.write_text(json.dumps(stats))
     tmp.rename(folder / f"{date}.json")
-    del out, series
+    del series
+    if keep_out:
+        return out
+    del out
     gc.collect()
 
 
@@ -289,7 +379,8 @@ def cmd_run(stage: str, shard: str, units_file: str | None) -> None:
     print(f"### SHARD DONE {stage} {shard}", flush=True)
 
 
-STAGES = ("denoise", "denoise-E", "oracle", "predict", "predict-E")
+STAGES = ("denoise", "denoise-E", "oracle", "predict", "predict-E", "largemove", "largemove-E",
+          "dagger", "dagger-E")
 
 
 def main() -> None:

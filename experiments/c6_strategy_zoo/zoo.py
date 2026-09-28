@@ -105,8 +105,10 @@ STATE_SIZE = 42
     P_MARKOUT_SIDED, P_REQUOTE_STEPS, P_TOX_SIZE, P_INV_FLATTEN,
     P_TOD0, P_TOD1, P_TOD2, P_TOD3, P_TOD4, P_TOD5,
     P_FAIR_MODE, P_FAIR_COEF,
-) = range(50)
-PARAM_SIZE = 50
+    P_DAG_MODE, P_DAG_B, P_DAG_W_MKT, P_DAG_W_DIST, P_DAG_W_POS, P_DAG_W_TOX, P_DAG_THR,
+    P_DAG_WIDEN_BP,
+) = range(58)
+PARAM_SIZE = 58
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
@@ -121,11 +123,16 @@ PARAM_NAMES = (
     "markout_sided", "requote_steps", "tox_size", "inv_flatten",
     "tod0", "tod1", "tod2", "tod3", "tod4", "tod5",
     "fair_mode", "fair_coef",
+    "dag_mode", "dag_b", "dag_w_mkt", "dag_w_dist", "dag_w_pos", "dag_w_tox", "dag_thr",
+    "dag_widen_bp",
 )
 
-#: C9: no external fair-price series. Numba needs the argument to have a
-#: fixed type, so it is a one-element array rather than `None`.
-NO_FAIR = np.full(1, np.nan, np.float64)
+#: C9's external per-step series, one row per quoting step: column 0 is the
+#: fair-price shift (bp of the mid) `fair_mode` uses; columns 1 and 2 are the
+#: market part of the DAgger student's danger score for the bid and the ask.
+#: "No series" is one row of NaN: numba needs a fixed type, not `None`.
+FAIR_COLS = 3
+NO_FAIR = np.full((1, FAIR_COLS), np.nan, np.float64)
 
 #: Half-life, in quoting steps, of the slow averages the circuit breaker
 #: compares its fast ones against: thirty minutes at 100 ms.
@@ -152,6 +159,14 @@ out_dtype = np.dtype(
         # 0 quoting normally; 1 breaker, both sides; 2 breaker, one side;
         # 3 loss limit (reduce-only).
         ("paused", "f8"),
+        # C9: the innermost bid and ask the rule would quote, before a
+        # forecast or the DAgger student pulls or widens them (NaN when the
+        # position cap stops a side), for the DAgger teacher to label.
+        ("bid_px", "f8"),
+        ("ask_px", "f8"),
+        # C9: the per-side markout toxicity the DAgger student reads.
+        ("tox_buy", "f8"),
+        ("tox_sell", "f8"),
     ]
 )
 
@@ -409,12 +424,17 @@ def quote_once(
     # C9: an external fair-price shift, one value per quoting step in bp of
     # the mid (a prediction of the mid's next move, or the future mid itself
     # for the oracle test), scaled by `fair_coef`. Mode 1 adds it to the
-    # strategy's own signal; mode 2 replaces the signal with it.
-    if params[P_FAIR_MODE] != 0.0 and t < len(fair_ext) and np.isfinite(fair_ext[t]):
-        shift_px = params[P_FAIR_COEF] * fair_ext[t] * 1e-4 * mid_price
+    # strategy's own signal; mode 2 replaces the signal with it. Modes 3 and 4
+    # never move the centre: a positive value (the mid is expected to rise,
+    # so the ask is the side about to be run over) widens the ask by it
+    # (mode 3) or pulls the ask (mode 4); a negative one does so to the bid.
+    shift_px = 0.0
+    if (params[P_FAIR_MODE] != 0.0 and t < fair_ext.shape[0]
+            and np.isfinite(fair_ext[t, 0])):
+        shift_px = params[P_FAIR_COEF] * fair_ext[t, 0] * 1e-4 * mid_price
         if params[P_FAIR_MODE] == 2.0:
             signal_px = shift_px
-        else:
+        elif params[P_FAIR_MODE] == 1.0:
             signal_px += shift_px
     state[Z_SIGNAL_PX] = signal_px
     fair_px = mid_price + alpha_mult * signal_px
@@ -480,6 +500,11 @@ def quote_once(
         if params[P_TOX_SIZE] > 0.0:
             shrink = 1.0 / (1.0 + params[P_TOX_SIZE] * max(state[Z_TOX], 0.0))
             order_qty = max(round(order_qty * shrink / lot_size) * lot_size, lot_size)
+    if params[P_FAIR_MODE] == 3.0:
+        if shift_px > 0.0:
+            half_ask_px += shift_px
+        else:
+            half_bid_px -= shift_px
     if strat == HFGRID:
         # The notebook skews hfgrid multiplicatively on the half spread, so its
         # skew scales with volatility too; keep that, but express the result in
@@ -522,6 +547,50 @@ def quote_once(
             ask_price = state[Z_ASK_ANCHOR]
         state[Z_BID_ANCHOR] = bid_price
         state[Z_ASK_ANCHOR] = ask_price
+
+    # C9: the quotes as the rule would post them, before the forecast (mode
+    # 4) or the DAgger student act on them -- the states the teacher labels.
+    out[t].bid_px = bid_price if position * mid_price < params[P_MAX_POSITION_DOLLAR] else np.nan
+    out[t].ask_px = ask_price if position * mid_price > -params[P_MAX_POSITION_DOLLAR] else np.nan
+    out[t].tox_buy = state[Z_TOX_BUY]
+    out[t].tox_sell = state[Z_TOX_SELL]
+
+    # C9: pull the side a forecast says is about to be run over (mode 4).
+    if params[P_FAIR_MODE] == 4.0 and shift_px != 0.0:
+        if shift_px > 0.0:
+            ask_price = np.nan
+        else:
+            bid_price = np.nan
+
+    # C9: the DAgger student. Per side, a danger score: the market part
+    # (precomputed from market features, `fair_ext` columns 1 and 2) plus
+    # the student's own state -- how far its quote sits from the mid, the
+    # inventory a fill would add to, and its recent markout toxicity -- with
+    # weights fitted by `dagger.py`. Above `dag_thr` (a probability) the side
+    # is pulled (`dag_widen_bp` 0) or widened by `dag_widen_bp`.
+    if params[P_DAG_MODE] > 0.0 and t < fair_ext.shape[0] and two_sided:
+        for side in range(2):
+            px = bid_price if side == 0 else ask_price
+            mkt = fair_ext[t, 1 + side]
+            if not (np.isfinite(px) and np.isfinite(mkt)):
+                continue
+            dist_bp = abs(px - mid_price) / mid_price * 1e4
+            # Inventory a fill on this side adds to: long for a bid fill.
+            pos = norm_pos if side == 0 else -norm_pos
+            tox = state[Z_TOX_BUY] if side == 0 else state[Z_TOX_SELL]
+            z = (params[P_DAG_B] + params[P_DAG_W_MKT] * mkt + params[P_DAG_W_DIST] * dist_bp
+                 + params[P_DAG_W_POS] * pos + params[P_DAG_W_TOX] * tox)
+            if 1.0 / (1.0 + np.exp(-z)) > params[P_DAG_THR]:
+                if params[P_DAG_WIDEN_BP] <= 0.0:
+                    px = np.nan
+                elif side == 0:
+                    px = np.floor((px - params[P_DAG_WIDEN_BP] * 1e-4 * mid_price) / grid_interval) * grid_interval
+                else:
+                    px = np.ceil((px + params[P_DAG_WIDEN_BP] * 1e-4 * mid_price) / grid_interval) * grid_interval
+            if side == 0:
+                bid_price = px
+            else:
+                ask_price = px
 
     # C8: circuit breaker and loss limit. Both only ever remove quotes.
     paused = 0.0

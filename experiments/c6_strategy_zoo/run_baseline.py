@@ -87,8 +87,9 @@ def run_day(
 ) -> tuple[dict, np.ndarray, np.ndarray]:
     """Replay one session; return its statistics, its record and the quoter's log.
 
-    `fair` is C9's external fair-price shift, one value per quoting step in bp
-    of the mid; the `fair_mode` and `fair_coef` overrides say how it is used.
+    `fair` is C9's external series, one row per quoting step: a 1-D fair-price
+    shift in bp of the mid (`fair_mode`, `fair_coef` say how it is used), or
+    the full `zoo.FAIR_COLS` columns (the DAgger student's market scores too).
     """
     assets.ensure_registered(symbol)
     config.use_symbol(symbol)
@@ -111,7 +112,13 @@ def run_day(
     interval_ns = int(overrides.get("interval_ns", strategies.INTERVAL_NS))
     record_every = max(1, round(strategies.RECORD_EVERY_NS / interval_ns))
 
-    fair = zoo.NO_FAIR if fair is None else np.ascontiguousarray(fair, dtype=np.float64)
+    if fair is None:
+        fair = zoo.NO_FAIR
+    else:
+        fair = np.asarray(fair, dtype=np.float64)
+        if fair.ndim == 1:  # a fair-price shift alone: column 0
+            fair = np.column_stack([fair, np.full((len(fair), zoo.FAIR_COLS - 1), np.nan)])
+        fair = np.ascontiguousarray(fair)
     out = zoo.run_day(
         hbt, recorder.recorder, params, table, fair, interval_ns, record_every, *multipliers
     )
