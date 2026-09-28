@@ -216,7 +216,7 @@ def check_baseline_matches_runner(strategy: str = "glft") -> tuple[bool, str]:
         state[slot] = np.nan
     out = np.zeros(n, zoo.out_dtype)
     zoo.advance(
-        hbt, recorder.recorder, state, out, params, run_baseline.NO_PRECOMPUTE,
+        hbt, recorder.recorder, state, out, params, run_baseline.NO_PRECOMPUTE, zoo.NO_FAIR,
         np.full(n, np.nan), np.full(n, np.nan), np.zeros(n),
         np.full(max(int(params[zoo.P_OBI_WINDOW]), 1), np.nan),
         np.zeros(glft_mod.MAX_BUCKET), np.arange(glft_mod.MAX_BUCKET) + 0.5,

@@ -411,7 +411,7 @@ class ZooEnv(gym.Env):
     def _advance(self, multipliers, n_inner: int) -> int:
         return zoo.advance(
             self._hbt, self._recorder.recorder, self._state, self._out, self.params,
-            self.table, self._arrival, self._midchg, self._flow, self._obi,
+            self.table, zoo.NO_FAIR, self._arrival, self._midchg, self._flow, self._obi,
             self._tmp, self._ticks, *multipliers, self.quote_interval_ns, 1, n_inner,
         )
 

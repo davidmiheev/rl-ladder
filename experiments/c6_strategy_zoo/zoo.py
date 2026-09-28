@@ -104,8 +104,9 @@ STATE_SIZE = 42
     P_SIGNAL_HL, P_ALPHA_CLIP, P_MOM_COEF, P_MOM_HL,
     P_MARKOUT_SIDED, P_REQUOTE_STEPS, P_TOX_SIZE, P_INV_FLATTEN,
     P_TOD0, P_TOD1, P_TOD2, P_TOD3, P_TOD4, P_TOD5,
-) = range(48)
-PARAM_SIZE = 48
+    P_FAIR_MODE, P_FAIR_COEF,
+) = range(50)
+PARAM_SIZE = 50
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
@@ -119,7 +120,12 @@ PARAM_NAMES = (
     "signal_hl", "alpha_clip", "mom_coef", "mom_hl",
     "markout_sided", "requote_steps", "tox_size", "inv_flatten",
     "tod0", "tod1", "tod2", "tod3", "tod4", "tod5",
+    "fair_mode", "fair_coef",
 )
+
+#: C9: no external fair-price series. Numba needs the argument to have a
+#: fixed type, so it is a one-element array rather than `None`.
+NO_FAIR = np.full(1, np.nan, np.float64)
 
 #: Half-life, in quoting steps, of the slow averages the circuit breaker
 #: compares its fast ones against: thirty minutes at 100 ms.
@@ -177,7 +183,7 @@ def _obi_alpha(depth, mid_price, tick_size, looking_depth, roi_lb_tick, roi_ub_t
 
 @njit
 def quote_once(
-    hbt, recorder, state, out, params, precomp, buf_arrival, buf_midchg, buf_flow,
+    hbt, recorder, state, out, params, precomp, fair_ext, buf_arrival, buf_midchg, buf_flow,
     buf_obi, tmp, ticks, spread_mult, skew_mult, alpha_mult, grid_mult, interval_ns,
 ):
     """One quoting iteration of whichever strategy `params` selects.
@@ -400,6 +406,16 @@ def quote_once(
     # the recent drift, `mom_coef` times the average change over `mom_hl`.
     if params[P_MOM_COEF] != 0.0:
         signal_px += params[P_MOM_COEF] * state[Z_MOM] * params[P_MOM_HL]
+    # C9: an external fair-price shift, one value per quoting step in bp of
+    # the mid (a prediction of the mid's next move, or the future mid itself
+    # for the oracle test), scaled by `fair_coef`. Mode 1 adds it to the
+    # strategy's own signal; mode 2 replaces the signal with it.
+    if params[P_FAIR_MODE] != 0.0 and t < len(fair_ext) and np.isfinite(fair_ext[t]):
+        shift_px = params[P_FAIR_COEF] * fair_ext[t] * 1e-4 * mid_price
+        if params[P_FAIR_MODE] == 2.0:
+            signal_px = shift_px
+        else:
+            signal_px += shift_px
     state[Z_SIGNAL_PX] = signal_px
     fair_px = mid_price + alpha_mult * signal_px
     state[Z_FAIR_PX] = fair_px
@@ -607,7 +623,7 @@ def quote_once(
 
 @njit
 def advance(
-    hbt, recorder, state, out, params, precomp, buf_arrival, buf_midchg, buf_flow,
+    hbt, recorder, state, out, params, precomp, fair_ext, buf_arrival, buf_midchg, buf_flow,
     buf_obi, tmp, ticks, spread_mult, skew_mult, alpha_mult, grid_mult, interval_ns,
     record_every, n_inner,
 ):
@@ -620,7 +636,7 @@ def advance(
         if int(state[Z_T]) >= len(out):
             return 1
         if quote_once(
-            hbt, recorder, state, out, params, precomp, buf_arrival, buf_midchg,
+            hbt, recorder, state, out, params, precomp, fair_ext, buf_arrival, buf_midchg,
             buf_flow, buf_obi, tmp, ticks, spread_mult, skew_mult, alpha_mult,
             grid_mult, interval_ns,
         ) != 0:
@@ -632,7 +648,7 @@ def advance(
 
 @njit
 def run_day(
-    hbt, recorder, params, precomp, interval_ns, record_every,
+    hbt, recorder, params, precomp, fair_ext, interval_ns, record_every,
     spread_mult, skew_mult, alpha_mult, grid_mult,
 ):
     """Replay a whole session at fixed multipliers: C6's baseline runner."""
@@ -652,7 +668,7 @@ def run_day(
 
     while True:
         if advance(
-            hbt, recorder, state, out, params, precomp, buf_arrival, buf_midchg,
+            hbt, recorder, state, out, params, precomp, fair_ext, buf_arrival, buf_midchg,
             buf_flow, buf_obi, tmp, ticks, spread_mult, skew_mult, alpha_mult,
             grid_mult, interval_ns, record_every, 1000,
         ) != 0:

@@ -83,8 +83,13 @@ def run_day(
     date: str,
     overrides: dict[str, float],
     multipliers: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+    fair: np.ndarray | None = None,
 ) -> tuple[dict, np.ndarray, np.ndarray]:
-    """Replay one session; return its statistics, its record and the quoter's log."""
+    """Replay one session; return its statistics, its record and the quoter's log.
+
+    `fair` is C9's external fair-price shift, one value per quoting step in bp
+    of the mid; the `fair_mode` and `fair_coef` overrides say how it is used.
+    """
     assets.ensure_registered(symbol)
     config.use_symbol(symbol)
     kwargs = {"beta": overrides["beta"]} if strategy.split("-")[0] == "apt" else {}
@@ -106,8 +111,9 @@ def run_day(
     interval_ns = int(overrides.get("interval_ns", strategies.INTERVAL_NS))
     record_every = max(1, round(strategies.RECORD_EVERY_NS / interval_ns))
 
+    fair = zoo.NO_FAIR if fair is None else np.ascontiguousarray(fair, dtype=np.float64)
     out = zoo.run_day(
-        hbt, recorder.recorder, params, table, interval_ns, record_every, *multipliers
+        hbt, recorder.recorder, params, table, fair, interval_ns, record_every, *multipliers
     )
     hbt.close()
 
