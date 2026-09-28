@@ -10,6 +10,7 @@ Figures (docs/assets/c8/):
     stress.png         the chosen configurations under each stress
     walk-forward.png   expanding-window selection over the whole month
     breadth.png        the breadth tier: chosen point per asset and strategy, held out
+    rl.png             RL on top of the markout rule, per seed, against the rule
 
 Everything is chosen on the 24 training sessions; the 7 held-out sessions
 (2025-09-19 to 09-25) are only ever reported.
@@ -357,6 +358,96 @@ def fig_breadth(rows: list[dict]) -> None:
     save(fig, "breadth.png")
 
 
+def rl_rows() -> list[dict]:
+    """RL on top of the markout rule (recipe v2-mk, 24 training sessions): per seed, held out."""
+    import glob
+    import json
+    import statistics
+
+    rows = []
+    for strategy, symbol in c8.PAIRS:
+        a = c8.choice_a(strategy, symbol)
+        seeds = []
+        for path in sorted(glob.glob(str(REPO / "runs" / "c6-eval" /
+                                         f"{strategy}-wide-{symbol}-td3-v2-mk-c8-s*" / "summary.json"))):
+            per_day = json.loads(Path(path).read_text())["per_day"]
+            seeds.append((chained(per_day), ex_crash(per_day),
+                          float(np.median([d["DailyNumberOfTrades"] for d in per_day]))))
+        if not seeds or a is None:
+            continue
+        test = c8.results(a, c8.TEST)
+        rows.append({"strategy": strategy, "symbol": symbol, "rule": chained(test),
+                     "rule_ex": ex_crash(test), "seeds": seeds,
+                     "median": statistics.median(x[0] for x in seeds),
+                     "median_ex": statistics.median(x[1] for x in seeds)})
+    return rows
+
+
+def table_rl(rows: list[dict]) -> str:
+    out = ["| asset | strategy | the rule (C8 grid) | RL on top, median of 5 | seeds | "
+           "rule ex-09-22 | RL ex-09-22 (median) | RL fills/day |",
+           "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for r in rows:
+        seeds = ", ".join(f"{x[0]:+.2f}" for x in r["seeds"])
+        fills = f"{min(x[2] for x in r['seeds']):.0f}–{max(x[2] for x in r['seeds']):.0f}"
+        out.append(f"| {ASSET[r['symbol']]} | {r['strategy']} | {fmt(r['rule'])} | "
+                   f"**{fmt(r['median'])}** | {seeds} | {fmt(r['rule_ex'])} | "
+                   f"{fmt(r['median_ex'])} | {fills} |")
+    return "\n".join(out)
+
+
+def breadth_stress_rows() -> list[dict]:
+    rows = []
+    for strategy, symbol in c8.BREADTH_PAIRS:
+        pick = c8.choose(c8.breadth_grid(strategy, symbol))
+        per_day = c8.results(pick, c8.TEST) if pick is not None else None
+        if per_day is None:
+            continue
+        sc = c8.score(per_day)
+        if sc["chained"] <= 0 or sc["median_fills"] < c8.MIN_FILLS:
+            continue
+        best = max(per_day, key=lambda d: d["Return"])["date"]
+        row = {"strategy": strategy, "symbol": symbol, "base": chained(per_day),
+               "fills/day": sc["median_fills"], "ex 09-22": ex_crash(per_day),
+               "ex best day": chained([d for d in per_day if d["date"] != best])}
+        for name, variant in c8.stress_configs(pick).items():
+            row[name] = chained(c8.results(variant, c8.TEST))
+        rows.append(row)
+    return rows
+
+
+def table_breadth_stress(rows: list[dict]) -> str:
+    names = (["ex 09-22", "ex best day"] + list(c8.STRESS)
+             + ["floor x0.8", "floor x1.25", "kappa x0.5", "kappa x2"])
+    out = ["| asset | strategy | as chosen | fills/day | " + " | ".join(names) + " |",
+           "| --- | --- | --- | --- |" + " --- |" * len(names)]
+    for r in rows:
+        out.append(f"| {r['symbol'].upper()} | {r['strategy']} | {fmt(r['base'])} | "
+                   f"{r['fills/day']:.0f} | " + " | ".join(fmt(r.get(n)) for n in names) + " |")
+    return "\n".join(out)
+
+
+def fig_rl(rows: list[dict]) -> None:
+    """RL on top of the markout rule: each seed against the rule it starts from."""
+    if not rows:
+        return
+    fig, ax = plt.subplots(figsize=(7.2, 3.6))
+    for i, r in enumerate(rows):
+        ys = [x[0] for x in r["seeds"]]
+        ax.scatter([i] * len(ys), ys, color=ORANGE, s=30, zorder=3,
+                   label="RL on top, one seed" if i == 0 else None)
+        ax.hlines(r["rule"], i - 0.3, i + 0.3, color=BLUE, lw=2.2, zorder=2,
+                  label="the rule it starts from" if i == 0 else None)
+        ax.hlines(r["median"], i - 0.18, i + 0.18, color=ORANGE, lw=1.2, ls="--", zorder=2,
+                  label="RL median" if i == 0 else None)
+    ax.axhline(0, color=MUTED, lw=0.6)
+    ax.set_xticks(range(len(rows)), [f"{r['strategy']} {ASSET[r['symbol']]}" for r in rows])
+    ax.set_ylabel("held-out return, % of book")
+    ax.set_title("RL on top of the markout rule (v2-mk), 24 training sessions, 7 held out")
+    ax.legend(fontsize=7.5, loc="lower left")
+    save(fig, "rl.png")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -370,6 +461,8 @@ def main() -> None:
     print("\n## Family gains over stage A (train / held out, points)\n\n" + table_families(gains))
     print("\n## Stress (held-out chained %)\n\n" + table_stress(stress))
     print("\n## Breadth\n\n" + table_breadth(breadth))
+    print("\n## Breadth stress\n\n" + table_breadth_stress(breadth_stress_rows()))
+    print("\n## RL on top of the markout rule\n\n" + table_rl(rl_rows()))
     if args.tables:
         return
     fig_heldout(rows)
@@ -377,6 +470,7 @@ def main() -> None:
     fig_stress(stress)
     fig_walk_forward()
     fig_breadth(breadth)
+    fig_rl(rl_rows())
 
 
 if __name__ == "__main__":
