@@ -357,9 +357,21 @@ def pending_units(stage: str) -> list[tuple[dict, str]]:
     return units
 
 
-def cmd_run(stage: str, shard: str) -> None:
+def cmd_run(stage: str, shard: str, units_file: str | None = None) -> None:
+    """Replay the stage's pending sessions (or an exported list), one shard of them.
+
+    `C8_REVERSE=1` walks the list from the end, so a second host can take the
+    same list from the other side; every unit is re-checked against the cache
+    just before it runs, so results merged in from elsewhere are never redone.
+    """
     index, count = (int(x) for x in shard.split("/"))
-    units = pending_units(stage)[index::count]
+    if units_file:
+        units = [(cfg, date) for cfg, date in json.loads(Path(units_file).read_text())]
+    else:
+        units = pending_units(stage)
+    units = units[index::count]
+    if os.environ.get("C8_REVERSE") == "1":
+        units = units[::-1]
     print(f"### stage {stage} shard {shard}: {len(units)} session replays", flush=True)
     # `C8_DEADLINE` (epoch seconds): take no new session after it, so a
     # time-limited host (a Kaggle session) finishes cleanly and keeps its cache.
@@ -368,6 +380,8 @@ def cmd_run(stage: str, shard: str) -> None:
         if time.time() > deadline:
             print("### deadline reached", flush=True)
             break
+        if result(cfg, date) is not None:
+            continue
         start = time.time()
         try:
             run_one(cfg, date)
@@ -377,6 +391,18 @@ def cmd_run(stage: str, shard: str) -> None:
         print(f"{i + 1}/{len(units)} {cfg['strategy']} {cfg['symbol']} {date} {key(cfg)} "
               f"{status} {time.time() - start:.0f}s", flush=True)
     print(f"### SHARD DONE {stage} {shard}", flush=True)
+
+
+def cmd_export(stages: list[str], out: str) -> None:
+    """Every pending (configuration, session) of these stages, for another host."""
+    units, seen = [], set()
+    for stage in stages:
+        for cfg, date in pending_units(stage):
+            if (key(cfg), date) not in seen:
+                seen.add((key(cfg), date))
+                units.append([cfg, date])
+    Path(out).write_text(json.dumps(units))
+    print(f"{len(units)} units -> {out}")
 
 
 def cmd_status() -> None:
@@ -392,10 +418,16 @@ def main() -> None:
     run.add_argument("--stage", required=True,
                      choices=["A", "B", "C", "D", "D-test", "E", "breadth"])
     run.add_argument("--shard", default="0/1")
+    run.add_argument("--units", default=None, help="a JSON list exported by `export`")
+    export = sub.add_parser("export")
+    export.add_argument("--stage", nargs="+", required=True)
+    export.add_argument("--out", required=True)
     sub.add_parser("status")
     args = parser.parse_args()
     if args.cmd == "run":
-        cmd_run(args.stage, args.shard)
+        cmd_run(args.stage, args.shard, args.units)
+    elif args.cmd == "export":
+        cmd_export(args.stage, args.out)
     else:
         cmd_status()
 
