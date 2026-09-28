@@ -5,6 +5,7 @@ days from here, so that the train/held-out split is decided once and cannot be
 quietly re-picked after seeing a result.
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -258,7 +259,12 @@ def ensure_latency(date: str, mul_entry: float = MUL_ENTRY, mul_resp: float = MU
     latency["resp_ts"] = latency["exch_ts"] + (mul_resp * feed).astype(np.int64)
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, data=latency)
+    # Written under a temporary name and renamed: parallel workers that need
+    # the same day's latency at once otherwise read each other's half-written
+    # file, which hftbacktest rejects as an invalid zip and aborts on (C8).
+    tmp = out.with_name(f"{out.stem}.tmp{os.getpid()}.npz")
+    np.savez_compressed(tmp, data=latency)
+    os.replace(tmp, out)
     return out
 
 
