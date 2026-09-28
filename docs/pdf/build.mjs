@@ -122,6 +122,11 @@ tr { break-inside: avoid; }
 th, td { border: 1px solid #ccc; padding: .25em .5em; vertical-align: top; }
 th { background: #eef1f5; }
 tr:nth-child(even) td { background: #fafafa; }
+/* Tables wider than ten columns (stress grids) set smaller to fit the page,
+   and those wider than sixteen smaller still. */
+table.dense { font-size: .62em; }
+table.dense th, table.dense td { padding: .15em .22em; }
+table.dense.xdense { font-size: .56em; }
 img { max-width: 100%; max-height: 95mm; width: auto; display: block; margin: .8em auto; break-inside: avoid; }
 blockquote { border-left: 3px solid #999; margin: .8em 0; padding: .1em 1em; color: #444; }
 hr { border: 0; border-top: 1px solid #ccc; margin: 1.5em 0; }
@@ -173,7 +178,24 @@ for (const f of files) {
   // they do on GitHub.
   const tmp = path.join(writeups, `.${f}.render.html`);
   fs.writeFileSync(tmp, html(title, body, wide));
+  // Lay the page out at the printable width (A4 less the @page margins, at
+  // 96 px/in), so the overflow check below measures what will be printed.
+  await page.setViewportSize({ width: wide ? 1032 : 665, height: 1000 });
   await page.goto(pathToFileURL(tmp).href, { waitUntil: "networkidle" });
+  // Dense tables, then a check that nothing is wider than the printed page:
+  // a clipped table loses its right-hand columns silently.
+  const overflow = await page.evaluate(() => {
+    for (const t of document.querySelectorAll("table")) {
+      const n = t.rows[0]?.cells.length ?? 0;
+      if (n > 10) t.classList.add("dense");
+      if (n > 16) t.classList.add("xdense");
+    }
+    const limit = document.body.clientWidth;
+    return [...document.querySelectorAll("table")]
+      .filter((t) => t.scrollWidth > limit + 1)
+      .map((t) => `${t.scrollWidth}px > ${limit}px: ${t.rows[0].innerText.replace(/\s+/g, " ").slice(0, 80)}`);
+  });
+  for (const o of overflow) console.warn(`${f}: table wider than the page (${o})`);
   const out = path.join(outDir, f.replace(/\.md$/, ".pdf"));
   await page.pdf({
     path: out, format: "A4", landscape: wide, printBackground: true,
