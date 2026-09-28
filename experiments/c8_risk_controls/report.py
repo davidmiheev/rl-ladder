@@ -149,8 +149,16 @@ def stress_rows() -> list[dict]:
     rows = []
     for strategy, symbol in c8.PAIRS:
         for label, cfg in c8.final_choices(strategy, symbol).items():
-            base = chained(c8.results(cfg, c8.TEST))
+            per_day = c8.results(cfg, c8.TEST)
+            base = chained(per_day)
             row = {"strategy": strategy, "symbol": symbol, "choice": label, "base": base}
+            if per_day is not None:
+                # Session-removal stresses: without the crash, and without
+                # whichever held-out session was best for this configuration.
+                best = max(per_day, key=lambda d: d["Return"])["date"]
+                row["ex 09-22"] = ex_crash(per_day)
+                row["ex best day"] = chained([d for d in per_day if d["date"] != best])
+                row["fills/day"] = float(np.median([d["DailyNumberOfTrades"] for d in per_day]))
             for name, variant in c8.stress_configs(cfg).items():
                 test = c8.results(variant, c8.TEST)
                 row[name] = chained(test)
@@ -159,11 +167,13 @@ def stress_rows() -> list[dict]:
 
 
 def table_stress(rows: list[dict]) -> str:
-    names = list(c8.STRESS) + ["floor x0.8", "floor x1.25", "kappa x0.5", "kappa x2"]
-    out = ["| asset | strategy | choice | as chosen | " + " | ".join(names) + " |",
-           "| --- | --- | --- | --- |" + " --- |" * len(names)]
+    names = (["ex 09-22", "ex best day"] + list(c8.STRESS)
+             + ["floor x0.8", "floor x1.25", "kappa x0.5", "kappa x2"])
+    out = ["| asset | strategy | choice | as chosen | fills/day | " + " | ".join(names) + " |",
+           "| --- | --- | --- | --- | --- |" + " --- |" * len(names)]
     for r in rows:
         out.append(f"| {ASSET[r['symbol']]} | {r['strategy']} | {r['choice']} | {fmt(r['base'])} | "
+                   f"{fmt(r.get('fills/day'), '{:.0f}')} | "
                    + " | ".join(fmt(r.get(n)) for n in names) + " |")
     return "\n".join(out)
 
@@ -257,7 +267,7 @@ def fig_stress(rows: list[dict]) -> None:
     rows = [r for r in rows if r["base"] is not None]
     if not rows:
         return
-    names = ["base"] + list(c8.STRESS) + ["floor x0.8", "floor x1.25"]
+    names = ["base", "ex 09-22", "ex best day"] + list(c8.STRESS) + ["floor x0.8", "floor x1.25"]
     fig, ax = plt.subplots(figsize=(11, 0.35 * len(rows) + 1.8))
     m = np.array([[r.get(n) if r.get(n) is not None else np.nan for n in names] for r in rows])
     lim = np.nanmax(np.abs(m))
