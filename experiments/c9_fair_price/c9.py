@@ -22,6 +22,7 @@ configuration C8 already replayed is never replayed again:
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import sys
@@ -131,16 +132,29 @@ def large_choice(strategy: str, symbol: str) -> dict | None:
 DAGGER_ROUND = int(os.environ.get("C9_DAGGER_ROUND", "2"))
 DAGGER_ACTIONS = [{"dag_thr": thr, "dag_widen_bp": w}
                   for thr in (0.4, 0.5, 0.6, 0.7) for w in (0.0, 2.0, 5.0)]
+#: The second teacher (the oracle large-move policy): its events are rare, so
+#: its probabilities are small and so are the thresholds; its last round.
+PULL_TEACHER = "pull:30:0.99"
+PULL_ROUND = int(os.environ.get("C9_PULL_ROUND", "1"))
+PULL_ACTIONS = [{"dag_thr": thr, "dag_widen_bp": w}
+                for thr in (0.05, 0.1, 0.2, 0.3) for w in (0.0, 5.0)]
 
 
-def dagger_configs(strategy: str, symbol: str) -> list[dict] | None:
+def dagger_students() -> list[tuple[str, int, list[dict]]]:
+    """(tag, final round, actions) for each teacher."""
+    return [("", DAGGER_ROUND, DAGGER_ACTIONS),
+            ("-" + PULL_TEACHER.replace(":", ""), PULL_ROUND, PULL_ACTIONS)]
+
+
+def dagger_configs(strategy: str, symbol: str, tag: str = "") -> list[dict] | None:
     import dagger
 
+    rnd, actions = {t: (r, a) for t, r, a in dagger_students()}[tag]
     base = base_choice(strategy, symbol)
-    if base is None or not (dagger.ROOT / f"{strategy}_{symbol}_r{DAGGER_ROUND}.json").exists():
+    name = strategy + tag
+    if base is None or not (dagger.ROOT / f"{name}_{symbol}_r{rnd}.json").exists():
         return None
-    return [c8.on_top(base, dagger.student_sets(strategy, symbol, DAGGER_ROUND, a))
-            for a in DAGGER_ACTIONS]
+    return [c8.on_top(base, dagger.student_sets(name, symbol, rnd, a)) for a in actions]
 
 
 def fair_families(strategy: str) -> dict[str, list[dict]]:
@@ -248,8 +262,8 @@ def jobs_for(stage: str) -> list[tuple[dict, list[str]]]:
     if stage in ("dagger", "dagger-E"):
         import dagger
 
-        for strategy, symbol in dagger.TARGETS:
-            cfgs = dagger_configs(strategy, symbol)
+        for (strategy, symbol), (tag, _, _) in itertools.product(dagger.TARGETS, dagger_students()):
+            cfgs = dagger_configs(strategy, symbol, tag)
             if cfgs is None:
                 continue
             if stage == "dagger":

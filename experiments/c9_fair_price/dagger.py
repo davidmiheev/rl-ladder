@@ -61,15 +61,25 @@ REBATE_BP = 0.5  # the default maker fee is a 0.5 bp rebate
 SIGNED = {"qi1", "micro_bp", "qi_2", "qi_10", "obi_z", "ofi_1", "ofi_5", "ofi_20", "ofi_100",
           "tfi_5", "tfi_20", "tfi_100", "ret_1", "ret_5", "ret_20", "ret_100"}
 MIRROR = np.array([-1.0 if c in SIGNED else 1.0 for c in predict.FEATURES], np.float32)
+#: Two teachers. `markout` (the first): pull a quote whose fill would lose
+#: on a 5 s markout. It turned out misaligned -- a quote the opposite touch
+#: reaches is mostly one the price runs through, so 58-69% of its labels say
+#: "pull" and the student learns to pull nearly everything, while the
+#: strategies earn over longer holds than 5 s. `pull:<k>:<q>` is the oracle
+#: policy the large-move check showed to pay: pull a side just before a move
+#: against it in the top (1-q) of k-step moves (on training sessions).
+TEACHER = os.environ.get("C9_TEACHER", "markout")
+TAG = "" if TEACHER == "markout" else "-" + TEACHER.replace(":", "")
 #: The action rollouts use while the student is being trained; the final
 #: threshold and action are chosen on training sessions afterwards.
-ROLLOUT_ACTION = {"dag_thr": 0.5, "dag_widen_bp": 0.0}
+ROLLOUT_ACTION = {"dag_thr": 0.5, "dag_widen_bp": 0.0} if TEACHER == "markout" else \
+    {"dag_thr": 0.2, "dag_widen_bp": 0.0}
 
 
-def student_sets(strategy: str, symbol: str, rnd: int, action: dict | None = None) -> dict:
-    """Configuration overrides for the student fitted after round `rnd`."""
-    spec = json.loads((ROOT / f"{strategy}_{symbol}_r{rnd}.json").read_text())
-    return {"fair_src": f"dag:{strategy}:{rnd}", "dag_mode": 1.0, **spec["weights"],
+def student_sets(name: str, symbol: str, rnd: int, action: dict | None = None) -> dict:
+    """Configuration overrides for the student `name` (strategy + teacher tag) after round `rnd`."""
+    spec = json.loads((ROOT / f"{name}_{symbol}_r{rnd}.json").read_text())
+    return {"fair_src": f"dag:{name}:{rnd}", "dag_mode": 1.0, **spec["weights"],
             **(action or ROLLOUT_ACTION)}
 
 
@@ -77,7 +87,7 @@ def rollout_config(strategy: str, symbol: str, rnd: int) -> dict:
     import c9
 
     base = c9.base_choice(strategy, symbol)
-    return base if rnd == 0 else c8.on_top(base, student_sets(strategy, symbol, rnd - 1))
+    return base if rnd == 0 else c8.on_top(base, student_sets(strategy + TAG, symbol, rnd - 1))
 
 
 def series(strategy: str, rnd: int, symbol: str, date: str, f: dict) -> np.ndarray:
@@ -93,7 +103,8 @@ def series(strategy: str, rnd: int, symbol: str, date: str, f: dict) -> np.ndarr
 
 
 def roll_path(strategy: str, symbol: str, rnd: int, date: str) -> Path:
-    return ROOT / "roll" / f"{strategy}_{symbol}_r{rnd}" / f"{date}.npz"
+    # Round 0 is the rule itself, the same for every teacher.
+    return ROOT / "roll" / f"{strategy}{TAG if rnd else ''}_{symbol}_r{rnd}" / f"{date}.npz"
 
 
 def rollout(strategy: str, symbol: str, rnd: int, date: str) -> None:
@@ -151,6 +162,41 @@ def teacher(symbol: str, date: str, roll: dict) -> list[dict]:
     return out
 
 
+NEG_STRIDE = 20  # the pull teacher's "keep" steps, subsampled and reweighted
+
+
+def teacher_pull(symbol: str, date: str, roll: dict) -> list[dict]:
+    """The oracle large-move policy's action on every quoted step, per side."""
+    import fair
+    import strategies
+
+    k, q = (float(x) for x in TEACHER.split(":")[1:])
+    f = features.load(symbol, date)
+    mid = fair.mid_of(f)
+    move = fair.future_move_bp(mid, int(k))
+    thr = fair.gate_threshold(q, f"oracle:{int(k)}", symbol)
+    n = min(len(mid), len(roll["bid_px"]))
+    x, _ = predict.build(f)
+    norm_pos = roll["position"][:n] * roll["mid"][:n] / strategies.MAX_POSITION_DOLLAR
+    out = []
+    for side, px, against in ((0, roll["bid_px"][:n].astype(np.float64), -move[:n]),
+                              (1, roll["ask_px"][:n].astype(np.float64), move[:n])):
+        quoted = np.isfinite(px) & np.isfinite(against)
+        pos_idx = np.where(quoted & (against >= thr))[0]
+        neg = quoted & (against < thr)
+        neg_idx = np.where(neg)[0][::NEG_STRIDE]
+        idx = np.concatenate([pos_idx, neg_idx])
+        out.append({
+            "x": x[idx] * (MIRROR if side == 1 else 1.0),
+            "dist": np.abs(px[idx] - mid[idx]) / mid[idx] * 1e4,
+            "pos": norm_pos[idx] if side == 0 else -norm_pos[idx],
+            "tox": (roll["tox_buy"] if side == 0 else roll["tox_sell"])[idx].astype(np.float64),
+            "y": np.concatenate([np.ones(len(pos_idx)), np.zeros(len(neg_idx))]),
+            "w": np.concatenate([np.ones(len(pos_idx)), np.full(len(neg_idx), float(NEG_STRIDE))]),
+        })
+    return out
+
+
 def _dataset(strategy: str, symbol: str, rounds: range):
     rows = []
     for rnd in rounds:
@@ -160,7 +206,8 @@ def _dataset(strategy: str, symbol: str, rounds: range):
                 raise SystemExit(f"missing rollout {path}")
             with np.load(path) as z:
                 roll = {k: z[k] for k in z.files}
-            for part in teacher(symbol, date, roll):
+            label = teacher if TEACHER == "markout" else teacher_pull
+            for part in label(symbol, date, roll):
                 part["date"] = np.full(len(part["y"]), c8.TRAIN.index(date))
                 rows.append(part)
     return {k: np.concatenate([r[k] for r in rows]) for k in rows[0]}
@@ -199,7 +246,8 @@ def fit(strategy: str, symbol: str, rnd: int) -> dict:
         callbacks=[lgb.early_stopping(30, verbose=False)],
     )
     ROOT.mkdir(parents=True, exist_ok=True)
-    booster.save_model(str(ROOT / f"{strategy}_{symbol}_r{rnd}.txt"))
+    name = strategy + TAG
+    booster.save_model(str(ROOT / f"{name}_{symbol}_r{rnd}.txt"))
     mkt = booster.predict(data["x"], raw_score=True)
     z = np.column_stack([np.ones(len(mkt)), mkt, data["dist"], data["pos"], data["tox"]])
     beta = _logistic(z, data["y"], data["w"])
@@ -214,7 +262,25 @@ def fit(strategy: str, symbol: str, rnd: int) -> dict:
               "trees": booster.best_iteration, "weights": weights,
               "pull_share_at_0.5": float(pulled.mean()),
               "bp_saved_per_fill_at_0.5": float(signed[pulled].sum() / len(signed))}
-    (ROOT / f"{strategy}_{symbol}_r{rnd}.json").write_text(json.dumps(report, indent=1))
+    report["teacher"] = TEACHER
+    if TEACHER != "markout":
+        # How well the student ranks the teacher's pulls on the last
+        # training session (the early-stopping one): weighted AUC, and
+        # precision and recall at the rollout threshold.
+        yv, wv, pv = data["y"][val], data["w"][val], p[val]
+        order = np.argsort(pv)
+        ranks = np.empty(len(pv))
+        ranks[order] = np.cumsum(wv[order]) - wv[order] / 2.0
+        pos_w, neg_w = wv[yv > 0].sum(), wv[yv == 0].sum()
+        auc = ((ranks[yv > 0] * wv[yv > 0]).sum() - pos_w * pos_w / 2.0) / (pos_w * neg_w)
+        hit = pv > ROLLOUT_ACTION["dag_thr"]
+        report.update({
+            "val_auc": float(auc),
+            "precision_at_thr": float((wv * yv * hit).sum() / max((wv * hit).sum(), 1e-12)),
+            "recall_at_thr": float((wv * yv * hit).sum() / pos_w),
+            "pull_share_at_thr": float((wv * hit).sum() / wv.sum()),
+        })
+    (ROOT / f"{name}_{symbol}_r{rnd}.json").write_text(json.dumps(report, indent=1))
     print(json.dumps(report), flush=True)
     return report
 
