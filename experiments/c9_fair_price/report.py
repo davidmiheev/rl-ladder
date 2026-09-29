@@ -220,6 +220,8 @@ def fig_r2_curve(rows: list[dict], rep: dict) -> None:
                            label=f"{'linear' if model == 'lin' else 'trees'}: {got[model]['r2']:.1f}%")
         ax.axhline(0, color=INK, lw=0.6)
         ax.set_xscale("symlog", linthresh=0.05)
+        ax.set_xticks([0, 0.05, 0.1, 0.2, 0.4, 1.0], ["0", ".05", ".1", ".2", ".4", "1"])
+        ax.minorticks_off()
         ax.set_xlabel("R² of the 1 s forecast the quotes are centred on")
         ax.set_title(name(r["strategy"], r["symbol"]), fontsize=10)
         ax.legend(fontsize=7, frameon=False)
@@ -353,17 +355,127 @@ def fig_denoise(rows: list[dict]) -> None:
     save(fig, "denoise.png")
 
 
+# ---------------------------------------------------------- large moves, DAgger
+
+def large_rows() -> list[dict]:
+    rows = []
+    for strategy, symbol in c9.LARGE_TARGETS:
+        base = c9.base_choice(strategy, symbol)
+        pick = c9.large_choice(strategy, symbol)
+        if base is None or pick is None:
+            continue
+        rows.append({"strategy": strategy, "symbol": symbol, "base_cfg": base, "base": summary(base),
+                     "oracle": {lab: summary(c8.on_top(base, v))
+                                for lab, v in c9.large_oracle_variants().items()},
+                     "fams": {"large-move forecast rule": {"cfg": pick, "what": describe(pick, base),
+                                                           **summary(pick)}}})
+    return rows
+
+
+LARGE_COLS = ("pull, top 10% of 1 s moves", "pull, top 1% of 3 s moves",
+              "widen, top 10% of 1 s moves", "widen endangered side by the 1 s move")
+
+
+def table_large(rows: list[dict]) -> str:
+    lines = ["| configuration | sessions | C8 choice | " + " | ".join(
+        f"oracle: {c}" for c in LARGE_COLS) + " | forecast rule (chosen on training) |",
+             "| --- | --- | --- |" + " --- |" * len(LARGE_COLS) + " --- |"]
+    for r in rows:
+        rule = r["fams"]["large-move forecast rule"]
+        for part, label in (("test", "held out"), ("train", "training")):
+            lines.append(f"| {name(r['strategy'], r['symbol'])} | {label} | {fmt(r['base'][part])} | "
+                         + " | ".join(fmt(r["oracle"][c][part]) for c in LARGE_COLS)
+                         + f" | {fmt(rule[part])} |")
+        lines.append(f"| | fills/day held out | {fmt(r['base']['fills'], '{:.0f}')} | "
+                     + " | ".join(fmt(r["oracle"][c]["fills"], "{:.0f}") for c in LARGE_COLS)
+                     + f" | {fmt(rule['fills'], '{:.0f}')} |")
+    return "\n".join(lines)
+
+
+def dagger_rows() -> list[dict]:
+    import dagger
+
+    rows = []
+    for strategy, symbol in dagger.TARGETS:
+        base = c9.base_choice(strategy, symbol)
+        fams = {}
+        for tag, rnd, _ in c9.dagger_students():
+            cfgs = c9.dagger_configs(strategy, symbol, tag)
+            pick = c8.choose(cfgs) if cfgs else None
+            if pick is None:
+                continue
+            teacher = "5 s markout teacher" if tag == "" else "large-move teacher"
+            fit = json.loads((dagger.ROOT / f"{strategy}{tag}_{symbol}_r{rnd}.json").read_text())
+            fams[f"DAgger, {teacher}"] = {"cfg": pick, "what": describe(pick, base), "fit": fit,
+                                         **summary(pick)}
+        if fams:
+            rows.append({"strategy": strategy, "symbol": symbol, "base_cfg": base,
+                         "base": summary(base), "fams": fams})
+    return rows
+
+
+def table_dagger(rows: list[dict]) -> str:
+    lines = ["| configuration | student | rounds, labelled rows | teacher says pull | "
+             "held-out AUC | chosen action | training | held out | without 09-22 | fills/day |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for r in rows:
+        b = r["base"]
+        lines.append(f"| {name(r['strategy'], r['symbol'])} | none (C8 choice) | – | – | – | – | "
+                     f"{fmt(b['train'])} | {fmt(b['test'])} | {fmt(b['ex_crash'])} | "
+                     f"{fmt(b['fills'], '{:.0f}')} |")
+        for fam, v in r["fams"].items():
+            fit = v["fit"]
+            auc = fmt(fit.get("val_auc"), "{:.2f}")
+            lines.append(f"| | {fam} | {fit['round'] + 1}, {fit['rows']:,} | "
+                         f"{100 * fit['weighted_adverse']:.1f}% | {auc} | "
+                         f"{v['what'].split(': ', 1)[-1]} (p > {v['cfg']['sets']['dag_thr']:g}) | "
+                         f"{fmt(v['train'])} | {fmt(v['test'])} | {fmt(v['ex_crash'])} | "
+                         f"{fmt(v['fills'], '{:.0f}')} |")
+    return "\n".join(lines)
+
+
+def fig_large(large: list[dict], dag: list[dict]) -> None:
+    if not large:
+        return
+    dag_by = {(r["strategy"], r["symbol"]): r for r in dag}
+    series = [("C8 choice", INK, lambda r: r["base"]["test"]),
+              ("oracle: pull, top 1% of 3 s moves", BLUE,
+               lambda r: r["oracle"]["pull, top 1% of 3 s moves"]["test"]),
+              ("forecast rule", AQUA, lambda r: r["fams"]["large-move forecast rule"]["test"]),
+              ("DAgger, 5 s markout teacher", YELLOW,
+               lambda r: dag_by.get((r["strategy"], r["symbol"]), {}).get("fams", {})
+               .get("DAgger, 5 s markout teacher", {}).get("test")),
+              ("DAgger, large-move teacher", ORANGE,
+               lambda r: dag_by.get((r["strategy"], r["symbol"]), {}).get("fams", {})
+               .get("DAgger, large-move teacher", {}).get("test"))]
+    fig, ax = plt.subplots(figsize=(7.5, 3.6))
+    width = 0.8 / len(series)
+    for i, (lab, color, get) in enumerate(series):
+        ys = [get(r) for r in large]
+        ax.bar(np.arange(len(large)) + (i - (len(series) - 1) / 2) * width,
+               [np.nan if y is None else y for y in ys], width, color=color, label=lab)
+    ax.set_xticks(range(len(large)), [name(r["strategy"], r["symbol"]) for r in large], fontsize=9)
+    ax.axhline(0, color=INK, lw=0.6)
+    ax.set_ylabel("held-out cumulative return, %")
+    ax.legend(fontsize=7, frameon=False, ncol=2)
+    ax.set_title("Acting on large moves: the oracle, a forecast rule, and two DAgger students",
+                 fontsize=10)
+    save(fig, "large-moves.png")
+
+
 # --------------------------------------------------------------------- stress
 
-def stress_rows(pred: list[dict], den: list[dict]) -> list[dict]:
+def stress_rows(pred: list[dict], den: list[dict], large: list[dict] = (),
+                dag: list[dict] = ()) -> list[dict]:
     out = []
-    for kind, rows in (("fair price", pred), ("denoise", den)):
+    for kind, rows in (("fair price", pred), ("denoise", den), ("large move", large),
+                       ("dagger", dag)):
         for r in rows:
-            base = stress_row(r["base_cfg"])
             out.append({"config": name(r["strategy"], r["symbol"]), "what": "C8 choice",
-                        "kind": kind, **base})
+                        "kind": kind, "train": r["base"]["train"], **stress_row(r["base_cfg"])})
             for fam, v in r["fams"].items():
                 out.append({"config": name(r["strategy"], r["symbol"]), "what": fam, "kind": kind,
+                            "train": v["train"], "base_train": r["base"]["train"],
                             **stress_row(v["cfg"])})
     return out
 
@@ -383,7 +495,17 @@ def table_stress(rows: list[dict], kind: str) -> str:
 
 
 def fig_stress(rows: list[dict]) -> None:
-    rows = [r for r in rows if r["base"] is not None and r.get("fee 0") is not None]
+    # The C8 choices, and every C9 variant that beat its C8 choice on the
+    # training sessions -- the ones a training-session selection would adopt.
+    rows = [r for r in rows if r["base"] is not None and r.get("fee 0") is not None
+            and r["kind"] != "denoise"
+            and ("base_train" not in r or (r["train"] or -1e9) > (r["base_train"] or 1e9))]
+    seen, uniq = set(), []
+    for r in rows:
+        if (r["config"], r["what"]) not in seen:
+            seen.add((r["config"], r["what"]))
+            uniq.append(r)
+    rows = uniq
     if not rows:
         return
     fig, ax = plt.subplots(figsize=(10, 0.9 + 0.3 * len(rows)))
@@ -407,7 +529,8 @@ def fig_stress(rows: list[dict]) -> None:
                        Line2D([], [], marker="x", color=INK, ls="", label="without 09-22"),
                        Line2D([], [], marker="v", color=INK, mfc="none", ls="", label="without best day")],
               fontsize=7, frameon=False, loc="lower right")
-    ax.set_title("Stress tests of every C9 configuration reported held out", fontsize=10)
+    ax.set_title("Stress tests: the C8 choices and every C9 variant that beat them on training "
+                 "sessions", fontsize=10)
     save(fig, "stress.png")
 
 
@@ -427,7 +550,9 @@ def main() -> None:
     orc = oracle_rows()
     pred = predict_rows()
     den = denoise_rows()
-    stress = stress_rows(pred, den)
+    large = large_rows()
+    dag = dagger_rows()
+    stress = stress_rows(pred, den, large, dag)
     print("## Predictability (held-out R², %)\n\n" + table_predictability(rep))
     print("\n## Oracle (cumulative return, %)\n\n" + table_oracle(orc))
     print("\n## Causal fair prices\n\n" + table_predict(pred))
@@ -435,12 +560,17 @@ def main() -> None:
     print("\n## Denoising: chosen variants\n\n" + table_denoise_choices(den))
     print("\n## Stress, fair prices\n\n" + table_stress(stress, "fair price"))
     print("\n## Stress, denoising\n\n" + table_stress(stress, "denoise"))
+    print("\n## Large moves (cumulative return, %)\n\n" + table_large(large))
+    print("\n## DAgger\n\n" + table_dagger(dag))
+    print("\n## Stress, large moves and DAgger\n\n" + table_stress(stress, "large move")
+          + "\n" + "\n".join(table_stress(stress, "dagger").splitlines()[2:]))
     if not args.tables:
         fig_predictability(rep)
         fig_oracle(orc)
         fig_r2_curve(orc, rep)
         fig_predict(pred)
         fig_denoise(den)
+        fig_large(large, dag)
         fig_stress(stress)
 
 

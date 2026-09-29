@@ -15,6 +15,11 @@ the summary; each phase has its own writeup, linked in §4.
 >   without the maker rebate (+2.05%), with a 1 bp maker fee (+1.13%) and at
 >   4× order latency (+1.30%). XRP's OBI gain, by the same stress tests, is
 >   the crash session.
+> - **The fair price matters more than anything else tried — if it were
+>   known.** Quoting around the mid 1–3 s ahead (C9) turns ETH GLFT from
+>   −3.25% to +4.30–19.67% held out; but the best forecast of the mid explains
+>   2–10% of its 1 s move, where about 40% would be needed, and no forecast,
+>   large-move rule or DAgger student captures the gain.
 > - **Everything on ETHUSDC still loses held out**, bar the rebate. The best, the same rule on
 >   OBI, is at −0.62%, against −6.40% for the widened baseline and −7.14% for
 >   the published parameters.
@@ -112,6 +117,7 @@ configuration under each stress.*
 | [C6](c6-strategy-zoo.md) | Is that just GLFT being a bad baseline? | No. On five strategies and nine assets, a per-asset wider spread is the largest single gain (+2.25 points median); TD3 on top of it does not beat it. |
 | [C7](c7-signals.md) | What information is the policy missing? | Not the deep book or BTCUSDT. The toxicity of its own recent fills: a markout rule beats C6 in 6 of 6 pairs and 13 of 18 untuned. |
 | [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets, an inventory-discounted reward and larger networks do not. |
+| [C9](c9-fair-price.md) | Can the fair price be forecast ~1 s ahead, and does denoising help anywhere? | Foresight of 1–3 s would be worth up to +40 points held out (little on XRP); real forecasts reach R² 0.02–0.10 and help one asset (AVAX). DAgger with a future-seeing teacher halves ETH GLFT's loss but does not make it pay. No denoiser helps on any of nine assets. |
 | [C8](c8-risk-controls.md) | Do risk controls, denoising or RL on top of the markout rule help, and does what makes money survive stress? | A circuit breaker helps the losers on ETH; no denoiser, combination of controls or RL policy improves OBI. SUIUSDC OBI survives every cost, latency and session stress but κ ×0.5; XRP's gain is the crash, ETH's the rebate. |
 
 ## 5. Lessons that held up
@@ -133,6 +139,9 @@ configuration under each stress.*
    and the rebate; the others were one session or the rebate.
 7. **More knobs fit the training month.** Adding controls chosen on 24
    sessions helped strategies that lose and hurt the one that works.
+8. **Measure the ceiling before learning.** C9's oracle showed where the
+   money is (the next 1–3 s) and its noisy oracles how good a forecast must
+   be (R² ≈ 0.4); real forecasts at 0.02–0.10 were then no surprise.
 
 ## 6. What next
 
@@ -149,3 +158,6 @@ markout rule). What remains:
   the crash session.
 - **κ from the asset's markout**, since SUIUSDC OBI depends on κ = 4 and only
   the grid chooses κ today.
+- **Information from outside the book** for the rare large moves C9 found to
+  carry the value: other venues' perpetuals, spot, funding and liquidation
+  feeds (C9 §12).

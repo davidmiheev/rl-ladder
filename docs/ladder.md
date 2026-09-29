@@ -1065,3 +1065,23 @@ or RL policy improves OBI.
 
 Writeup: [`writeups/c8-risk-controls.md`](writeups/c8-risk-controls.md).
 Lab notebook: [`../experiments/c8_risk_controls/README.md`](../experiments/c8_risk_controls/README.md).
+
+
+<a id="c9"></a>
+## C9. The fair price, forecasts of the mid, and denoising on every asset (added, not from the original ladder)
+
+Not one of the 59 items. C9 asked whether the price the spread is quoted
+around can be forecast about a second ahead and whether quoting around the
+future mid would pay; then tested denoising on all nine assets, acting only
+on large moves, and DAgger with a teacher that sees the future mid.
+
+Its answer: foresight of 1–3 s would be worth a lot on seven of eight
+configurations (ETH GLFT −3.25% to +4.30% at 1 s), but the best causal
+forecast explains 2–10% of the 1 s move against the ~40% needed; a
+micro-price or forecast fair price helps only AVAXUSDC; a perfect
+large-move detector would suffice but the book does not anticipate those
+moves; the DAgger students halve ETH GLFT's loss without making it pay; and
+no denoiser helps on any asset.
+
+Writeup: [`writeups/c9-fair-price.md`](writeups/c9-fair-price.md).
+Lab notebook: [`../experiments/c9_fair_price/README.md`](../experiments/c9_fair_price/README.md).
