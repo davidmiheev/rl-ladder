@@ -73,7 +73,7 @@ TAG = "" if TEACHER == "markout" else "-" + TEACHER.replace(":", "")
 #: The action rollouts use while the student is being trained; the final
 #: threshold and action are chosen on training sessions afterwards.
 ROLLOUT_ACTION = {"dag_thr": 0.5, "dag_widen_bp": 0.0} if TEACHER == "markout" else \
-    {"dag_thr": 0.2, "dag_widen_bp": 0.0}
+    {"dag_thr": 0.02, "dag_widen_bp": 0.0}
 
 
 def student_sets(name: str, symbol: str, rnd: int, action: dict | None = None) -> dict:

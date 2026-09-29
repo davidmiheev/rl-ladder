@@ -137,7 +137,7 @@ DAGGER_ACTIONS = [{"dag_thr": thr, "dag_widen_bp": w}
 PULL_TEACHER = "pull:30:0.99"
 PULL_ROUND = int(os.environ.get("C9_PULL_ROUND", "1"))
 PULL_ACTIONS = [{"dag_thr": thr, "dag_widen_bp": w}
-                for thr in (0.05, 0.1, 0.2, 0.3) for w in (0.0, 5.0)]
+                for thr in (0.01, 0.02, 0.05, 0.1) for w in (0.0, 5.0)]
 
 
 def dagger_students() -> list[tuple[str, int, list[dict]]]:

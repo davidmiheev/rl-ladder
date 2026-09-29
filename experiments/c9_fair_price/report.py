@@ -85,9 +85,13 @@ def stress_row(cfg: dict) -> dict:
 
 def describe(cfg: dict, base: dict) -> str:
     extra = {k: v for k, v in cfg["sets"].items() if base["sets"].get(k) != v}
+    s = cfg["sets"]
+    if "dag_mode" in extra:
+        act = "pull" if s["dag_widen_bp"] == 0 else f"widen {s['dag_widen_bp']:g} bp"
+        return f"DAgger student {s['fair_src'].split(':', 1)[1]}, p > {s['dag_thr']:g}: {act}"
     if "fair_src" in extra or "fair_mode" in extra:
-        s = cfg["sets"]
-        mode = "added to own signal" if s["fair_mode"] == 1.0 else "replaces own signal"
+        mode = {1.0: "added to own signal", 2.0: "replaces own signal",
+                3.0: "widens the endangered side", 4.0: "pulls the endangered side"}[s["fair_mode"]]
         return f"{s['fair_src']}, ×{s['fair_coef']:g}, {mode}"
     return ", ".join(f"{k} {v:g}" for k, v in extra.items())
 
