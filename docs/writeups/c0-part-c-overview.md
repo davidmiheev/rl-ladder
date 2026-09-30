@@ -272,8 +272,9 @@ ranked by expected value at a 1–3 s horizon, and what can be had for free
 | **Depth ±1–5%** | book resilience regime | Binance archive, daily `bookDepth` | ~30 s | ✓ |
 | **Implied volatility** (Deribit DVOL, options) | volatility regime | Deribit public API | 1 min and slower | not checked |
 | **Best bid/ask of other contracts** | quote-level lead-lag | Binance `bookTicker` archive | tick | ✗ discontinued after 2024-03-30 |
-| **Full L2 books of other contracts or venues** | book-level lead-lag | Tardis free files (first day of each month, no key): one request succeeded, then Cloudflare returned 403 to every request from this machine; **free**: record live websockets with hftbacktest's collector | tick | partial |
-| **Our own L2 after 2025-09-25** | the forward test (a backtest needs the book, not only trades) | the project's dataset (`cardinalai/backtest_data` on Hugging Face, needs `HF_TOKEN` to list); or record live | tick | not checked |
+| **Bybit's full order books** (perpetuals, USDT- and USDC-margined, and spot) | book-level lead-lag across venues; and a year of fresh data for a forward test | Bybit, `quote-saver.bycsi.com/orderbook/{linear,spot}/<SYMBOL>/<date>_<SYMBOL>_ob200.data.zip`: 200 levels, a snapshot then deltas every 10–100 ms, JSON lines with exchange and matching-engine timestamps | tick | ✓ ETHUSDT, XRPUSDT, SUIUSDT, ETHPERP (USDC) and spot, from our month through 2026-09-28; ETHUSDT 137–287 MB/day zipped |
+| **Other venues' full books** | the same, more venues | Tardis free files (first day of each month, no key): one request succeeded, then Cloudflare returned 403 to every request from this machine | tick | partial |
+| **Binance books after 2025-09-25** | the forward test on the same venue | the project's dataset holds only 2025-08-26 to 09-25 (checked: 11 symbols, including BTCUSDC, nothing later); Binance's own historical depth data is by application only; **free**: record the live websockets from now on | tick | ✗ historical; live only |
 
 Only the first rows can trigger a 1–3 s decision; the slow series (funding,
 open interest, depth snapshots, implied volatility) can only condition the
@@ -308,7 +309,14 @@ first:
 - **The forward test:** the frozen SUIUSDC and XRP OBI choices (and AVAXUSDC
   with C9's boosted-tree fair price) on sessions after 2025-09-25, with no
   re-selection. Seven held-out sessions cannot tell a +2.5% edge from luck.
-  Needs the book after 09-25 (§7, last row).
+  Binance's books after 09-25 are not available, so there are two routes
+  (§7): **on Bybit**, whose free books run from our month to two days ago —
+  a year of out-of-sample sessions, on a different venue (its fees, ticks
+  and queues), so a test of the strategies' generality rather than of the
+  exact Binance configurations — and **on Binance from now on**, by
+  recording the free live websockets (depth every 100 ms and trades) with
+  hftbacktest's collector on an always-on host; an always-free cloud VM in
+  Tokyo, near Binance's matching engine, is enough.
 - **Lead-lag inputs from outside the book** (§7): the only line of work that
   could raise the information limit every method has hit.
 - **RL with a privileged critic and C9's per-side actions** (§6.4): worth
