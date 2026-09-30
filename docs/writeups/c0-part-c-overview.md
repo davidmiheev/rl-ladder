@@ -29,8 +29,28 @@ the summary; each phase has its own writeup, linked in §4.
 >   five seeds), GRPO- and PPO-style parameter search, extra order-book and
 >   BTCUSDT inputs, fill targets, a reward that discounts inventory PnL and
 >   networks up to 170 times larger all lose to the best fixed rule held out;
->   so does RL on top of that rule (C8). A circuit breaker helps the losing
->   strategies on ETH; extra controls chosen on training data hurt OBI.
+>   so does RL on top of that rule (C8). DAgger with a teacher that sees the
+>   future mid (C9) halves ETH GLFT's loss without making it pay. A circuit
+>   breaker helps the losing strategies on ETH; extra controls chosen on
+>   training data hurt OBI.
+> - **Why learning keeps losing** (§6): reward-driven RL learns from a signal
+>   buried in mark-to-market noise, and every method — RL or imitation — is
+>   capped by what the book tells it, which C9 measured at R² 0.02–0.10 of
+>   the next second's move. The next step is new inputs from outside the
+>   book (§7), most of them free.
+
+---
+
+**Contents**
+
+- [1. Setup, in five lines](#1-setup-in-five-lines)
+- [2. The track record](#2-the-track-record)
+- [3. Every method, held out](#3-every-method-held-out)
+- [4. What each phase contributed](#4-what-each-phase-contributed)
+- [5. Lessons that held up](#5-lessons-that-held-up)
+- [6. RL in Part C: what was tried, why it failed, what could make it tractable](#6-rl-in-part-c-what-was-tried-why-it-failed-what-could-make-it-tractable)
+- [7. Data from outside the order book](#7-data-from-outside-the-order-book)
+- [8. What next](#8-what-next)
 
 ---
 
@@ -143,21 +163,159 @@ configuration under each stress.*
    money is (the next 1–3 s) and its noisy oracles how good a forecast must
    be (R² ≈ 0.4); real forecasts at 0.02–0.10 were then no surprise.
 
-## 6. What next
+## 6. RL in Part C: what was tried, why it failed, what could make it tractable
 
-C8 did the follow-ups listed here before it (circuit breaker, loss limits,
-stress tests, breadth assets on more held-out sessions, RL on top of the
-markout rule). What remains:
+### 6.1 What was tried
 
-- **The forward test:** the frozen SUIUSDC and XRP OBI choices on sessions
-  after 2025-09-25, with no re-selection. Seven held-out sessions cannot tell
-  a +2.5% edge from luck.
-- **OBI on more assets**, since it is the only strategy that generalises.
-- **A crash-aware breaker** that does not pause when the position is already
-  on the right side of the move — the breaker's cost on OBI XRP is exactly
-  the crash session.
-- **κ from the asset's markout**, since SUIUSDC OBI depends on κ = 4 and only
-  the grid chooses κ today.
-- **Information from outside the book** for the rare large moves C9 found to
-  carry the value: other venues' perpetuals, spot, funding and liquidation
-  feeds (C9 §12).
+| method (phase) | learns from | the policy sets | decides every | held out |
+| --- | --- | --- | --- | --- |
+| DDPG, TD3, SAC ([C3](c3-continuous-control.md)) | reward: mark-to-market PnL minus an inventory penalty | GLFT's γ, c₁ and a spread scale | quoting step | loses less than GLFT, never makes money |
+| TD3 residual policy, v1/v2 ([C6](c6-strategy-zoo.md)) | reward relative to the rule it adjusts (counterfactual in v2) | multipliers on the rule's spread, skew, signal and grid | 5 s | never beats the widened rule |
+| PPO- and GRPO-style search ([C4](c4-ppo-grpo.md)) | ranked session PnL of sampled parameter sets | the rule's parameters for a whole session | session | the plain grid refines ETH; learned search does not |
+| fill targets, edge/inventory reward, networks up to 170× ([C4](c4-ppo-grpo.md)) | the same, reshaped | the same | 5 s | no change |
+| TD3 on top of the markout rule ([C8](c8-risk-controls.md)) | reward relative to the rule, toxicity in the state | the same multipliers | 5 s | never beats the rule |
+| DAgger with a privileged teacher ([C9](c9-fair-price.md)) | a teacher's label at every quote (the teacher sees the future mid) | pull or widen one side | 100 ms | halves ETH GLFT's loss, does not help ETH OBI |
+
+### 6.2 Why RL kept failing, and what DAgger changes
+
+- **Reward-driven RL learns from a signal buried in noise.** One quoting
+  decision is worth a fraction of a basis point; the position's
+  mark-to-market moves by basis points a second. The learner has to credit
+  a gain to one of thousands of decisions inside that noise, which is why
+  seed spreads were 1–10 points and why larger networks changed nothing
+  (the network was never the bottleneck).
+- **DAgger replaces the reward with a teacher's label at every step.** It
+  turns the problem into supervised classification with dense, low-variance
+  feedback, and relabels the states the student itself visits (the
+  "DAgger" part, which fixes plain imitation's drift into unfamiliar
+  states). It removes the noise problem completely.
+- **No method can beat the information in its inputs.** A student can learn
+  at best the teacher's action averaged over every situation that looks the
+  same from its observations; when the teacher's decision depends on the
+  future and the book barely hints at it, that average is weak. C9 measured
+  the limit: the future mid is worth up to +40 points, a forecast needs
+  R² ≈ 0.4 to pay, and the book supplies 0.02–0.10. RL sees the same inputs
+  with a noisier signal, so it hits the same limit or a lower one.
+
+### 6.3 Clues that would make the search tractable
+
+Each attacks the noise and credit-assignment problem; none adds information.
+
+1. **A privileged critic (asymmetric actor-critic).** In TD3 or SAC the
+   critic is used only in training, so it may see the future mid, the
+   teacher's labels and each fill's eventual markout; the actor sees only
+   what the quoter sees. This cuts the variance of the learning signal
+   directly. The first thing to try.
+2. **Imitation first, RL second.** Initialise from the rule or the DAgger
+   student and fine-tune with a penalty on drifting away from it (the
+   recipe that makes RL work in robotics and games), instead of exploring
+   from scratch — which in market making means paying the spread to learn.
+3. **Imitate values, not actions (AggreVaTe).** The teacher gives each
+   action's cost-to-go instead of its choice, which fixes what broke C9's
+   first teacher (a 5 s markout instead of what a fill actually earns). It
+   needs counterfactual replays per labelled state, so it would run on a
+   sample of a few thousand states per session.
+4. **A curriculum over privileged information.** Train with a noisy oracle
+   of the future move as an input and lower its R² towards what real
+   forecasts reach, so the policy first learns what to do with good
+   information and then how to discount weak information. C9's noisy oracle
+   is exactly this input.
+5. **More shaping and variance reduction.** Beyond the counterfactual reward
+   (C6) and the edge/inventory split (C4): rewards built on markout curves,
+   and every comparison paired on the same sessions.
+6. **Pool assets.** One policy over nine assets sees nine times the rare
+   large moves, which a single asset starves.
+
+### 6.4 Are the strategy parameters too rigid?
+
+- **The RL action spaces were, for what C9 found valuable.** The oracle's
+  gain comes from pulling one side of the book 1–3 s before a move. The RL
+  policies decided every 5 s (too slow), scaled both sides at once (could
+  not pull one), and stayed inside the spread floor. C9's kernel inputs —
+  a series read every 100 ms, per-side widening and pulling — are the
+  missing actions, and no RL policy has used them yet.
+- **But every added degree of freedom has so far fit the training month.**
+  The greedy combination of controls (C8), bigger networks (C4), the
+  denoisers and forecast fair prices on SUIUSDC, XRPUSDT and BNB (C9) all
+  gained on training sessions and lost held out. With 24 training sessions
+  the rigid parametric rules act as the regularisation.
+- **And rigidity is not what blocks the gain.** The same kernel reaches
+  +6.53% on ETH OBI when told the future, and the DAgger student had exactly
+  the right actions. The strategy can express the profitable policy; the
+  inputs do not say when to use it.
+
+**Next RL experiment, if Part C continues:** TD3 with a privileged critic,
+C9's per-side 100 ms actions, initialised from the rule, pooled across
+assets, five seeds, under the usual protocol. The honest expectation is
+roughly the DAgger result (ETH GLFT's loss halved, OBI unchanged) unless the
+inputs change — which is §7.
+
+## 7. Data from outside the order book
+
+C9 found that the value is in rare large moves (the top 1% of 3 s moves)
+that the traded contract's own book does not anticipate. Large moves usually
+start somewhere else: on the more liquid contract for the same asset, on
+spot, on another venue, or in a liquidation cascade. What we would want,
+ranked by expected value at a 1–3 s horizon, and what can be had for free
+(availability checked on 2026-09-30 for the study month, 2025-08-26 to
+09-25):
+
+| data | why it could lead | free source | resolution | checked |
+| --- | --- | --- | --- | --- |
+| **The same asset's USDT perpetual** (ETHUSDT, XRPUSDT, SUIUSDT … for our USDC contracts) | price discovery happens on the far larger USDT contract; the USDC contract follows | Binance public archive, `data.binance.vision/data/futures/um/daily/trades` (and `aggTrades`) | every trade, ms | ✓ available for the month and through 2026-09; ETHUSDT 34 MB/day zipped |
+| **Spot** (Binance ETHUSDT, ETHUSDC, XRPUSDT …) | the index and mark price are built from spot; spot leads some moves | Binance archive, `data/spot/daily/trades` | every trade, ms | ✓ ETHUSDT spot 18 MB/day |
+| **Other venues' perpetuals and spot** (Bybit, OKX) | large moves often start on one venue and arbitrage carries them over | Bybit `public.bybit.com/trading/` and `/spot/`; OKX `okx.com/cdn/okex/traderecords/trades/daily/` | every trade (Bybit 0.1 ms) | ✓ Bybit ETHUSDT 46 MB/day; ✓ OKX files served |
+| **Coinbase spot** (ETH-USD, XRP-USD) | the main US venue, leads in US hours | Coinbase Exchange REST `/products/{id}/trades` (free, paginated, slow) | every trade | not checked |
+| **Liquidations** | cascades drive the largest moves | no free history: Binance's archive has none, Tardis's free samples are blocked here (below); **free live**: Binance `!forceOrder@arr` (at most one per second per symbol), Bybit `allLiquidation`, OKX liquidation orders | event | live only |
+| **Funding, premium, mark and index price** | funding-time flows; basis stress | Binance archive: `monthly/fundingRate`, daily `premiumIndexKlines`, `markPriceKlines`, `indexPriceKlines` | 8 h; 1 min | ✓ |
+| **Open interest, long/short and taker ratios** | positioning regime | Binance archive, daily `metrics` | 5 min | ✓ |
+| **Depth ±1–5%** | book resilience regime | Binance archive, daily `bookDepth` | ~30 s | ✓ |
+| **Implied volatility** (Deribit DVOL, options) | volatility regime | Deribit public API | 1 min and slower | not checked |
+| **Best bid/ask of other contracts** | quote-level lead-lag | Binance `bookTicker` archive | tick | ✗ discontinued after 2024-03-30 |
+| **Full L2 books of other contracts or venues** | book-level lead-lag | Tardis free files (first day of each month, no key): one request succeeded, then Cloudflare returned 403 to every request from this machine; **free**: record live websockets with hftbacktest's collector | tick | partial |
+| **Our own L2 after 2025-09-25** | the forward test (a backtest needs the book, not only trades) | the project's dataset (`cardinalai/backtest_data` on Hugging Face, needs `HF_TOKEN` to list); or record live | tick | not checked |
+
+Only the first rows can trigger a 1–3 s decision; the slow series (funding,
+open interest, depth snapshots, implied volatility) can only condition the
+regime — when to be wider — which the markout rule and the circuit breaker
+already do from our own flow.
+
+**How it would be tested**, with the C9 machinery unchanged:
+
+1. **Alignment first.** The archives carry exchange timestamps; the backtest
+   sees our own book at local receive time. External events are shifted by
+   an assumed feed latency (tens of ms same-venue, 50–150 ms cross-venue)
+   before they may enter a feature, and every result is re-run with
+   +100 ms and +250 ms extra delay as a stress: a lead that disappears
+   under 250 ms of delay is not tradable.
+2. **Offline, cheap:** add lead-lag features (returns and signed flow of the
+   USDT perp, spot and Bybit over the last 0.1–1 s; the basis between them;
+   bursts of large trades) to `predict.py`, and measure held-out R² and,
+   more to the point, the AUC and precision of a top-1% large-move
+   classifier against the book-only 0.71 and 3–11%.
+3. **Only if (2) moves:** the large-move rule and the DAgger student with
+   the new inputs, chosen on training sessions, held out, stress-tested.
+4. **Disk:** a month of one source is 0.5–1.5 GB zipped; reduced on the fly
+   to the 100 ms grid it is a few MB, so the raw files are downloaded,
+   reduced and deleted day by day.
+
+## 8. What next
+
+C8 did the follow-ups listed before it; C9 answered the fair-price and
+denoising questions. What remains in Part C, cheapest and most informative
+first:
+
+- **The forward test:** the frozen SUIUSDC and XRP OBI choices (and AVAXUSDC
+  with C9's boosted-tree fair price) on sessions after 2025-09-25, with no
+  re-selection. Seven held-out sessions cannot tell a +2.5% edge from luck.
+  Needs the book after 09-25 (§7, last row).
+- **Lead-lag inputs from outside the book** (§7): the only line of work that
+  could raise the information limit every method has hit.
+- **RL with a privileged critic and C9's per-side actions** (§6.4): worth
+  running only once the inputs carry more than R² 0.1.
+- **Smaller:** OBI on more assets; κ from the asset's own markout (SUIUSDC
+  depends on κ = 4 and only the grid chooses it); a crash-aware breaker.
+
+Everything on the original ladder's Part C list is done. Part C can pause
+here without losing anything: the cache, the features and the kernel inputs
+are all on the branch, and each item above starts from them.

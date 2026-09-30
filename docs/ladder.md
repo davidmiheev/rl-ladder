@@ -1083,5 +1083,11 @@ large-move detector would suffice but the book does not anticipate those
 moves; the DAgger students halve ETH GLFT's loss without making it pay; and
 no denoiser helps on any asset.
 
+Why the learning methods of Part C keep losing to rules, what could make RL
+tractable, whether the strategies' parameters are too rigid, and the data
+from outside the order book that could raise the information limit (with
+free sources) are in the Part C overview, §6–§8
+([`writeups/c0-part-c-overview.md`](writeups/c0-part-c-overview.md)).
+
 Writeup: [`writeups/c9-fair-price.md`](writeups/c9-fair-price.md).
 Lab notebook: [`../experiments/c9_fair_price/README.md`](../experiments/c9_fair_price/README.md).

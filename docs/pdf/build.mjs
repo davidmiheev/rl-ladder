@@ -127,6 +127,8 @@ tr:nth-child(even) td { background: #fafafa; }
 table.dense { font-size: .62em; }
 table.dense th, table.dense td { padding: .15em .22em; }
 table.dense.xdense { font-size: .56em; }
+/* Long paths and identifiers inside table cells may break anywhere. */
+table code { overflow-wrap: anywhere; }
 img { max-width: 100%; max-height: 95mm; width: auto; display: block; margin: .8em auto; break-inside: avoid; }
 blockquote { border-left: 3px solid #999; margin: .8em 0; padding: .1em 1em; color: #444; }
 hr { border: 0; border-top: 1px solid #ccc; margin: 1.5em 0; }

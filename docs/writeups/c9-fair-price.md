@@ -442,6 +442,18 @@ training session, which the tree model uses for early stopping only.*
   nothing here, since a student that rarely acts visits the same states as
   the rule.
 
+**How this differs from the RL tried before.** C3, C4, C6 and C8 learned
+from reward — session or step PnL — and the effect of any one quoting
+decision is buried in the mark-to-market noise of the position, so the
+learners never found a signal. DAgger learns from a label at every step,
+which removes that problem entirely; what it cannot remove is the limit of
+what its inputs reveal about the teacher's privileged information. The
+students here reach that limit: they rank the dangerous moments (AUC 0.71)
+but cannot act on them precisely enough. The comparison across Part C, the
+clues that could make RL tractable, and whether the strategies' parameters
+are too rigid are in the
+[Part C overview, §6](c0-part-c-overview.md#6-rl-in-part-c-what-was-tried-why-it-failed-what-could-make-it-tractable).
+
 ## 9. Denoising on every asset
 
 C8 tried three denoisers on ETHUSDC and XRPUSDC. Here five run on OBI on all
@@ -552,9 +564,11 @@ configuration, including those that did not beat the C8 choice — are in the
   on sessions after 2025-09-25.
 - **Information the book does not carry.** The large moves are what matters
   and the book does not anticipate them at 1–3 s. The candidates are
-  outside it: the same asset's perpetual on other venues, spot, and the
-  funding and liquidation feeds — C7 already showed BTCUSDT's book adds
-  nothing at 1 s.
+  outside it — the same asset's USDT perpetual, spot, other venues'
+  perpetuals, liquidation feeds — and most are free: the full list, where
+  each can be had, and how it would be tested without look-ahead are in the
+  [Part C overview, §7](c0-part-c-overview.md#7-data-from-outside-the-order-book).
+  C7 already showed BTCUSDT's book adds nothing at 1 s.
 - **Tail-event classifiers with a longer label horizon**, trained on the
   whole cross-section of assets rather than one, since a top-1% move is rare
   on any single asset.
