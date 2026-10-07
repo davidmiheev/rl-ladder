@@ -18,6 +18,7 @@ Written to `data/c9/<symbol>_<date>.npz`, one row per step:
     ofi         float32  top-of-book order-flow imbalance over the step
                          (Cont, Kukanov and Stoikov), in base units
     buy, sell   float32  aggressive volume by side over the step
+    ts          int64    the step's local timestamp, ns (C10: aligns outside data)
 
     python experiments/c9_fair_price/features.py --symbol ethusdc --days all
 """
@@ -51,7 +52,7 @@ INVALID_MAX = 9223372036854775807
 
 
 @njit
-def _replay(hbt, interval_ns, mid2, spread, bq1, aq1, bb, ab, ofi, buy, sell, bands_bp, levels):
+def _replay(hbt, interval_ns, mid2, spread, bq1, aq1, bb, ab, ofi, buy, sell, bands_bp, levels, ts):
     tick = hbt.depth(0).tick_size
     lvl = np.zeros(len(levels))
     band = np.zeros(len(bands_bp))
@@ -61,6 +62,7 @@ def _replay(hbt, interval_ns, mid2, spread, bq1, aq1, bb, ab, ofi, buy, sell, ba
     prev_aq = 0.0
     t = 0
     while t < len(mid2) and hbt.elapse(interval_ns) == 0:
+        ts[t] = hbt.current_timestamp
         for trade in hbt.last_trades(0):
             if trade.ev & BUY_EVENT == BUY_EVENT:
                 buy[t] += trade.qty
@@ -117,8 +119,9 @@ def extract(symbol: str, date: str) -> Path:
     bq1, aq1 = np.zeros(n), np.zeros(n)
     bb, ab = np.zeros((n, len(BANDS_BP))), np.zeros((n, len(BANDS_BP)))
     ofi, buy, sell = np.zeros(n), np.zeros(n), np.zeros(n)
+    ts = np.zeros(n, np.int64)
     steps = _replay(hbt, strategies.INTERVAL_NS, mid2, spread, bq1, aq1, bb, ab, ofi, buy, sell,
-                    BANDS_BP, LEVELS)
+                    BANDS_BP, LEVELS, ts)
     hbt.close()
     out = path_for(symbol, date)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -128,7 +131,7 @@ def extract(symbol: str, date: str) -> Path:
         tmp, mid2=mid2[:steps].astype(np.int32), spread=spread[:steps].astype(np.int16),
         bq1=f32(bq1), aq1=f32(aq1), bb_2=f32(bb[:, 0]), ab_2=f32(ab[:, 0]),
         bb_10=f32(bb[:, 1]), ab_10=f32(ab[:, 1]), ofi=f32(ofi), buy=f32(buy), sell=f32(sell),
-        tick=config.TICK_SIZE,
+        tick=config.TICK_SIZE, ts=ts[:steps],
     )
     os.replace(tmp, out)
     return out

@@ -11,6 +11,24 @@
     "price": 846.75,
     "roi_ub": 3387.0
   },
+  "bybit-suiperp": {
+    "tick_size": 9.999999999976694e-05,
+    "lot_size": 0.09999999999854481,
+    "price": 3.7226,
+    "roi_ub": 14.8904
+  },
+  "bybit-xrpperp": {
+    "tick_size": 9.999999999976694e-05,
+    "lot_size": 1.0,
+    "price": 3.0321,
+    "roi_ub": 12.1284
+  },
+  "bybit-xrpusdt": {
+    "tick_size": 9.999999999976694e-05,
+    "lot_size": 1.0,
+    "price": 3.0282,
+    "roi_ub": 12.1128
+  },
   "enausdc": {
     "tick_size": 9.999999999998899e-05,
     "lot_size": 1.0,

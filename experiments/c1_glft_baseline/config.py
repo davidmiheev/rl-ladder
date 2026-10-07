@@ -144,6 +144,10 @@ DEFAULT_QUEUE_MODEL = "power2"
 #: "Order Latency Data" tutorial and using its multipliers unchanged.
 MUL_ENTRY = 4
 MUL_RESP = 3
+#: The feed latency Bybit's order latency is synthesised from (C10): the
+#: Binance days' typical value, so both venues are tested at the same order
+#: latency. See `ensure_latency`.
+BYBIT_ORDER_FEED_NS = 3_000_000
 
 
 def day_path(date: str) -> Path:
@@ -253,6 +257,13 @@ def ensure_latency(date: str, mul_entry: float = MUL_ENTRY, mul_resp: float = MU
     del data
 
     feed = out_local[:n] - out_exch[:n]
+    if SYMBOL.startswith("bybit-"):
+        # Bybit's 200-level book is pushed in 10-100 ms batches, so its
+        # feed latency is mostly batching, which delays the data and not our
+        # orders. Order latency is pinned to the Binance days' typical feed
+        # latency instead (~3 ms, a ~20 ms round trip at the multipliers),
+        # so the two venues are compared at the same order latency (C10).
+        feed = np.full(n, BYBIT_ORDER_FEED_NS, np.int64)
     latency = np.zeros(n, dtype=ORDER_LATENCY_DTYPE)
     latency["req_ts"] = out_local[:n]
     latency["exch_ts"] = out_local[:n] + (mul_entry * feed).astype(np.int64)
