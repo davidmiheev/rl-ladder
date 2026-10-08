@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+from collections import deque
 import json
 import os
 import sys
@@ -57,6 +58,8 @@ from hftbacktest.types import (  # noqa: E402
 )
 
 BOTH = EXCH_EVENT | LOCAL_EVENT
+SNAPSHOT_SLACK_NS = 5_000_000_000
+POST_ONLY_NS = 50_000_000
 
 
 def name(pair: str, l3: bool) -> str:
@@ -136,9 +139,23 @@ def convert(raw: Path, pair: str, session: str) -> dict:
     live = False  # False until a snapshot has been laid down (and after a disconnect)
     ref_px = 0.0  # the last trade, or the snapshot's best bid: what a resting price is near
     ignored: set[int] = set()
+    marketable: dict[int, tuple[int, float, float]] = {}
     snap_ts = 0
     snap_local = 0
+    last_exch = 0
     stats = defaultdict(int)
+
+    best = {1: None, -1: None}  # cached best price per side (None: recompute)
+
+    def best_px(side):
+        if best[side] is None and levels[side]:
+            best[side] = max(levels[side]) if side > 0 else min(levels[side])
+        return best[side]
+
+    def crosses(side, px):
+        """Would an order at `px` match the other side at once?"""
+        other = best_px(-side)
+        return other is not None and (px >= other if side > 0 else px <= other)
 
     def level(side, px, delta, exch, local):
         book = levels[side]
@@ -148,8 +165,12 @@ def convert(raw: Path, pair: str, session: str) -> dict:
         if book[px] <= 0.0:
             book.pop(px, None)
             q = 0.0
+            if best[side] == px:
+                best[side] = None
         else:
             q = book[px]
+            if best[side] is not None and (px > best[side] if side > 0 else px < best[side]):
+                best[side] = px
         l2.add(DEPTH_EVENT | BOTH | (BUY_EVENT if side > 0 else SELL_EVENT), exch, local, px, q)
 
     def lay_snapshot(book, local):
@@ -163,6 +184,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             l3.add(DEPTH_CLEAR_EVENT | BOTH | flag, exch, local, far, 0.0)
             l2.add(DEPTH_CLEAR_EVENT | BOTH | flag, exch, local, far, 0.0)
             levels[side].clear()
+            best[side] = None
             for p, q, oid in rows:
                 p, q, oid = float(p), float(q), int(oid)
                 orders[oid] = (side, p, q)
@@ -192,12 +214,69 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             prio = 0 if o.get("event") == "trade" else 1
             msgs.append((int(o["data"]["microtimestamp"]) * 1000, prio, local, "event", o))
     msgs.sort(key=lambda m: (m[0], m[1]))
+    # Every order that took liquidity, from the trades (the buyer's order
+    # when the taker bought): only these were marketable when created.
+    takers = {int(o["data"]["buy_order_id"] if int(o["data"]["type"]) == 0 else o["data"]["sell_order_id"])
+              for _, _, _, kind, o in msgs if kind == "event" and o.get("event") == "trade"}
+    # When each order was deleted: a post-only order that would cross is
+    # published as created and deleted at once, without trading.
+    deleted_at = {int(o["data"]["id"]): ex for ex, _, _, kind, o in msgs
+                  if kind == "event" and o.get("event") == "order_deleted"}
 
-    for _, _, local, kind, o in msgs:
+    # A REST snapshot's contents can be older than its timestamp, so the
+    # events of the last seconds before it are applied again right after it,
+    # stamped with its time: re-adding a known order and deleting an unknown
+    # one are no-ops, while a deletion the snapshot missed removes a stale
+    # order that would otherwise sit through the market for the session.
+    recent: deque = deque()
+    born: dict[int, int] = {}  # order id -> exchange time it was added
+
+    def drop(oid, exch, local, why):
+        s0, p0, q0 = orders.pop(oid)
+        born.pop(oid, None)
+        l3.add(CANCEL_ORDER_EVENT | BOTH | (BUY_EVENT if s0 > 0 else SELL_EVENT), exch, local, p0, 0.0, oid)
+        level(s0, p0, -q0, exch, local)
+        stats[why] += 1
+
+    def reconcile(book, local):
+        """At a later snapshot: orders we hold that it does not, and that are
+        older than it by more than the slack, were deleted unseen."""
+        t = int(book["microtimestamp"]) * 1000
+        have = {int(r[2]) for key in ("bids", "asks") for r in book[key]}
+        when = max(t, last_exch)
+        for oid in [i for i in orders if i not in have and born.get(i, 0) < t - SNAPSHOT_SLACK_NS]:
+            drop(oid, when, max(local, snap_local), "stale_dropped_at_snapshot")
+
+    def clear_through(taker_buy, px, exch, local):
+        """A trade at `px` proves resting orders better than it on the side
+        it hit were gone (they would have matched first)."""
+        side = -1 if taker_buy else 1
+        stale = [i for i, (sd, p, _) in orders.items()
+                 if sd == side and ((side > 0 and p > px) or (side < 0 and p < px))]
+        for oid in stale:
+            drop(oid, exch, local, "stale_dropped_by_trade")
+
+    def stream():
+        for exch_m, _, local, kind, o in msgs:
+            if kind == "event" and not live:
+                recent.append((exch_m, local, o))
+                while recent and recent[0][0] < exch_m - SNAPSHOT_SLACK_NS:
+                    recent.popleft()
+                continue
+            yield kind, local, o
+            if kind == "snapshot":
+                for e, lo, ro in list(recent):
+                    if e > snap_ts - SNAPSHOT_SLACK_NS:
+                        yield "event", lo, ro
+                recent.clear()
+
+    for kind, local, o in stream():
         if kind == "snapshot":
             if not live:
                 lay_snapshot(o["book"], local)
                 live = True
+            else:
+                reconcile(o["book"], local)
             continue
         if kind == "disconnect":
             live = False
@@ -209,17 +288,17 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             continue
         # An event newer than the snapshot can arrive before the snapshot's
         # REST response does; on the local clock it must still follow the
-        # snapshot it modifies.
+        # snapshot it modifies, and a replayed one (above) on both clocks.
         local = max(local, snap_local)
         d, ev = o["data"], o.get("event")
-        exch = int(d["microtimestamp"]) * 1000
-        if exch <= snap_ts:
-            continue
+        exch = max(int(d["microtimestamp"]) * 1000, snap_ts)
+        last_exch = max(last_exch, exch)
         if ev == "trade":
             taker_buy = int(d["type"]) == 0
             maker = int(d["sell_order_id"] if taker_buy else d["buy_order_id"])
             px, qty = float(d["price"]), float(d["amount"])
             ref_px = px
+            clear_through(taker_buy, px, exch - 2, local)
             for out in (l3, l2):
                 out.add(TRADE_EVENT | BOTH | (BUY_EVENT if taker_buy else SELL_EVENT), exch, local, px, qty)
             if maker in orders:
@@ -245,12 +324,42 @@ def convert(raw: Path, pair: str, session: str) -> dict:
                 ignored.add(oid)
                 stats["non_resting_skipped"] += 1
                 continue
+            # A marketable limit order is published as created at its limit
+            # price before it matches; only a remainder ever rests (it comes
+            # back as order_changed). Added at once, it would "cross" and
+            # fill every backtest order down to its limit.
+            if oid in takers:
+                marketable[oid] = (side, px, qty)
+                stats["marketable_held"] += 1
+                continue
+            if crosses(side, px) and deleted_at.get(oid, 1 << 62) - exch <= POST_ONLY_NS:
+                ignored.add(oid)
+                stats["post_only_rejected_skipped"] += 1
+                continue
+            if crosses(side, px):
+                # It rested at a price the other side reaches: what it
+                # crosses was deleted unseen.
+                for i in [i for i, (sd, p, _) in orders.items()
+                          if sd == -side and (p <= px if side > 0 else p >= px)]:
+                    drop(i, exch - 2, local, "stale_dropped_by_cross")
             orders[oid] = (side, px, qty)
+            born[oid] = exch
             l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, px, qty, oid)
             level(side, px, qty, exch, local)
             stats["adds"] += 1
         elif ev == "order_changed":
             if oid in ignored:
+                continue
+            if oid in marketable:
+                if qty > 0 and not crosses(side, px):  # the remainder now rests
+                    del marketable[oid]
+                    orders[oid] = (side, px, qty)
+                    born[oid] = exch
+                    l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, px, qty, oid)
+                    level(side, px, qty, exch, local)
+                    stats["marketable_rested"] += 1
+                else:
+                    marketable[oid] = (side, px, qty)
                 continue
             if oid not in orders:
                 stats["changes_unknown"] += 1
@@ -265,10 +374,14 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             if oid in ignored:
                 ignored.discard(oid)
                 continue
+            if oid in marketable:
+                del marketable[oid]
+                continue
             if oid not in orders:
                 stats["deletes_unknown"] += 1
                 continue
             s0, p0, q0 = orders.pop(oid)
+            born.pop(oid, None)
             l3.add(CANCEL_ORDER_EVENT | BOTH | (BUY_EVENT if s0 > 0 else SELL_EVENT), exch, local,
                    p0, 0.0, oid)
             level(s0, p0, -q0, exch, local)
