@@ -188,6 +188,12 @@ def table() -> dict:
                 continue
             label = next(k for k, v in rows.items() if c8.key(v) == c8.key(pick))
             stress = {name: summary(c, c8.TEST) for name, c in stress_set(pick, outside).items()}
+            # Without the 09-22 crash session, and without the pick's best session.
+            per_day = c8.results(pick, c8.TEST)
+            if per_day is not None:
+                best = max(per_day, key=lambda x: x["Return"])["date"]
+                stress["ex 09-22"] = summary(pick, [d for d in c8.TEST if d != c8.CRASH])
+                stress["ex best day"] = summary(pick, [d for d in c8.TEST if d != best])
             sym["choices"][fam] = {"pick": label, "test": summary(pick, c8.TEST), "stress": stress}
         out[symbol] = sym
     return out
