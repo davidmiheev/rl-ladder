@@ -1091,3 +1091,25 @@ free sources) are in the Part C overview, §6–§8
 
 Writeup: [`writeups/c9-fair-price.md`](writeups/c9-fair-price.md).
 Lab notebook: [`../experiments/c9_fair_price/README.md`](../experiments/c9_fair_price/README.md).
+
+## C10. A year forward on Bybit, the crash, and data from outside the book (added, not from the original ladder)
+
+Not one of the 59 items. C10 ran the frozen C8 configurations, unchanged, on
+a year of Bybit's free order books (one session a week from 2025-09-26, and
+the study month's held-out week as a venue control), tested risk controls on
+the 2025-10-10 crash, and measured whether the same asset's other markets
+(Binance perpetual and spot trades, Bybit's perpetual) forecast the traded
+book's next second — first as forecasts, then through the backtest.
+
+Its answer: without the crash only one of six configurations makes money on
+Bybit (XRPUSDC → XRPPERP, +3.96%, +0.21% at the standard maker fee), and the
+same held-out week already costs most of the edge on the new venue; none of
+C8's controls bounds the crash, while a loss limit that exits at the touch
+(stop 50 bp) holds every configuration's crash drawdown to at most 6.4% under
+every stress; outside data roughly doubles the 1 s forecast's R² and makes
+almost every forecast rule better held out, but the genuine lead (ETH OBI
++0.85% → +1.78%) is gone at +100–250 ms of delay, and XRP's gain is the
+crash session.
+
+Writeup: [`writeups/c10-forward.md`](writeups/c10-forward.md).
+Lab notebook: [`../experiments/c10_forward/README.md`](../experiments/c10_forward/README.md).

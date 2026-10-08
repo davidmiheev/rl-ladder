@@ -47,7 +47,7 @@ merged from `c10_days.tgz` into `runs/c8/days/`).
 | stops on every session | done | stop 50 bp: crash drawdowns 0.8–6.4%, forward without the crash −5.59% summed (−8.41% as frozen); picked by the rule fixed in advance |
 | stop 50 bp stress tests | done | crash drawdown ≤ 6.4% under every stress; only XRPUSDC → XRPPERP stays positive (+0.32% at +2 bp, +2.09% at latency ×4) |
 | lead-lag forecasts, 3 assets × 3 delays | done | 1 s R² roughly doubles with outside data at +0 ms (XRP 6.0 → 8.9%, SUI 2.5 → 6.3%, ETH 3.8 → 8.4%), half gone at +100 ms; large-move precision +2–3 points |
-| lead-lag through the backtest | running | |
+| lead-lag through the backtest, 3 assets × 11 variants × 31 sessions + stresses | done | outside-data rules beat their own-book versions held out in 14 of 15 pairs; ETH OBI pick +1.78% vs +0.85% held out, +0.30% at +100 ms, −0.31% at +250 ms; XRP pick +3.77% vs +2.84% but +0.39% vs +0.09% without 09-22; SUI keeps the C8 choice |
 
 ## Findings
 
@@ -58,3 +58,9 @@ merged from `c10_days.tgz` into `runs/c8/days/`).
 - The daily loss limit failed on the crash because reduce-only quoting does
   not fill in a market running away; a stop that takes the touch does.
 - Outside markets lead our book by a few hundred milliseconds at most.
+- Outside data improves almost every forecast-driven quoting rule held out,
+  but the part that is a lead (ETH) is gone at +100–250 ms, and the XRP gain
+  is the crash session.
+- The configuration as C8 chose it reproduces C8's held-out return exactly
+  on all three Binance assets in the lead-lag backtest (a check that the
+  replays match).

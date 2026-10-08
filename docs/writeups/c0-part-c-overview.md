@@ -14,7 +14,7 @@ the summary; each phase has its own writeup, linked in §4.
 >   positive without the crash (+1.77%), without its best session (+1.52%),
 >   without the maker rebate (+2.05%), with a 1 bp maker fee (+1.13%) and at
 >   4× order latency (+1.30%). XRP's OBI gain, by the same stress tests, is
->   the crash session.
+>   the crash session. Neither survives a year forward on Bybit (C10).
 > - **The fair price matters more than anything else tried — if it were
 >   known.** Quoting around the mid 1–3 s ahead (C9) turns ETH GLFT from
 >   −3.25% to +4.30–19.67% held out; but the best forecast of the mid explains
@@ -38,6 +38,12 @@ the summary; each phase has its own writeup, linked in §4.
 >   capped by what the book tells it, which C9 measured at R² 0.02–0.10 of
 >   the next second's move. The next step is new inputs from outside the
 >   book (§7), most of them free.
+> - **A year forward on Bybit (C10), the edge does not travel.** Without the
+>   2025-10-10 crash only one of six frozen OBI configurations makes money,
+>   and it needs a rebate. That crash (SUI −82% in minutes) needs a stop that
+>   exits at the touch — C8's controls do not bound it. Outside markets do
+>   lead our book, by under 100 ms: ETH OBI's held-out +0.85% becomes +1.78%
+>   with them and +0.30% if they arrive 100 ms later.
 
 ---
 
@@ -138,6 +144,7 @@ configuration under each stress.*
 | [C7](c7-signals.md) | What information is the policy missing? | Not the deep book or BTCUSDT. The toxicity of its own recent fills: a markout rule beats C6 in 6 of 6 pairs and 13 of 18 untuned. |
 | [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets, an inventory-discounted reward and larger networks do not. |
 | [C9](c9-fair-price.md) | Can the fair price be forecast ~1 s ahead, and does denoising help anywhere? | Foresight of 1–3 s would be worth up to +40 points held out (little on XRP); real forecasts reach R² 0.02–0.10 and help one asset (AVAX). DAgger with a future-seeing teacher halves ETH GLFT's loss but does not make it pay. No denoiser helps on any of nine assets. |
+| [C10](c10-forward.md) | Does the C8 edge survive a year forward, and do markets outside the book forecast it? | On a year of Bybit sessions only one of six frozen configurations makes money without the 2025-10-10 crash (XRPUSDC → XRPPERP, +3.96%, +0.21% at the standard fee). A loss limit that exits at the touch bounds the crash (≤ 6.4% drawdown) where C8's controls do not. Outside data doubles the 1 s forecast's R² and improves 14 of 15 forecast rules held out, but the real lead is gone at +100 ms. |
 | [C8](c8-risk-controls.md) | Do risk controls, denoising or RL on top of the markout rule help, and does what makes money survive stress? | A circuit breaker helps the losers on ETH; no denoiser, combination of controls or RL policy improves OBI. SUIUSDC OBI survives every cost, latency and session stress but κ ×0.5; XRP's gain is the crash, ETH's the rebate. |
 
 ## 5. Lessons that held up
@@ -281,7 +288,14 @@ open interest, depth snapshots, implied volatility) can only condition the
 regime — when to be wider — which the markout rule and the circuit breaker
 already do from our own flow.
 
-**How it would be tested**, with the C9 machinery unchanged:
+**Tested in C10** ([writeup](c10-forward.md), §7–§8) on ETHUSDC, XRPUSDC and
+SUIUSDC with the first three rows plus Bybit's book: outside data raises the
+held-out R² of the 1 s move from 2.5–6.0% to 6.3–8.9% at the assumed delay
+(half of it gone at +100 ms) and large-move precision by 2–3 points; in the
+backtest it improves 14 of 15 forecast rules held out, but the genuine lead
+(ETH) is gone at +100–250 ms and XRP's gain is the crash session.
+
+**How it was tested**, with the C9 machinery unchanged:
 
 1. **Alignment first.** The archives carry exchange timestamps; the backtest
    sees our own book at local receive time. External events are shifted by
@@ -303,26 +317,26 @@ already do from our own flow.
 ## 8. What next
 
 C8 did the follow-ups listed before it; C9 answered the fair-price and
-denoising questions. What remains in Part C, cheapest and most informative
-first:
+denoising questions; C10 ran the forward test on Bybit and the lead-lag
+inputs. What remains in Part C, cheapest and most informative first:
 
-- **The forward test:** the frozen SUIUSDC and XRP OBI choices (and AVAXUSDC
-  with C9's boosted-tree fair price) on sessions after 2025-09-25, with no
-  re-selection. Seven held-out sessions cannot tell a +2.5% edge from luck.
-  Binance's books after 09-25 are not available, so there are two routes
-  (§7): **on Bybit**, whose free books run from our month to two days ago —
-  a year of out-of-sample sessions, on a different venue (its fees, ticks
-  and queues), so a test of the strategies' generality rather than of the
-  exact Binance configurations — and **on Binance from now on**, by
-  recording the free live websockets (depth every 100 ms and trades) with
-  hftbacktest's collector on an always-on host; an always-free cloud VM in
-  Tokyo, near Binance's matching engine, is enough.
-- **Lead-lag inputs from outside the book** (§7): the only line of work that
-  could raise the information limit every method has hit.
+- **Record Binance from now on** and repeat the forward test on the venue the
+  configurations were chosen on, to separate "the venue" from "the time"
+  (C10 found most of the edge gone on Bybit already on the study month's own
+  held-out week). Binance's books after 2025-09-25 are not available, so this
+  needs the free live websockets (depth every 100 ms and trades) recorded
+  with hftbacktest's collector on an always-on host; an always-free cloud VM
+  in Tokyo, near Binance's matching engine, is enough.
+- **Re-select on Bybit:** choose floors and κ on a Bybit training month and
+  forward-test on the rest of the year, with C10's stop.
+- **Lead-lag at the real delay:** measure the arrival delay of Binance spot
+  and Bybit at that Tokyo host before investing further in outside-data
+  forecasts; at +100 ms C10's lead is worth little.
 - **RL with a privileged critic and C9's per-side actions** (§6.4): worth
   running only once the inputs carry more than R² 0.1.
 - **Smaller:** OBI on more assets; κ from the asset's own markout (SUIUSDC
-  depends on κ = 4 and only the grid chooses it); a crash-aware breaker.
+  depends on κ = 4 and only the grid chooses it); C10's stop and units cap
+  on by default.
 
 Everything on the original ladder's Part C list is done. Part C can pause
 here without losing anything: the cache, the features and the kernel inputs

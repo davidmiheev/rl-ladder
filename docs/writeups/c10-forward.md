@@ -11,8 +11,8 @@ seen, and inputs from outside the traded book. Lab notebook:
 >   configurations, run unchanged on one Bybit session a week from
 >   2025-09-26 to 2026-10-02 (54 sessions): without the 2025-10-10 crash only
 >   XRPUSDC → XRPPERP makes money (+3.96%, 30 of 53 sessions up), and it
->   falls to +0.21% at Bybit's standard +2 bp maker fee. At the assumed rebate the other five
->   lose 0.1–5.8%.
+>   falls to +0.21% at Bybit's standard +2 bp maker fee. At the assumed
+>   rebate the other five lose 0.1–5.8%.
 > - **The venue alone already costs most of it.** On the study month's own
 >   held-out week, replayed on Bybit, the six make +1.41 to −1.37% against
 >   +2.5 to +3.5% on Binance.
@@ -35,7 +35,13 @@ seen, and inputs from outside the traded book. Lab notebook:
 >   perpetual roughly doubles the held-out R² of the 1 s move (XRP 6.0 →
 >   8.9%, SUI 2.5 → 6.3%, ETH 3.8 → 8.4%); most of the gain is gone 100 ms
 >   later. The large-move classifier gains 2–3 points of precision at any
->   delay. Whether either pays in the backtest: §8.
+>   delay.
+> - **In the backtest outside data helps almost every forecast rule, but the lead
+>   is too short to use.** Rule by rule it beats the own-book version held
+>   out in 14 of 15 cases. ETH OBI's training pick goes from +0.85% to
+>   +1.78% held out — and to +0.30% if the data arrives 100 ms later; XRP's
+>   gain is the 09-22 crash (+0.39% against +0.09% without it); on SUI the
+>   training sessions keep the C8 choice.
 
 ---
 
@@ -345,14 +351,128 @@ arriving +0, +100 and +250 ms late.*
 
 ## 8. Lead-lag through the backtest
 
-*Pending: `llbacktest.py` — each forecast (own book, own book + outside)
-used as a fair-price shift and as a pull rule on the C8 OBI configurations,
-chosen on training sessions, reported held out and stress-tested including
-+100/+250 ms; running on Kaggle.*
+A better R² is not a result; quoting with it is (`llbacktest.py`). The C8 OBI
+configuration of each asset (ETHUSDC floor 6 bp, κ 4; XRPUSDC floor 12 bp,
+κ 2, skew ×2; SUIUSDC floor 8 bp, κ 4) quotes with each forecast in C9's two
+ways — the 1 s forecast added to the fair price (*shift*), or the side a
+forecast says is about to be run over pulled for the step when the forecast
+is in its training-session top 5%, 1% or 0.3% (*pull*) — with the
+forecast models fitted on the own book alone and on the own book plus the
+outside data, the same model and settings, the same sessions. Every variant
+ran on all 31 sessions; the configuration as C8 chose it reproduces C8's
+held-out return exactly on all three assets (+0.85, +2.84, +2.52%).
+
+![llbt](../assets/c10/llbt.png)
+
+*Figure — held-out cumulative return of every variant: the C8 choice
+(black), own-book forecasts (blue), own book plus outside data (orange).*
+
+| asset | variant | training, % | held out, % | held-out fills/day |
+| --- | --- | --- | --- | --- |
+| ETHUSDC | as C8 chose it | +3.37 | +0.85 | 369 |
+| | own book: shift by the 1 s forecast | +1.20 | +0.51 | 230 |
+| | own book: pull, top 5% of 1 s forecasts | +5.12 | +0.96 | 486 |
+| | own book: pull, top 1% of 1 s forecasts | +1.23 | +1.37 | 276 |
+| | own book: pull, top 1% of large-move scores | +1.26 | +0.72 | 383 |
+| | own book: pull, top 0.3% of large-move scores | +2.65 | +0.79 | 652 |
+| | + outside: shift by the 1 s forecast | −1.12 | +0.76 | 535 |
+| | + outside: pull, top 5% of 1 s forecasts | +2.51 | +1.21 | 468 |
+| | **+ outside: pull, top 1% of 1 s forecasts** | **+4.73** | **+1.78** | 392 |
+| | + outside: pull, top 1% of large-move scores | +2.83 | +0.85 | 528 |
+| | + outside: pull, top 0.3% of large-move scores | +1.15 | +1.57 | 639 |
+| XRPUSDC | as C8 chose it | +1.41 | +2.84 | 106 |
+| | own book: shift by the 1 s forecast | +0.51 | +2.50 | 113 |
+| | own book: pull, top 5% of 1 s forecasts | +0.15 | +1.28 | 78 |
+| | own book: pull, top 1% of 1 s forecasts | +0.66 | +2.59 | 86 |
+| | own book: pull, top 1% of large-move scores | −0.02 | +0.43 | 87 |
+| | own book: pull, top 0.3% of large-move scores | +0.69 | +0.37 | 83 |
+| | **+ outside: shift by the 1 s forecast** | **+2.32** | **+3.77** | 91 |
+| | + outside: pull, top 5% of 1 s forecasts | −0.83 | +2.46 | 74 |
+| | + outside: pull, top 1% of 1 s forecasts | +0.42 | +2.88 | 87 |
+| | + outside: pull, top 1% of large-move scores | −0.02 | +1.03 | 85 |
+| | + outside: pull, top 0.3% of large-move scores | +0.88 | +0.75 | 88 |
+| SUIUSDC | **as C8 chose it** | **+3.60** | **+2.52** | 175 |
+| | own book: shift by the 1 s forecast | +1.43 | +3.25 | 315 |
+| | own book: pull, top 5% of 1 s forecasts | +2.96 | −0.55 | 271 |
+| | own book: pull, top 1% of 1 s forecasts | −2.19 | +0.80 | 243 |
+| | own book: pull, top 1% of large-move scores | −0.46 | +0.88 | 314 |
+| | own book: pull, top 0.3% of large-move scores | +0.22 | +1.57 | 352 |
+| | + outside: shift by the 1 s forecast | +1.04 | +2.56 | 303 |
+| | + outside: pull, top 5% of 1 s forecasts | −0.33 | +2.58 | 235 |
+| | + outside: pull, top 1% of 1 s forecasts | −1.98 | +3.75 | 405 |
+| | + outside: pull, top 1% of large-move scores | −1.29 | +7.01 | 305 |
+| | + outside: pull, top 0.3% of large-move scores | +0.75 | +3.66 | 377 |
+
+*Chained return, %: 24 training and 7 held-out sessions. Bold: the
+training-session pick among the C8 choice and the outside-data variants.
+The forecast models are fitted on the training sessions, so the training
+column is in sample for the forecast; the held-out column is the one to
+read.*
+
+The picks, stress-tested on the held-out week:
+
+| asset | inputs | training pick | held out | ex 09-22 | ex best day | fee 0 | fee +1 bp | fee +2 bp | latency ×4 | queue risk-averse | floor ×0.8 / ×1.25 | κ ×0.5 / ×2 | outside data +100 ms | +250 ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ETHUSDC | own book | pull, top 5% of 1 s forecasts | +0.96 | +0.50 | +0.50 | +0.22 | −1.25 | −2.71 | +0.14 | +0.15 | −0.12 / +0.66 | +0.40 / +1.00 | – | – |
+| ETHUSDC | + outside | pull, top 1% of 1 s forecasts | **+1.78** | +0.66 | +0.66 | +0.93 | −0.77 | −2.44 | +0.85 | +2.26 | +1.26 / +2.77 | +1.23 / −0.24 | **+0.30** | **−0.31** |
+| XRPUSDC | own book | as C8 chose it | +2.84 | +0.09 | +0.09 | +2.61 | +2.14 | +1.68 | +1.17 | +2.27 | +3.71 / +2.98 | +3.57 / +2.80 | – | – |
+| XRPUSDC | + outside | shift by the 1 s forecast | **+3.77** | **+0.39** | +0.39 | +3.51 | +2.98 | +2.45 | +2.70 | +2.90 | +4.11 / +2.00 | +3.16 / +1.38 | +3.41 | +3.52 |
+| SUIUSDC | either | as C8 chose it | +2.52 | +1.77 | +1.52 | +2.05 | +1.13 | +0.21 | +1.30 | +2.46 | +1.43 / +1.36 | −0.90 / +0.56 | – | – |
+
+*Held-out chained return, %. The full stress set is printed by
+`report.py`.*
+
+- **Outside data makes every forecast-driven rule better.** Rule by rule,
+  the outside-data version beats the own-book version held out in 14 of 15
+  pairs, by 0.1 to 6.1 points. The forecasts' R² gain is real enough to
+  show in the quotes.
+- **On ETH it is a true lead, and a short one.** Pulling the side the
+  outside-data forecast says is about to be run over takes ETH OBI from
+  +0.85% to +1.78% held out, and without the rebate from +0.09% to +0.93%.
+  With the outside data 100 ms later it is +0.30%, 250 ms later −0.31%:
+  the gain is the first tenth of a second after Binance spot or Bybit
+  trades, which a host in Tokyo receiving them over the public feeds would
+  only partly see. And at a 1 bp maker fee it loses, like the C8 choice.
+- **On XRP it is the crash, again.** The outside-data shift's +3.77%
+  against +2.84% is +0.39% against +0.09% without 2025-09-22 — and it does
+  not fade with delay (+3.52% at +250 ms), so it is not a lead at all: in a
+  crash the other markets' last few seconds tell the quoter which way the
+  mid is going, however late they arrive.
+- **On SUI the training sessions prefer the C8 choice**, with or without
+  outside data. Some outside-data variants did far better on the held-out
+  week (+7.01% for pulling at the top 1% of large-move scores, which lost
+  1.29% on training); a selection that picked on the held-out week would
+  report that. It is a hypothesis for more sessions, not a result.
+- **Large-move pulls are never the training pick**, and held out they are
+  mixed: well below the C8 choice on XRP (+0.37 to +1.03% against +2.84%),
+  above it with outside data on SUI (+3.66 and +7.01% against +2.52%) and on
+  ETH at the 0.3% threshold (+1.57% against +0.85%). Three of four alarms
+  are false; whether the true ones pay for them changes with the week.
 
 ## 9. So what?
 
-*To be written when §6 and §8 are in.*
+- **The Part C edge was the venue, the month and the crash.** A year on
+  Bybit leaves one of six frozen configurations positive on ordinary days,
+  and it needs a rebate. The forward test did what seven held-out sessions
+  could not: it says the C8 numbers were not an edge that travels.
+- **Before anything runs live, it needs a stop that takes the touch.**
+  A cap valued at a falling price and a loss limit that only goes
+  reduce-only both fail exactly when they are needed; the 50 bp stop bounds
+  a −82% session to a 6.4% drawdown under every stress, at little cost on
+  ordinary days. This is the most transferable result of C10.
+- **Outside data is the first input in Part C that moves the quotes in the
+  right direction consistently** — 14 of 15 rules better held out — but the
+  part that is a genuine lead lives in the first 100 ms. Using it needs
+  co-located, direct feeds from the other venues, not a better model.
+- **Next**, in order of information per hour:
+  1. **Record Binance from now on** (item 3 of the list, the user's host)
+     and repeat the forward test on the venue the configurations were
+     chosen on, to separate "the venue" from "the time".
+  2. **Re-select on Bybit**: choose floors and κ on a Bybit training month
+     and forward-test on the rest of the year, with the stop.
+  3. **Lead-lag at the real delay**: measure the actual arrival delay of
+     Binance spot and Bybit at a Tokyo host before investing further in
+     the outside-data forecasts; at +100 ms they are worth little.
 
 ## 10. How it was run, and what went wrong
 
