@@ -19,6 +19,8 @@ chosen again on Bybit, on the same 24 training dates C8 used (2025-08-26 to
 
     python experiments/c12_bybit_select/reselect.py run --phase train --shard 0/12
     python experiments/c12_bybit_select/reselect.py run --phase test --shard 0/12
+    python experiments/c12_bybit_select/reselect.py run --phase train-long --shard 0/12
+    python experiments/c12_bybit_select/reselect.py run --phase test-long --shard 0/12
     python experiments/c12_bybit_select/reselect.py status
     python experiments/c12_bybit_select/reselect.py report
 """
@@ -47,6 +49,12 @@ FLOORS_BP = (4.0, 6.0, 8.0, 12.0, 16.0, 24.0)
 KAPPAS = c8.KAPPAS
 STOP = forward.STOPS[forward.STOP_PICK]
 TEST_DATES = forward.CONTROL + forward.FORWARD
+#: The long scheme: Bybit's year makes a longer training period possible.
+#: Train on the study month and the first half of the forward year (51
+#: sessions); test on the second half, which no choice has seen.
+SPLIT = "2026-04-01"
+TRAIN_LONG = c8.TRAIN + forward.CONTROL + [d for d in forward.FORWARD if d < SPLIT]
+TEST_LONG = [d for d in forward.FORWARD if d >= SPLIT]
 
 
 def grid(contract: str) -> list[dict]:
@@ -54,13 +62,22 @@ def grid(contract: str) -> list[dict]:
             for f in FLOORS_BP for k in KAPPAS]
 
 
-def pick(contract: str) -> dict | None:
-    return c8.choose(grid(contract), c8.TRAIN)
+def pick(contract: str, long: bool = False) -> dict | None:
+    return c8.choose(grid(contract), TRAIN_LONG if long else c8.TRAIN)
 
 
-def test_configs(contract: str) -> list[dict]:
-    p = pick(contract)
+def test_configs(contract: str, long: bool = False) -> list[dict]:
+    p = pick(contract, long)
     return [] if p is None else [p, *c8.stress_configs(p).values()]
+
+
+PHASES = {
+    # phase -> (dates, configurations for a contract)
+    "train": (lambda: c8.TRAIN, grid),
+    "test": (lambda: TEST_DATES, test_configs),
+    "train-long": (lambda: [d for d in TRAIN_LONG if d not in c8.TRAIN], grid),
+    "test-long": (lambda: TEST_LONG, lambda c: test_configs(c, long=True)),
+}
 
 
 def units(phase: str) -> list[tuple[str, str, list[dict]]]:
@@ -70,7 +87,8 @@ def units(phase: str) -> list[tuple[str, str, list[dict]]]:
     for contract in CONTRACTS:
         if contract not in os.environ.get("C12_CONTRACTS", contract).split(","):
             continue
-        dates, cfgs = (c8.TRAIN, grid(contract)) if phase == "train" else (TEST_DATES, test_configs(contract))
+        dates_fn, cfgs_fn = PHASES[phase]
+        dates, cfgs = dates_fn(), cfgs_fn(contract)
         for date in dates:
             if keep is None or (contract, date) in keep:
                 out.append((contract, date, cfgs))
@@ -116,7 +134,7 @@ def cmd_run(phase: str, shard: str) -> None:
 
 
 def cmd_status() -> None:
-    for phase in ("train", "test"):
+    for phase in PHASES:
         us = units(phase)
         done = sum(bool(cfgs) and all(c8.result(c, d) is not None for c in cfgs) for _, d, cfgs in us)
         print(f"{phase}: {done}/{len(us)} units done")
@@ -158,7 +176,7 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--phase", required=True, choices=("train", "test"))
+    r.add_argument("--phase", required=True, choices=tuple(PHASES))
     r.add_argument("--shard", default="0/1")
     sub.add_parser("status")
     sub.add_parser("report")
