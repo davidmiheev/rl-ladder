@@ -28,6 +28,7 @@ At three delays: as assumed, +100 ms, +250 ms.
 
     python experiments/c10_forward/leadlag.py prepare --symbol ethusdc --shard 0/4
     python experiments/c10_forward/leadlag.py fit --symbol ethusdc
+    python experiments/c10_forward/leadlag.py models --symbol ethusdc   # for llbacktest.py
 """
 
 from __future__ import annotations
@@ -290,6 +291,115 @@ def fit(symbol: str, train: list[str], test: list[str], sources=external.SOURCES
     return {**spec, "tasks": tasks}
 
 
+# ------------------------------------------------- models for the backtest
+
+MODELS = OUT / "models"
+SERIES = OUT / "series"
+#: task -> (uses outside data, kind). `r10` forecasts the 1 s move (bp);
+#: `cls` scores the large move against each side.
+TASKS = {"r10": (True, "reg"), "cls": (True, "cls"),
+         "r10b": (False, "reg"), "clsb": (False, "cls")}
+
+
+def model_path(symbol: str, task: str, d_ms: int) -> Path:
+    return MODELS / f"{symbol}_{task}@{d_ms}.txt"
+
+
+def save_models(symbol: str, train: list[str], sources=external.SOURCES) -> None:
+    """The models `series` quotes with, fitted on the training sessions as in
+    `fit`: with outside data at each delay, and own-book only (`r10b`, `clsb`,
+    saved under delay 0, which they do not depend on)."""
+    names = [n for s in sources for n in ext_names(s)]
+    mirror = _mirror(names)
+    xb, y = _stack_book(symbol, train)
+    n_val = len(xb) // len(train)
+    mv = y[K_LARGE]
+    okl = np.isfinite(mv)
+    thr = float(np.quantile(np.abs(mv[okl]), Q_LARGE))
+    MODELS.mkdir(parents=True, exist_ok=True)
+
+    def reg(x, path):
+        ok = np.isfinite(y[10])
+        xo, yo = x[ok], y[10][ok]
+        _gbm(xo[:-n_val], yo[:-n_val], xo[-n_val:], yo[-n_val:], "regression").save_model(str(path))
+
+    def cls(x, mir, path):
+        xa = np.vstack([x[okl], x[okl] * mir])
+        ya = np.concatenate([(mv[okl] >= thr), (-mv[okl] >= thr)]).astype(np.float32)
+        keep = (ya > 0) | (np.random.default_rng(0).random(len(ya)) < 0.1)
+        val = np.zeros(len(ya), bool)
+        half = len(ya) // 2
+        val[half - n_val:half] = True
+        val[-n_val:] = True
+        tr = keep & ~val
+        _gbm(xa[tr], ya[tr], xa[val], ya[val], "binary",
+             weight=np.where(ya[tr] > 0, 1.0, 10.0)).save_model(str(path))
+
+    if not model_path(symbol, "r10b", 0).exists():
+        reg(xb, model_path(symbol, "r10b", 0))
+    if not model_path(symbol, "clsb", 0).exists():
+        cls(xb, mirror[: xb.shape[1]], model_path(symbol, "clsb", 0))
+    for d_ms in DELAYS_MS:
+        if model_path(symbol, "r10", d_ms).exists() and model_path(symbol, "cls", d_ms).exists():
+            continue
+        x = np.hstack([xb, _stack_ext(symbol, train, d_ms * 1_000_000, sources)])
+        if not model_path(symbol, "r10", d_ms).exists():
+            reg(x, model_path(symbol, "r10", d_ms))
+        if not model_path(symbol, "cls", d_ms).exists():
+            cls(x, mirror, model_path(symbol, "cls", d_ms))
+        del x
+        print("models", symbol, d_ms, flush=True)
+
+
+_BOOSTERS: dict = {}
+
+
+def series(task: str, d_ms: int, symbol: str, date: str, sources=external.SOURCES) -> np.ndarray:
+    """A saved model's forecast for every 100 ms step of a session, cached.
+
+    `r10`: the 1 s move, bp. `cls`: the larger of the two sides' large-move
+    probabilities, signed + when the up move (the ask's danger) is the
+    likelier: the sign convention of `fair_mode` 3 and 4.
+    """
+    import lightgbm as lgb
+
+    cache = SERIES / f"{symbol}_{task}@{d_ms}_{date}.npy"
+    if cache.exists():
+        return np.load(cache)
+    ext, kind = TASKS[task]
+    f = features.load(symbol, date)
+    xb, mid = predict.build(f)
+    x = xb
+    if ext:
+        ts = f["ts"].astype(np.int64)
+        bad = ~np.isfinite(mid)
+        mid_ff = mid
+        if bad.any():
+            i = np.where(~bad, np.arange(len(mid)), 0)
+            np.maximum.accumulate(i, out=i)
+            mid_ff = mid[i]
+        asset = external.asset_of(symbol)
+        x = np.hstack([xb, np.hstack([ext_features(s, external.load(s, asset, date), ts, mid_ff,
+                                                   d_ms * 1_000_000) for s in sources])])
+    key = (symbol, task, d_ms)
+    if key not in _BOOSTERS:
+        _BOOSTERS[key] = lgb.Booster(model_file=str(model_path(symbol, task, d_ms)))
+    m = _BOOSTERS[key]
+    if kind == "reg":
+        out = m.predict(x, num_threads=1)
+    else:
+        mir = _mirror([n for s in sources for n in ext_names(s)])[: x.shape[1]]
+        up = m.predict(x, num_threads=1)
+        down = m.predict(x * mir, num_threads=1)
+        out = np.where(up >= down, up, -down)
+    out = out.astype(np.float64)
+    SERIES.mkdir(parents=True, exist_ok=True)
+    tmp = cache.with_name(f"{cache.stem}.{os.getpid()}.npy")
+    np.save(tmp, out)
+    os.replace(tmp, cache)
+    return out
+
+
 def prepare(symbol: str, days: list[str], shard: str) -> None:
     """Own-book features (needs the session's L2 file) and every outside source."""
     import config
@@ -316,7 +426,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("prepare", "fit"):
+    for name in ("prepare", "fit", "models"):
         p = sub.add_parser(name)
         p.add_argument("--symbol", required=True)
         p.add_argument("--train", nargs="*", default=None)
@@ -328,6 +438,8 @@ def main() -> None:
     test = args.test or c8.TEST
     if args.cmd == "prepare":
         prepare(args.symbol, train + test, args.shard)
+    elif args.cmd == "models":
+        save_models(args.symbol, train)
     else:
         fit(args.symbol, train, test)
 
