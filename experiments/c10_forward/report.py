@@ -211,6 +211,13 @@ def table_stop_stress() -> str:
         lines.append(f"| {short(label)} | " + " | ".join(
             fmt(None if c is None else c["chained"]) for c in cells)
             + f" | {fmt(None if cells[0] is None else cells[0]['fills'], '{:.0f}')} |")
+    # Does the stop still bound the crash when it is slower or pays more?
+    worst = []
+    for n in [forward.STOP_PICK] + list(forward.STOP_STRESS):
+        r = [c8.result(forward.cfg(label, n), forward.CRASH) for label in forward.FROZEN]
+        worst.append(None if any(x is None for x in r) else max(x["MaxDrawdown"] for x in r) * 100)
+    lines.append("| *worst crash-day drawdown, %* | " + " | ".join(fmt(w, "{:.1f}") for w in worst)
+                 + " | |")
     del names
     return "\n".join(lines)
 

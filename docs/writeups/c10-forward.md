@@ -23,11 +23,13 @@ seen, and inputs from outside the traded book. Lab notebook:
 >   ignored resting orders, so the quoter kept buying.
 > - **None of C8's risk controls bounds that day; a stop does.** Circuit
 >   breakers, daily loss limits and a units cap each leave some
->   configuration with a crash-day drawdown of 23–211%. A loss limit that
+>   configuration with a crash-day drawdown of 26–211%. A loss limit that
 >   *exits* the position at the touch (`loss_flatten`) holds every
 >   configuration's drawdown to 0.8–6.4% at 50 bp, and is also the cheapest
 >   control on the rest of the year (summed −5.6% against −8.4% as frozen).
->   Its stress tests: §6.
+>   It keeps the crash bounded under every stress (worst drawdown 3.5–6.4%
+>   with fees up to +2 bp, latency ×4 and a pessimistic queue); it does not
+>   make a losing configuration profitable.
 > - **Outside data improves the forecasts, if it arrives at once.** Adding
 >   the same asset's Binance perpetual and spot trades and Bybit's
 >   perpetual roughly doubles the held-out R² of the 1 s move (XRP 6.0 →
@@ -257,8 +259,35 @@ losing configurations profitable; it makes their losses bounded.
 
 ## 6. The picked stop, stress-tested
 
-*Pending: stop 50 bp with each cost, latency and queue stress on every
-forward session (`C10_VARSET=stopstress`), running.*
+The picked stop, run with each of the forward test's stresses on all 61
+sessions (`C10_VARSET=stopstress`):
+
+| configuration (stop 50 bp) | as picked | fee 0 | fee +1 bp | fee +2 bp (Bybit VIP 0) | latency ×4 | queue risk-averse | fills/day |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| XRPUSDC → XRPPERP | **+4.18** | **+3.45** | **+1.47** | **+0.32** | **+2.09** | **+3.56** | 42 |
+| XRPUSDT → XRPUSDT | +0.47 | −3.29 | −11.84 | −15.28 | −2.18 | −0.03 | 194 |
+| SUIUSDC → SUIPERP | −1.35 | −1.78 | −2.57 | −4.96 | −10.74 | −0.73 | 19 |
+| SUIUSDC → SUIUSDT | −3.21 | −4.81 | −7.28 | −8.76 | −7.19 | −2.30 | 70 |
+| SUIUSDT → SUIUSDT | −1.32 | −1.53 | −2.09 | −3.50 | −2.38 | −1.40 | 22 |
+| AVAXUSDC → AVAXUSDT | −4.37 | −4.82 | −5.42 | −7.23 | −2.76 | −4.60 | 33 |
+| *worst crash-day drawdown, %* | 6.4 | 6.4 | 6.2 | 6.0 | 3.6 | 3.5 | |
+
+*Chained return, %, over the 53 forward sessions without the crash; the last
+row is the worst of the six configurations' drawdowns on 2025-10-10 under
+each stress.*
+
+- **The stop's protection is robust.** Under every stress the crash-day
+  drawdown stays at or below 6.4% for every configuration: slower orders
+  (latency ×4) and a pessimistic queue do not let the position run away
+  before the stop fires.
+- **Its ordinary-day effect is not.** Only XRPUSDC → XRPPERP stays positive
+  under every stress, and the stop makes it a little sturdier than as
+  frozen (+0.32% against +0.21% at +2 bp, +2.09% against +0.52% at latency
+  ×4). XRPUSDT's +0.47% is the rebate: at a zero fee it is −3.29%. The
+  other four lose under every stress.
+- So the stop is a **risk control, not an edge**: it is what any of these
+  quoters would need before running live, and it does not make one
+  profitable that was not.
 
 ## 7. Lead-lag: forecasts with outside data
 

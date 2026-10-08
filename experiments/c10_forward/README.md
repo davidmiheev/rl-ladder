@@ -43,9 +43,9 @@ merged from `c10_days.tgz` into `runs/c8/days/`).
 | run | status | result |
 | --- | --- | --- |
 | forward, frozen, 6 stresses × 61 sessions × 6 configurations | done | without the 2025-10-10 crash only XRPUSDC → XRPPERP makes money (+3.96%, +0.21% at +2 bp); venue-control week +1.41 to −1.37% against +2.5 to +3.5% on Binance |
-| C8's controls on every session | done | none bounds the crash: worst crash-day drawdowns 23–211% |
+| C8's controls on every session | done | none bounds the crash: worst crash-day drawdowns 26–211% |
 | stops on every session | done | stop 50 bp: crash drawdowns 0.8–6.4%, forward without the crash −5.59% summed (−8.41% as frozen); picked by the rule fixed in advance |
-| stop 50 bp stress tests | running | |
+| stop 50 bp stress tests | done | crash drawdown ≤ 6.4% under every stress; only XRPUSDC → XRPPERP stays positive (+0.32% at +2 bp, +2.09% at latency ×4) |
 | lead-lag forecasts, 3 assets × 3 delays | done | 1 s R² roughly doubles with outside data at +0 ms (XRP 6.0 → 8.9%, SUI 2.5 → 6.3%, ETH 3.8 → 8.4%), half gone at +100 ms; large-move precision +2–3 points |
 | lead-lag through the backtest | running | |
 
