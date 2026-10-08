@@ -5,6 +5,42 @@
     "price": 23.521,
     "roi_ub": 94.084
   },
+  "bitstamp-ethusd": {
+    "tick_size": 0.009999999999763531,
+    "lot_size": 9.999999974752427e-07,
+    "price": 2412.67,
+    "roi_ub": 9650.68
+  },
+  "bitstamp-ethusd-l3": {
+    "tick_size": 0.009999999999763531,
+    "lot_size": 9.999999974752427e-07,
+    "price": 2412.67,
+    "roi_ub": 9650.68
+  },
+  "bitstamp-suiusd": {
+    "tick_size": 9.999999999843467e-06,
+    "lot_size": 0.0009999999999763531,
+    "price": 1.00006,
+    "roi_ub": 4.00024
+  },
+  "bitstamp-suiusd-l3": {
+    "tick_size": 9.999999999843467e-06,
+    "lot_size": 0.0009999999999763531,
+    "price": 1.00006,
+    "roi_ub": 4.00024
+  },
+  "bitstamp-xrpusd": {
+    "tick_size": 9.999999999621423e-06,
+    "lot_size": 9.999894245993346e-09,
+    "price": 1.32216,
+    "roi_ub": 5.28864
+  },
+  "bitstamp-xrpusd-l3": {
+    "tick_size": 9.999999999621423e-06,
+    "lot_size": 9.999894245993346e-09,
+    "price": 1.32216,
+    "roi_ub": 5.28864
+  },
   "bnbusdc": {
     "tick_size": 0.009999999999990905,
     "lot_size": 0.009999999999990905,
