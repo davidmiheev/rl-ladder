@@ -100,8 +100,17 @@ def _messages(raw: Path, pair: str):
 class _Out:
     def __init__(self):
         self.rows: list[tuple] = []
+        self.last_local: dict[int, int] = {}
 
     def add(self, ev, exch, local, px, qty, oid=0):
+        if oid:
+            # One order's events keep their order on the local clock too: a
+            # repair cancel takes the time of the trade that proved it, which
+            # can have arrived before the order's own add.
+            # Kept after a cancel too: an order can be dropped by a repair
+            # and come back (a later snapshot still has it).
+            local = max(local, self.last_local.get(oid, 0) + 1)
+            self.last_local[oid] = local
         self.rows.append((ev, exch, local, px, qty, oid))
 
     def array(self) -> np.ndarray:
@@ -176,6 +185,40 @@ def convert(raw: Path, pair: str, session: str) -> dict:
     def lay_snapshot(book, local):
         nonlocal snap_ts, snap_local, ref_px
         exch = int(book["microtimestamp"]) * 1000
+        if stats["snapshots_laid"]:
+            relay(book, max(exch, last_exch), local)
+        else:
+            first_lay(book, exch, local)
+        snap_ts = max(exch, last_exch)
+        snap_local = local
+        if book["bids"]:
+            ref_px = float(book["bids"][0][0])
+        stats["snapshots_laid"] += 1
+
+    def relay(book, exch, local):
+        """After a gap: bring the book to the snapshot order by order (no
+        clear, which would also expire every backtest order)."""
+        snap = {int(o): (side, float(p), float(q))
+                for side, key in ((1, "bids"), (-1, "asks")) for p, q, o in book[key]}
+        for oid in [i for i in orders if i not in snap]:
+            drop(oid, exch, local, "relay_dropped")
+        for oid, (side, p, q) in snap.items():
+            flag = BUY_EVENT if side > 0 else SELL_EVENT
+            if oid not in orders:
+                orders[oid] = (side, p, q)
+                born[oid] = exch
+                l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, p, q, oid)
+                level(side, p, q, exch, local)
+                stats["relay_added"] += 1
+            elif orders[oid] != (side, p, q):
+                s0, p0, q0 = orders[oid]
+                orders[oid] = (side, p, q)
+                l3.add(MODIFY_ORDER_EVENT | BOTH | flag, exch, local, p, q, oid)
+                level(s0, p0, -q0, exch, local)
+                level(side, p, q, exch, local)
+                stats["relay_modified"] += 1
+
+    def first_lay(book, exch, local):
         orders.clear()
         for side, key in ((1, "bids"), (-1, "asks")):
             flag = BUY_EVENT if side > 0 else SELL_EVENT
@@ -192,11 +235,6 @@ def convert(raw: Path, pair: str, session: str) -> dict:
                 l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, p, q, oid)
             for p, q in levels[side].items():
                 l2.add(DEPTH_SNAPSHOT_EVENT | BOTH | flag, exch, local, p, q)
-        snap_ts = exch
-        snap_local = local
-        if book["bids"]:
-            ref_px = float(book["bids"][0][0])
-        stats["snapshots_laid"] += 1
 
     # Exchange-time order across the two channels (they arrive with their own
     # delays): at one microsecond, trades first (their FILL must precede the
@@ -298,14 +336,19 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             maker = int(d["sell_order_id"] if taker_buy else d["buy_order_id"])
             px, qty = float(d["price"]), float(d["amount"])
             ref_px = px
-            clear_through(taker_buy, px, exch - 2, local)
+            # At the trade's own time: after the fills of a sweep's earlier
+            # levels in the same microsecond, whose makers it would drop.
+            clear_through(taker_buy, px, exch, local)
             for out in (l3, l2):
                 out.add(TRADE_EVENT | BOTH | (BUY_EVENT if taker_buy else SELL_EVENT), exch, local, px, qty)
             if maker in orders:
                 side = orders[maker][0]
                 # Ordered before the maker's own update at the same time (below).
+                # Before the maker's own update at the same time, but never
+                # before the maker's add (it can be created in the same
+                # microsecond it is hit).
                 l3.add(FILL_EVENT | BOTH | (BUY_EVENT if side > 0 else SELL_EVENT),
-                       exch - 1, local, px, qty, maker)
+                       max(exch - 1, born.get(maker, 0)), local, px, qty, maker)
                 stats["fills"] += 1
             else:
                 stats["fills_unknown_maker"] += 1
@@ -341,7 +384,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
                 # crosses was deleted unseen.
                 for i in [i for i, (sd, p, _) in orders.items()
                           if sd == -side and (p <= px if side > 0 else p >= px)]:
-                    drop(i, exch - 2, local, "stale_dropped_by_cross")
+                    drop(i, exch, local, "stale_dropped_by_cross")
             orders[oid] = (side, px, qty)
             born[oid] = exch
             l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, px, qty, oid)
