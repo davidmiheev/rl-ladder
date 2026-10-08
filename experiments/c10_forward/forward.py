@@ -103,8 +103,15 @@ def pending(contract: str, date: str) -> list[dict]:
 
 
 def units() -> list[tuple[str, str]]:
-    return [(c, d) for d in DATES for c in CONTRACTS
-            if c in os.environ.get("C10_CONTRACTS", c).split(",")]
+    out = [(c, d) for d in DATES for c in CONTRACTS
+           if c in os.environ.get("C10_CONTRACTS", c).split(",")]
+    # `C10_ONLY=CONTRACT:DATE,...` restricts a host to named units, so a
+    # host without the cache does not redo what another host finished.
+    only = os.environ.get("C10_ONLY")
+    if only:
+        keep = {tuple(u.split(":")) for u in only.split(",")}
+        out = [u for u in out if u in keep]
+    return out
 
 
 def run_unit(contract: str, date: str) -> str:

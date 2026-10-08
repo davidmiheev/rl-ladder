@@ -53,7 +53,7 @@ import predict  # noqa: E402
 OUT = REPO / "runs" / "c10"
 WINDOWS_S = (0.1, 0.5, 1.0, 5.0)
 DELAYS_MS = (0, 100, 250)
-STRIDE = 3
+STRIDE = int(os.environ.get("C10_STRIDE", "5"))  # every 5th 100 ms step
 K_REG = (10, 30)
 K_LARGE, Q_LARGE = 30, 0.99
 
@@ -183,9 +183,16 @@ def _at_rate(y, s, rate):
 def fit(symbol: str, train: list[str], test: list[str], sources=external.SOURCES) -> dict:
     names = [n for s in sources for n in ext_names(s)]
     mirror = _mirror(names)
+    out_path = OUT / f"leadlag_{symbol}.json"
     report = {"symbol": symbol, "sources": list(sources), "train": train, "test": test,
-              "n_ext_features": len(names), "delays": {}}
+              "n_ext_features": len(names), "stride": STRIDE, "delays": {}}
+    if out_path.exists():  # resume: delays already fitted are kept
+        old = json.loads(out_path.read_text())
+        if old.get("train") == train and old.get("test") == test and old.get("stride") == STRIDE:
+            report["delays"] = old["delays"]
     for d_ms in DELAYS_MS:
+        if str(d_ms) in report["delays"]:
+            continue
         extra = d_ms * 1_000_000
         xb, xe, y = _stack(symbol, train, extra, sources)
         tb, te, yt = _stack(symbol, test, extra, sources)
@@ -215,7 +222,6 @@ def fit(symbol: str, train: list[str], test: list[str], sources=external.SOURCES
             rng = np.random.default_rng(0)
             keep = (ya > 0) | (rng.random(len(ya)) < 0.1)
             w = np.where(ya[keep] > 0, 1.0, 10.0)
-            nv = 2 * n_val
             val = np.zeros(len(ya), bool)
             half = len(ya) // 2
             val[half - n_val:half] = True
@@ -238,8 +244,8 @@ def fit(symbol: str, train: list[str], test: list[str], sources=external.SOURCES
         report["delays"][str(d_ms)] = row
         print(symbol, f"+{d_ms} ms", json.dumps({k: (round(v, 4) if isinstance(v, float) else v)
                                                  for k, v in row.items()}), flush=True)
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"leadlag_{symbol}.json").write_text(json.dumps(report, indent=1))
+        OUT.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report, indent=1))
     return report
 
 
