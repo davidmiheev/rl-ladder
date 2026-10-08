@@ -131,16 +131,35 @@ def _targets(mid: np.ndarray) -> dict[int, np.ndarray]:
     return {k: predict.target(mid, k)[::STRIDE] for k in set(K_REG) | {K_LARGE}}
 
 
-def _stack(symbol, days, extra_ns, sources):
-    xb, xe, ys = [], [], {k: [] for k in set(K_REG) | {K_LARGE}}
+def _stack_book(symbol, days):
+    """Own-book features and targets for `days` (independent of any delay)."""
+    xb, ys = [], {k: [] for k in set(K_REG) | {K_LARGE}}
     for date in days:
-        b, e, mid, _ = day_matrix(symbol, date, extra_ns, sources)
-        t = _targets(mid)
-        xb.append(b)
-        xe.append(e)
-        for k in ys:
-            ys[k].append(t[k].astype(np.float32))
-    return np.concatenate(xb), np.concatenate(xe), {k: np.concatenate(v) for k, v in ys.items()}
+        f = features.load(symbol, date)
+        b, mid = predict.build(f)
+        xb.append(b[::STRIDE])
+        for k, v in _targets(mid).items():
+            ys[k].append(v.astype(np.float32))
+    return np.concatenate(xb), {k: np.concatenate(v) for k, v in ys.items()}
+
+
+def _stack_ext(symbol, days, extra_ns, sources):
+    """Outside features for `days` at an extra arrival delay."""
+    out = []
+    asset = external.asset_of(symbol)
+    for date in days:
+        f = features.load(symbol, date)
+        _, mid = predict.build(f)
+        bad = ~np.isfinite(mid)
+        if bad.any():
+            i = np.where(~bad, np.arange(len(mid)), 0)
+            np.maximum.accumulate(i, out=i)
+            mid = mid[i]
+        ts = f["ts"].astype(np.int64)
+        xe = np.hstack([ext_features(s, external.load(s, asset, date), ts, mid, extra_ns)
+                        for s in sources])
+        out.append(xe[::STRIDE])
+    return np.concatenate(out)
 
 
 def _mirror(n_ext_cols: list[str]) -> np.ndarray:
@@ -181,72 +200,94 @@ def _at_rate(y, s, rate):
 
 
 def fit(symbol: str, train: list[str], test: list[str], sources=external.SOURCES) -> dict:
+    """Every model is its own task, saved as it finishes, so a restart loses one fit at most.
+
+    Book-only models do not depend on the delay and are fitted once.
+    """
     names = [n for s in sources for n in ext_names(s)]
     mirror = _mirror(names)
     out_path = OUT / f"leadlag_{symbol}.json"
-    report = {"symbol": symbol, "sources": list(sources), "train": train, "test": test,
-              "n_ext_features": len(names), "stride": STRIDE, "delays": {}}
-    if out_path.exists():  # resume: delays already fitted are kept
+    spec = {"symbol": symbol, "sources": list(sources), "train": train, "test": test,
+            "n_ext_features": len(names), "stride": STRIDE}
+    tasks = {}
+    if out_path.exists():
         old = json.loads(out_path.read_text())
-        if old.get("train") == train and old.get("test") == test and old.get("stride") == STRIDE:
-            report["delays"] = old["delays"]
-    for d_ms in DELAYS_MS:
-        if str(d_ms) in report["delays"]:
-            continue
-        extra = d_ms * 1_000_000
-        xb, xe, y = _stack(symbol, train, extra, sources)
-        tb, te, yt = _stack(symbol, test, extra, sources)
-        n_val = len(xb) // len(train)  # the last training session: early stopping only
-        row = {}
-        for k in K_REG:
-            ok, okt = np.isfinite(y[k]), np.isfinite(yt[k])
-            for label, x, xt in (("book", xb, tb), ("book+ext", np.hstack([xb, xe]),
-                                                      np.hstack([tb, te]))):
-                xo, yo = x[ok], y[k][ok]
-                m = _gbm(xo[:-n_val], yo[:-n_val], xo[-n_val:], yo[-n_val:], "regression")
-                p = m.predict(xt[okt])
-                yy = yt[k][okt]
-                row[f"r2_{k}_{label}"] = float(1 - np.sum((yy - p) ** 2) / np.sum((yy - yy.mean()) ** 2)) * 100
-        # Large moves: one row per side, the bid side mirrored.
-        mv, mvt = y[K_LARGE], yt[K_LARGE]
-        ok, okt = np.isfinite(mv), np.isfinite(mvt)
-        thr = float(np.quantile(np.abs(mv[ok]), Q_LARGE))
-        row["large_threshold_bp"] = thr
-        for label, x, xt, mir in (("book", xb, tb, mirror[: xb.shape[1]]),
-                                  ("book+ext", np.hstack([xb, xe]), np.hstack([tb, te]), mirror)):
-            xa = np.vstack([x[ok], x[ok] * mir])
-            ya = np.concatenate([(mv[ok] >= thr), (-mv[ok] >= thr)]).astype(np.float32)
-            xta = np.vstack([xt[okt], xt[okt] * mir])
-            yta = np.concatenate([(mvt[okt] >= thr), (-mvt[okt] >= thr)]).astype(np.float32)
-            # Keep every positive and every 10th negative, reweighted.
-            rng = np.random.default_rng(0)
-            keep = (ya > 0) | (rng.random(len(ya)) < 0.1)
-            w = np.where(ya[keep] > 0, 1.0, 10.0)
-            val = np.zeros(len(ya), bool)
-            half = len(ya) // 2
-            val[half - n_val:half] = True
-            val[-n_val:] = True
-            tr = keep & ~val
-            m = _gbm(xa[tr], ya[tr], xa[val], ya[val], "binary", weight=np.where(ya[tr] > 0, 1.0, 10.0))
-            s = m.predict(xta)
-            row[f"auc_{label}"] = _auc(yta, s)
-            row[f"base_rate"] = float(yta.mean())
-            for rate in (0.003, 0.01):
-                prec, rec = _at_rate(yta, s, rate)
-                row[f"precision_{rate:g}_{label}"] = prec
-                row[f"recall_{rate:g}_{label}"] = rec
-            if label == "book+ext":
-                gain = m.feature_importance("gain")
-                cols = list(predict.FEATURES) + names
-                top = np.argsort(gain)[::-1][:8]
-                row["top_features"] = {cols[i]: round(float(gain[i] / gain.sum()), 3) for i in top}
-            del xa, ya, xta, yta
-        report["delays"][str(d_ms)] = row
-        print(symbol, f"+{d_ms} ms", json.dumps({k: (round(v, 4) if isinstance(v, float) else v)
-                                                 for k, v in row.items()}), flush=True)
+        if all(old.get(k) == v for k, v in spec.items()):
+            tasks = old.get("tasks", {})
+
+    def save():
         OUT.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(report, indent=1))
-    return report
+        delays = {}
+        for d_ms in DELAYS_MS:
+            row = {k: v for k, v in tasks.items() if "@" not in k}
+            row.update({k.split("@")[0]: v for k, v in tasks.items() if k.endswith(f"@{d_ms}")})
+            delays[str(d_ms)] = row
+        out_path.write_text(json.dumps({**spec, "tasks": tasks, "delays": delays}, indent=1))
+
+    xb, y = _stack_book(symbol, train)
+    tb, yt = _stack_book(symbol, test)
+    n_val = len(xb) // len(train)  # about one session: the last training one, early stopping only
+    mv, mvt = y[K_LARGE], yt[K_LARGE]
+    okl, oklt = np.isfinite(mv), np.isfinite(mvt)
+    thr = float(np.quantile(np.abs(mv[okl]), Q_LARGE))
+    tasks["large_threshold_bp"] = thr
+
+    def regression(x, xt, k):
+        ok, okt = np.isfinite(y[k]), np.isfinite(yt[k])
+        xo, yo = x[ok], y[k][ok]
+        m = _gbm(xo[:-n_val], yo[:-n_val], xo[-n_val:], yo[-n_val:], "regression")
+        p = m.predict(xt[okt])
+        yy = yt[k][okt]
+        return float(1 - np.sum((yy - p) ** 2) / np.sum((yy - yy.mean()) ** 2)) * 100
+
+    def classifier(x, xt, mir, cols):
+        # One row per side, the bid side mirrored; every positive and every
+        # 10th negative, reweighted.
+        xa = np.vstack([x[okl], x[okl] * mir])
+        ya = np.concatenate([(mv[okl] >= thr), (-mv[okl] >= thr)]).astype(np.float32)
+        xta = np.vstack([xt[oklt], xt[oklt] * mir])
+        yta = np.concatenate([(mvt[oklt] >= thr), (-mvt[oklt] >= thr)]).astype(np.float32)
+        keep = (ya > 0) | (np.random.default_rng(0).random(len(ya)) < 0.1)
+        val = np.zeros(len(ya), bool)
+        half = len(ya) // 2
+        val[half - n_val:half] = True
+        val[-n_val:] = True
+        tr = keep & ~val
+        m = _gbm(xa[tr], ya[tr], xa[val], ya[val], "binary", weight=np.where(ya[tr] > 0, 1.0, 10.0))
+        sc = m.predict(xta)
+        res = {"auc": _auc(yta, sc), "base_rate": float(yta.mean())}
+        for rate in (0.003, 0.01):
+            res[f"precision_{rate:g}"], res[f"recall_{rate:g}"] = _at_rate(yta, sc, rate)
+        gain = m.feature_importance("gain")
+        top = np.argsort(gain)[::-1][:8]
+        res["top_features"] = {cols[i]: round(float(gain[i] / gain.sum()), 3) for i in top}
+        return res
+
+    def run(key, fn):
+        if key in tasks:
+            return
+        tasks[key] = fn()
+        save()
+        print(symbol, key, json.dumps(tasks[key]) if isinstance(tasks[key], dict)
+              else round(tasks[key], 4), flush=True)
+
+    book_cols = list(predict.FEATURES)
+    for k in K_REG:
+        run(f"r2_{k}_book", lambda k=k: regression(xb, tb, k))
+    run("cls_book", lambda: classifier(xb, tb, mirror[: xb.shape[1]], book_cols))
+    for d_ms in DELAYS_MS:
+        keys = [f"r2_{k}_book+ext@{d_ms}" for k in K_REG] + [f"cls_book+ext@{d_ms}"]
+        if all(key in tasks for key in keys):
+            continue
+        xe = _stack_ext(symbol, train, d_ms * 1_000_000, sources)
+        te = _stack_ext(symbol, test, d_ms * 1_000_000, sources)
+        x, xt = np.hstack([xb, xe]), np.hstack([tb, te])
+        for k in K_REG:
+            run(f"r2_{k}_book+ext@{d_ms}", lambda k=k: regression(x, xt, k))
+        run(f"cls_book+ext@{d_ms}", lambda: classifier(x, xt, mirror, book_cols + names))
+        del xe, te, x, xt
+    save()
+    return {**spec, "tasks": tasks}
 
 
 def prepare(symbol: str, days: list[str], shard: str) -> None:
