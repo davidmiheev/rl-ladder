@@ -151,6 +151,31 @@ def cmd_status() -> None:
     print(f"{done}/{len(units())} (contract, session) units done")
 
 
+def summary(label: str, variant: str, dates: list[str]) -> dict | None:
+    rows = [r for r in (c8.result(cfg(label, variant), d) for d in dates) if r is not None]
+    if not rows:
+        return None
+    r = np.array([x["Return"] for x in rows])
+    return {"n": len(rows), "chained": float(np.prod(1 + r) - 1) * 100,
+            "mean_bp": float(r.mean()) * 1e4, "up": int((r > 0).sum()),
+            "fills": float(np.median([x["DailyNumberOfTrades"] for x in rows]))}
+
+
+def cmd_report() -> None:
+    for period, dates in (("control (held-out week)", CONTROL), ("forward (weekly)", FORWARD)):
+        print(f"\n## {period}\n")
+        print("| configuration | sessions | " + " | ".join(VARIANTS) + " | fills/day | sessions up |")
+        print("| --- | --- |" + " --- |" * len(VARIANTS) + " --- | --- |")
+        for label in FROZEN:
+            cells = [summary(label, v, dates) for v in VARIANTS]
+            base = cells[0]
+            if base is None:
+                continue
+            print(f"| {label} | {base['n']} | " + " | ".join(
+                "–" if c is None else f"{c['chained']:+.2f}" for c in cells)
+                + f" | {base['fills']:.0f} | {base['up']}/{base['n']} |")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -158,9 +183,12 @@ def main() -> None:
     r = sub.add_parser("run")
     r.add_argument("--shard", default="0/1")
     sub.add_parser("status")
+    sub.add_parser("report")
     args = parser.parse_args()
     if args.cmd == "run":
         cmd_run(args.shard)
+    elif args.cmd == "report":
+        cmd_report()
     else:
         cmd_status()
 
