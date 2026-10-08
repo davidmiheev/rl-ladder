@@ -38,7 +38,11 @@ import c8  # noqa: E402
 import l3data  # noqa: E402
 
 PAIRS = ("ethusd", "xrpusd", "suiusd")
-FLOORS_BP = (1.0, 2.0, 4.0, 8.0, 16.0)
+#: 0 and 0.5 bp quote at or next to the touch, where our orders join prices
+#: other orders already hold and the queue models differ; on Bitstamp's
+#: sparse books wider quotes usually sit alone at their price, where every L2
+#: model agrees (a 45-minute dev session: identical to the last digit).
+FLOORS_BP = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0)
 KAPPA = 2.0
 L2_MODELS = ("power2", "power2-2", "power3-3", "log", "log2", "risk-adverse")
 
