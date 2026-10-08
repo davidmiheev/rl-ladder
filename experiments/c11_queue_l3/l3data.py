@@ -134,6 +134,8 @@ def convert(raw: Path, pair: str, session: str) -> dict:
     orders: dict[int, tuple[int, float, float]] = {}  # id -> (side +1/-1, px, qty)
     levels: dict[int, dict[float, float]] = {1: defaultdict(float), -1: defaultdict(float)}
     live = False  # False until a snapshot has been laid down (and after a disconnect)
+    ref_px = 0.0  # the last trade, or the snapshot's best bid: what a resting price is near
+    ignored: set[int] = set()
     snap_ts = 0
     stats = defaultdict(int)
 
@@ -150,7 +152,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
         l2.add(DEPTH_EVENT | BOTH | (BUY_EVENT if side > 0 else SELL_EVENT), exch, local, px, q)
 
     def lay_snapshot(book, local):
-        nonlocal snap_ts
+        nonlocal snap_ts, ref_px
         exch = int(book["microtimestamp"]) * 1000
         orders.clear()
         for side, key in ((1, "bids"), (-1, "asks")):
@@ -168,6 +170,8 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             for p, q in levels[side].items():
                 l2.add(DEPTH_SNAPSHOT_EVENT | BOTH | flag, exch, local, p, q)
         snap_ts = exch
+        if book["bids"]:
+            ref_px = float(book["bids"][0][0])
         stats["snapshots_laid"] += 1
 
     # Exchange-time order across the two channels (they arrive with their own
@@ -209,6 +213,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             taker_buy = int(d["type"]) == 0
             maker = int(d["sell_order_id"] if taker_buy else d["buy_order_id"])
             px, qty = float(d["price"]), float(d["amount"])
+            ref_px = px
             for out in (l3, l2):
                 out.add(TRADE_EVENT | BOTH | (BUY_EVENT if taker_buy else SELL_EVENT), exch, local, px, qty)
             if maker in orders:
@@ -227,11 +232,20 @@ def convert(raw: Path, pair: str, session: str) -> dict:
         if ev == "order_created":
             if oid in orders or qty <= 0:
                 continue
+            # Market orders appear as order_created at a sentinel price
+            # (999999999 for a buy) and are deleted at once: they never rest,
+            # and a bid at that price would "cross" every tick up to it.
+            if ref_px and not 0.5 * ref_px < px < 2.0 * ref_px:
+                ignored.add(oid)
+                stats["non_resting_skipped"] += 1
+                continue
             orders[oid] = (side, px, qty)
             l3.add(ADD_ORDER_EVENT | BOTH | flag, exch, local, px, qty, oid)
             level(side, px, qty, exch, local)
             stats["adds"] += 1
         elif ev == "order_changed":
+            if oid in ignored:
+                continue
             if oid not in orders:
                 stats["changes_unknown"] += 1
                 continue
@@ -242,6 +256,9 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             level(side, px, qty, exch, local)
             stats["modifies"] += 1
         elif ev == "order_deleted":
+            if oid in ignored:
+                ignored.discard(oid)
+                continue
             if oid not in orders:
                 stats["deletes_unknown"] += 1
                 continue
