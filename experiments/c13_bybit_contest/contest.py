@@ -27,6 +27,8 @@ Selection uses training (and, for the final pick, validation) sessions only;
 the test block is reported, never chosen on.
 
     python experiments/c13_bybit_contest/contest.py run --phase screen --shard 0/12
+    python experiments/c13_bybit_contest/contest.py units --phase families > units.json
+    C13_UNITS=units.json python experiments/c13_bybit_contest/contest.py run --phase families --shard 0/12
     python experiments/c13_bybit_contest/contest.py status
     python experiments/c13_bybit_contest/contest.py report
 """
@@ -36,6 +38,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import gc
+import json
 import os
 import sys
 import time
@@ -251,7 +254,10 @@ def run_unit(contract: str, date: str, cfgs: list[dict]) -> str:
 
 def cmd_run(phase: str, shard: str) -> None:
     index, count = (int(x) for x in shard.split("/"))
-    todo = [u for u in units(phase) if u[2]][index::count]
+    # Later phases are built from earlier results; a machine without them (a
+    # fresh Kaggle session) is handed the units, as dumped by `units`.
+    us = json.loads(Path(os.environ["C13_UNITS"]).read_text()) if os.environ.get("C13_UNITS") else units(phase)
+    todo = [u for u in us if u[2]][index::count]
     deadline = float(os.environ.get("C8_DEADLINE", "inf"))
     print(f"### C13 {phase} shard {shard}: {len(todo)} (contract, session) units", flush=True)
     for i, (contract, date, cfgs) in enumerate(todo):
@@ -323,11 +329,16 @@ def main() -> None:
     r = sub.add_parser("run")
     r.add_argument("--phase", required=True, choices=("screen", "families", "greedy", "valid", "test"))
     r.add_argument("--shard", default="0/1")
+    u = sub.add_parser("units")
+    u.add_argument("--phase", required=True, choices=("screen", "families", "greedy", "valid", "test"))
     sub.add_parser("status")
     sub.add_parser("report")
     args = parser.parse_args()
     if args.cmd == "run":
         cmd_run(args.phase, args.shard)
+    elif args.cmd == "units":
+        todo = [(k, d, [c for c in cfgs if c8.result(c, d) is None]) for k, d, cfgs in units(args.phase)]
+        print(json.dumps([u for u in todo if u[2]]))
     elif args.cmd == "report":
         cmd_report()
     else:
