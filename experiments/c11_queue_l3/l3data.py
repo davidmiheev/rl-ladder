@@ -137,6 +137,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
     ref_px = 0.0  # the last trade, or the snapshot's best bid: what a resting price is near
     ignored: set[int] = set()
     snap_ts = 0
+    snap_local = 0
     stats = defaultdict(int)
 
     def level(side, px, delta, exch, local):
@@ -152,7 +153,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
         l2.add(DEPTH_EVENT | BOTH | (BUY_EVENT if side > 0 else SELL_EVENT), exch, local, px, q)
 
     def lay_snapshot(book, local):
-        nonlocal snap_ts, ref_px
+        nonlocal snap_ts, snap_local, ref_px
         exch = int(book["microtimestamp"]) * 1000
         orders.clear()
         for side, key in ((1, "bids"), (-1, "asks")):
@@ -170,6 +171,7 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             for p, q in levels[side].items():
                 l2.add(DEPTH_SNAPSHOT_EVENT | BOTH | flag, exch, local, p, q)
         snap_ts = exch
+        snap_local = local
         if book["bids"]:
             ref_px = float(book["bids"][0][0])
         stats["snapshots_laid"] += 1
@@ -205,6 +207,10 @@ def convert(raw: Path, pair: str, session: str) -> dict:
             continue
         if "data" not in o or "microtimestamp" not in o.get("data", {}):
             continue
+        # An event newer than the snapshot can arrive before the snapshot's
+        # REST response does; on the local clock it must still follow the
+        # snapshot it modifies.
+        local = max(local, snap_local)
         d, ev = o["data"], o.get("event")
         exch = int(d["microtimestamp"]) * 1000
         if exch <= snap_ts:
