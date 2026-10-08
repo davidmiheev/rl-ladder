@@ -17,6 +17,12 @@
     "price": 3.7226,
     "roi_ub": 14.8904
   },
+  "bybit-suiusdt": {
+    "tick_size": 9.999999999976694e-05,
+    "lot_size": 10.0,
+    "price": 3.6661,
+    "roi_ub": 14.6644
+  },
   "bybit-xrpperp": {
     "tick_size": 9.999999999976694e-05,
     "lot_size": 1.0,
