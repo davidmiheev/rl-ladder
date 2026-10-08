@@ -107,9 +107,16 @@ STOPS = {
                                 "loss_mode": 1.0, "loss_flatten": 1.0},
     "units cap + inventory flatten 0.5": {"cap_ref": 1.0, "cap_resting": 1.0, "inv_flatten": 0.5},
 }
-#: `C10_VARSET=controls` (or `stops`) runs those instead of the stress variants.
-VARSET = {"stress": VARIANTS, "controls": CONTROLS,
-          "stops": STOPS}[os.environ.get("C10_VARSET", "stress")]
+#: The stop picked by the rule fixed before the stops ran: every
+#: configuration's crash-session drawdown at most 10%, then the best summed
+#: forward return without the crash. It is stress-tested like the frozen ones.
+STOP_PICK = "stop 50 bp"
+STOP_STRESS = {f"{STOP_PICK}, {v}": {**STOPS[STOP_PICK], **x}
+               for v, x in VARIANTS.items() if x}
+#: `C10_VARSET=controls` (or `stops`, `stopstress`) runs those instead of the
+#: stress variants.
+VARSET = {"stress": VARIANTS, "controls": CONTROLS, "stops": STOPS,
+          "stopstress": STOP_STRESS}[os.environ.get("C10_VARSET", "stress")]
 CRASH = "2025-10-10"
 
 CONTROL = c8.TEST  # 2025-09-19 .. 09-25
@@ -133,7 +140,7 @@ def configs_for(contract: str) -> list[dict]:
 
 def cfg(label: str, variant: str) -> dict:
     contract, sets = FROZEN[label]
-    extra = {**VARIANTS, **CONTROLS, **STOPS}[variant]
+    extra = {**VARIANTS, **CONTROLS, **STOPS, **STOP_STRESS}[variant]
     return c8.config("obi", bybit.name(contract), {**sets, **extra})
 
 
