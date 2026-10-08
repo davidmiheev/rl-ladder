@@ -47,6 +47,12 @@
     "price": 846.75,
     "roi_ub": 3387.0
   },
+  "bybit-avaxusdt": {
+    "tick_size": 0.0009999999999976694,
+    "lot_size": 0.09999999999854481,
+    "price": 34.259,
+    "roi_ub": 137.036
+  },
   "bybit-suiperp": {
     "tick_size": 9.999999999976694e-05,
     "lot_size": 0.09999999999854481,
