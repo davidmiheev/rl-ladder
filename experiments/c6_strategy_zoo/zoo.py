@@ -108,9 +108,9 @@ STATE_SIZE = 43
     P_FAIR_MODE, P_FAIR_COEF,
     P_DAG_MODE, P_DAG_B, P_DAG_W_MKT, P_DAG_W_DIST, P_DAG_W_POS, P_DAG_W_TOX, P_DAG_THR,
     P_DAG_WIDEN_BP,
-    P_CAP_REF, P_CAP_RESTING,
-) = range(60)
-PARAM_SIZE = 60
+    P_CAP_REF, P_CAP_RESTING, P_LOSS_FLATTEN,
+) = range(61)
+PARAM_SIZE = 61
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
@@ -127,7 +127,7 @@ PARAM_NAMES = (
     "fair_mode", "fair_coef",
     "dag_mode", "dag_b", "dag_w_mkt", "dag_w_dist", "dag_w_pos", "dag_w_tox", "dag_thr",
     "dag_widen_bp",
-    "cap_ref", "cap_resting",
+    "cap_ref", "cap_resting", "loss_flatten",
 )
 
 #: C9's external per-step series, one row per quoting step: column 0 is the
@@ -683,9 +683,16 @@ def quote_once(
     # with an immediate-or-cancel order at the opposite touch, paying the
     # taker fee, at most once a second. Submitted after the quote refresh so
     # the cancel pass above cannot catch it in flight.
-    if (params[P_INV_FLATTEN] > 0.0 and two_sided and abs(norm_pos) > params[P_INV_FLATTEN]
-            and t - state[Z_LAST_FLATTEN] >= 10):
-        excess = (abs(norm_pos) - 0.5 * params[P_INV_FLATTEN]) * params[P_MAX_POSITION_DOLLAR] / mid_price
+    # C10: `loss_flatten` 1 makes the loss limit a stop: while it halts
+    # quoting, the whole position goes out the same way, instead of waiting
+    # for the passive reduce-only quotes to fill in a market running away.
+    loss_exit = params[P_LOSS_FLATTEN] > 0.0 and paused == 3.0 and position != 0.0
+    if (two_sided and t - state[Z_LAST_FLATTEN] >= 10
+            and (loss_exit or (params[P_INV_FLATTEN] > 0.0 and abs(norm_pos) > params[P_INV_FLATTEN]))):
+        if loss_exit:
+            excess = abs(position)
+        else:
+            excess = (abs(norm_pos) - 0.5 * params[P_INV_FLATTEN]) * params[P_MAX_POSITION_DOLLAR] / mid_price
         qty = max(round(excess / lot_size) * lot_size, lot_size)
         flatten_id = np.uint64(1 << 40) + np.uint64(t)
         if position > 0.0:

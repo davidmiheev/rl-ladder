@@ -93,8 +93,23 @@ CONTROLS = {
     "units cap + breaker vol 2.5x": {"cap_ref": 1.0, "cap_resting": 1.0, "cb_mode": 1.0,
                                      "cb_vol": 2.5, "cb_fast_hl": 100.0, "cb_cooldown": 300.0},
 }
-#: `C10_VARSET=controls` runs the controls instead of the stress variants.
-VARSET = {"stress": VARIANTS, "controls": CONTROLS}[os.environ.get("C10_VARSET", "stress")]
+#: On the crash session every control above still let some configuration
+#: lose 15-160%: the loss limit only makes quoting reduce-only, and passive
+#: reducing quotes do not fill in a market running away. These make the loss
+#: limit a stop (`loss_flatten`: the position goes out at the touch, taker
+#: fee paid, while the limit is hit) and cut inventory early.
+STOPS = {
+    "stop 50 bp": {"loss_limit_bp": 50.0, "loss_mode": 1.0, "loss_flatten": 1.0},
+    "stop 100 bp": {"loss_limit_bp": 100.0, "loss_mode": 1.0, "loss_flatten": 1.0},
+    "trailing stop 100 bp, 30 min": {"loss_limit_bp": 100.0, "loss_mode": 2.0,
+                                     "loss_cooldown": 18000.0, "loss_flatten": 1.0},
+    "units cap + stop 100 bp": {"cap_ref": 1.0, "cap_resting": 1.0, "loss_limit_bp": 100.0,
+                                "loss_mode": 1.0, "loss_flatten": 1.0},
+    "units cap + inventory flatten 0.5": {"cap_ref": 1.0, "cap_resting": 1.0, "inv_flatten": 0.5},
+}
+#: `C10_VARSET=controls` (or `stops`) runs those instead of the stress variants.
+VARSET = {"stress": VARIANTS, "controls": CONTROLS,
+          "stops": STOPS}[os.environ.get("C10_VARSET", "stress")]
 CRASH = "2025-10-10"
 
 CONTROL = c8.TEST  # 2025-09-19 .. 09-25
@@ -118,7 +133,7 @@ def configs_for(contract: str) -> list[dict]:
 
 def cfg(label: str, variant: str) -> dict:
     contract, sets = FROZEN[label]
-    extra = VARIANTS[variant] if variant in VARIANTS else CONTROLS[variant]
+    extra = {**VARIANTS, **CONTROLS, **STOPS}[variant]
     return c8.config("obi", bybit.name(contract), {**sets, **extra})
 
 
@@ -192,17 +207,19 @@ def summary(label: str, variant: str, dates: list[str]) -> dict | None:
             "fills": float(np.median([x["DailyNumberOfTrades"] for x in rows]))}
 
 
-def cmd_report_controls() -> None:
+def cmd_report_controls(controls: dict, title: str) -> None:
     fw = [d for d in FORWARD if d != CRASH]
-    names = ["as frozen (-0.5 bp)"] + list(CONTROLS)
-    print("\n## risk controls: the crash session, and the forward year without it\n")
+    names = ["as frozen (-0.5 bp)"] + list(controls)
+    print(f"\n## {title}: the crash session (return / max drawdown, %), "
+          "and the forward year without it (chained %)\n")
     print("| configuration | " + " | ".join(names) + " |")
     print("| --- |" + " --- |" * len(names))
     for label in FROZEN:
         crash = [c8.result(cfg(label, v), CRASH) for v in names]
         rest = [summary(label, v, fw) for v in names]
         print(f"| {label} | " + " | ".join(
-            "–" if c is None or r is None else f"{c['Return'] * 100:+.1f} / {r['chained']:+.2f}"
+            "–" if c is None or r is None
+            else f"{c['Return'] * 100:+.1f} / {c['MaxDrawdown'] * 100:.1f} ; {r['chained']:+.2f}"
             for c, r in zip(crash, rest)) + " |")
 
 
@@ -234,7 +251,8 @@ def main() -> None:
         cmd_run(args.shard)
     elif args.cmd == "report":
         cmd_report()
-        cmd_report_controls()
+        cmd_report_controls(CONTROLS, "C8's risk controls")
+        cmd_report_controls(STOPS, "stops")
     else:
         cmd_status()
 
