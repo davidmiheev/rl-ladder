@@ -183,18 +183,21 @@ def _obi_alpha(depth, mid_price, tick_size, looking_depth, roi_lb_tick, roi_ub_t
     the standardisation is running and lives in the caller, because recomputing
     `nanmean`/`nanstd` over an hour-long window at every 100 ms iteration is
     quadratic and the notebook only gets away with it at a 1 s interval.
+
+    Read through `*_qty_at_tick` (C11), which every depth type has: inside
+    the ROI it is the same array element, so results are unchanged.
     """
     sum_ask_qty = 0.0
     from_tick = max(depth.best_ask_tick, roi_lb_tick)
     upto_tick = min(int(np.floor(mid_price * (1 + looking_depth) / tick_size)), roi_ub_tick)
     for price_tick in range(from_tick, upto_tick):
-        sum_ask_qty += depth.ask_depth[price_tick - roi_lb_tick]
+        sum_ask_qty += depth.ask_qty_at_tick(price_tick)
 
     sum_bid_qty = 0.0
     from_tick = min(depth.best_bid_tick, roi_ub_tick)
     upto_tick = max(int(np.ceil(mid_price * (1 - looking_depth) / tick_size)), roi_lb_tick)
     for price_tick in range(from_tick, upto_tick, -1):
-        sum_bid_qty += depth.bid_depth[price_tick - roi_lb_tick]
+        sum_bid_qty += depth.bid_qty_at_tick(price_tick)
 
     return sum_bid_qty - sum_ask_qty
 

@@ -46,6 +46,7 @@ class Sink:
     def __init__(self, out: Path):
         self.out = out
         self.files: dict[str, tuple[str, gzip.GzipFile]] = {}
+        self.flushed = time.time()
         out.mkdir(parents=True, exist_ok=True)
 
     def write(self, stream: str, raw: str) -> None:
@@ -57,6 +58,13 @@ class Sink:
             f = gzip.open(self.out / f"{stream}_{hour}.jsonl.gz", "at", compresslevel=6)
             self.files[stream] = (hour, f)
         self.files[stream][1].write(f"{time.time_ns()} {raw}\n")
+        # Flush every 30 s, so a session stopped without closing its files
+        # keeps all but the last half minute.
+        now = time.time()
+        if now - self.flushed > 30:
+            for _, f in self.files.values():
+                f.flush()
+            self.flushed = now
 
     def close(self) -> None:
         for _, f in self.files.values():
