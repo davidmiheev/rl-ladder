@@ -81,8 +81,13 @@ def _fetch(url: str, path: Path) -> Path:
     for attempt in range(4):
         try:
             with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as out:
+                expected = int(r.headers.get("Content-Length") or -1)
                 while chunk := r.read(1 << 22):
                     out.write(chunk)
+            # A dropped connection can end the read early without an error;
+            # a short file would then be cached as if it were whole.
+            if expected >= 0 and tmp.stat().st_size != expected:
+                raise IOError(f"{url}: got {tmp.stat().st_size} of {expected} bytes")
             os.replace(tmp, path)
             return path
         except Exception:  # transient network errors: back off and retry

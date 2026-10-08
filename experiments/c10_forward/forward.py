@@ -74,6 +74,29 @@ VARIANTS = {
     "queue risk-averse": {"queue_model": "risk-adverse"},
 }
 
+#: Risk controls tried after the 2025-10-10 crash (SUI -82%, AVAX -67%,
+#: XRP -54% within minutes on Bybit): C8's circuit breaker and loss limits,
+#: and two cap fixes in the kernel -- the cap valued at the session's first
+#: price (a cap in units, so a falling price does not make room to buy more)
+#: with resting orders counted against it. Each runs on every session, so
+#: its cost on ordinary days is measured as well as the crash.
+CONTROLS = {
+    "breaker vol 2.5x, 30 s": {"cb_mode": 1.0, "cb_vol": 2.5, "cb_fast_hl": 100.0,
+                               "cb_cooldown": 300.0},
+    "breaker vol 4x, 5 min": {"cb_mode": 1.0, "cb_vol": 4.0, "cb_fast_hl": 100.0,
+                              "cb_cooldown": 3000.0},
+    "breaker flow 0.7, hit side, 5 min": {"cb_mode": 2.0, "cb_flow": 0.7, "cb_fast_hl": 100.0,
+                                          "cb_cooldown": 3000.0},
+    "daily loss limit 50 bp": {"loss_limit_bp": 50.0, "loss_mode": 1.0},
+    "daily loss limit 100 bp": {"loss_limit_bp": 100.0, "loss_mode": 1.0},
+    "units cap, resting orders counted": {"cap_ref": 1.0, "cap_resting": 1.0},
+    "units cap + breaker vol 2.5x": {"cap_ref": 1.0, "cap_resting": 1.0, "cb_mode": 1.0,
+                                     "cb_vol": 2.5, "cb_fast_hl": 100.0, "cb_cooldown": 300.0},
+}
+#: `C10_VARSET=controls` runs the controls instead of the stress variants.
+VARSET = {"stress": VARIANTS, "controls": CONTROLS}[os.environ.get("C10_VARSET", "stress")]
+CRASH = "2025-10-10"
+
 CONTROL = c8.TEST  # 2025-09-19 .. 09-25
 FORWARD_START = dt.date(2025, 9, 26)
 #: The last Bybit day checked to exist when the forward set was fixed.
@@ -88,14 +111,15 @@ def configs_for(contract: str) -> list[dict]:
     for label, (c, sets) in FROZEN.items():
         if c != contract:
             continue
-        for extra in VARIANTS.values():
+        for extra in VARSET.values():
             out.append(c8.config("obi", bybit.name(c), {**sets, **extra}))
     return out
 
 
 def cfg(label: str, variant: str) -> dict:
     contract, sets = FROZEN[label]
-    return c8.config("obi", bybit.name(contract), {**sets, **VARIANTS[variant]})
+    extra = VARIANTS[variant] if variant in VARIANTS else CONTROLS[variant]
+    return c8.config("obi", bybit.name(contract), {**sets, **extra})
 
 
 def pending(contract: str, date: str) -> list[dict]:
@@ -168,6 +192,20 @@ def summary(label: str, variant: str, dates: list[str]) -> dict | None:
             "fills": float(np.median([x["DailyNumberOfTrades"] for x in rows]))}
 
 
+def cmd_report_controls() -> None:
+    fw = [d for d in FORWARD if d != CRASH]
+    names = ["as frozen (-0.5 bp)"] + list(CONTROLS)
+    print("\n## risk controls: the crash session, and the forward year without it\n")
+    print("| configuration | " + " | ".join(names) + " |")
+    print("| --- |" + " --- |" * len(names))
+    for label in FROZEN:
+        crash = [c8.result(cfg(label, v), CRASH) for v in names]
+        rest = [summary(label, v, fw) for v in names]
+        print(f"| {label} | " + " | ".join(
+            "–" if c is None or r is None else f"{c['Return'] * 100:+.1f} / {r['chained']:+.2f}"
+            for c, r in zip(crash, rest)) + " |")
+
+
 def cmd_report() -> None:
     for period, dates in (("control (held-out week)", CONTROL), ("forward (weekly)", FORWARD)):
         print(f"\n## {period}\n")
@@ -196,6 +234,7 @@ def main() -> None:
         cmd_run(args.shard)
     elif args.cmd == "report":
         cmd_report()
+        cmd_report_controls()
     else:
         cmd_status()
 
