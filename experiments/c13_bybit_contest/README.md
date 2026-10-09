@@ -66,6 +66,34 @@ ENAUSDT, BNBUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT.
 | SUIPERP, all sessions | momentum + breaker | +18.85% | +10.27% | +7.78% | 24.9% | 30 |
 | SUIPERP, crash-guarded | nothing beats the leader | +6.70% | −1.30% | +8.10% | 7.2% | 18 |
 
+### Stage 1 for the six added contracts, and how much of each leader is the rebate
+
+Every backtest assumes Binance's best market-maker rebate (maker fee −0.5 bp,
+`config.MAKER_FEE`). Bybit's standard maker fee is +2 bp. A session's rebate
+income is its turnover x 0.5 bp of capital, so high-turnover settings can rank
+first on the rebate alone. Screen leaders (24 sessions), with the return
+recomputed without the rebate and at Bybit's standard fee:
+
+| contract | leader | screen | rebate part | no rebate | +2 bp (Bybit VIP 0) | turnover/session |
+| --- | --- | --- | --- | --- | --- | --- |
+| XRPPERP | OBI 8 bp, κ 2 | +7.65% | +1.65 | +5.99% | −0.39% | 7.4x |
+| SUIPERP | hfgrid 8 bp | +2.57% | +0.16 | +2.41% | +1.77% | 1.1x |
+| XRPUSDT | OBI 8 bp, κ 4 | +6.65% | +1.32 | +5.32% | +0.18% | 7.3x |
+| SUIUSDT | hfgrid 4 bp | +9.01% | +0.74 | +8.27% | +5.34% | 5.8x |
+| AVAXUSDT | OBI 6 bp, κ 4 | +5.05% | +2.38 | +2.67% | −6.35% | 11.8x |
+| ENAUSDT | GLFT 8 bp, κ 4 | +61.58% | +111.41 | **−49.84%** | −100% | 266.7x |
+| BNBUSDT | GLFT 4 bp | +5.86% | +1.14 | +4.72% | +0.26% | 6.4x |
+| DOGEUSDT | OBI 16 bp, κ 4 | +2.72% | +0.23 | +2.49% | +1.57% | 1.5x |
+| ADAUSDT | hfgrid 4 bp | +6.64% | +0.48 | +6.17% | +4.28% | 3.7x |
+| LINKUSDT | hfgrid 4 bp, κ 2 | +6.68% | +0.19 | +6.49% | +5.75% | 1.1x |
+| LTCUSDT | hfgrid 4 bp | +8.51% | +0.72 | +7.79% | +4.97% | 5.6x |
+
+(No rebate = return − turnover x 0.5 bp per session, chained; the fee stress
+runs in stage 5 recompute it in the backtest.) ENAUSDT's top three all turn
+over 270-310x capital a session and lose 47-54% without the rebate: the
+rebate is the whole result. Its families stage runs last. The slow grid
+quoters (hfgrid) keep most of their return without the rebate.
+
 ### Crash-session check (2025-10-10)
 
 Under C8's rule every greedy result so far wins the crash session by a wide
