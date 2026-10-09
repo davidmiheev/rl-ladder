@@ -157,6 +157,48 @@ unchanged (+1.68%). Without each entry's best test session all three are
 negative (−1.45% to −1.64%). The hfgrid quoters trade about 11 times a session,
 so these are small samples.
 
+### AVAXUSDT: validation and test
+
+| entry | training (48) | validation (27) | test (27) | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, all sessions: OBI 6 bp, κ 4 + momentum (50 s) | +249.50% | +1.37% | **−1.26%** | −2.50% | −2.47% | 12/27 | 132 |
+| pick, crash-guarded: OBI 6 bp, κ 4 + markout half-life 5 s | +17.84% | +1.25% | **−1.69%** | −2.62% | −2.39% | 15/27 | 52 |
+| C8's choice, unchanged (AVAXUSDC OBI) | −79.64% | −1.61% | **+2.64%** | +1.02% | +2.19% | 16/27 | 49 |
+
+The crash-guarded pick is built on the screen leader, whose crash-session
+drawdown was 31% (see the crash check above); the guard only applied to the
+added markout half-life.
+
+Stress set on the test block (chained return, 27 sessions):
+
+| stress | pick, all sessions | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | −1.26% | −1.69% |
+| maker fee 0 (no rebate) | −2.47% | −2.39% |
+| maker fee +1 bp | −4.85% | −3.76% |
+| maker fee +2 bp (Bybit VIP 0) | −7.17% | −5.12% |
+| latency x2 | +2.88% | −0.86% |
+| latency x4 | −2.82% | +2.57% |
+| queue risk-averse | −1.80% | −1.82% |
+| queue log | −0.65% | −2.71% |
+| size x2 | −1.77% | −0.97% |
+| floor x0.8 | −0.07% | +0.83% |
+| floor x1.25 | −1.61% | +0.99% |
+| κ x0.5 | −5.04% | −5.85% |
+| κ x2 | +2.16% | +1.20% |
+
+**AVAXUSDT verdict.** Both picks lost on the test (−1.26%, −1.69%) and lose
+3.8-7.2% at Bybit's real fee levels (+1 to +2 bp). The stresses scatter on
+both sides of zero (latency x2 +2.88% vs latency x4 −2.82% for the same
+configuration), which is what no edge looks like. C8's Binance choice, run
+unchanged, made +2.64% on the same test sessions (+2.19% without the rebate),
+after −79.6% on training (the crash) and −1.6% on validation: it was not
+selectable on anything before the test.
+
+So far (SUIPERP, AVAXUSDT) the full procedure on a year of Bybit has not
+produced a configuration that beats C8's untouched Binance choice on the
+locked test.
+
 ## Status
 
 See `python experiments/c13_bybit_contest/contest.py status`. Kaggle runs use
