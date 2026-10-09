@@ -19,9 +19,14 @@ the project has is a contestant:
               alpha clipping) and C10's (the 50 bp stop, the units cap)
     greedy    stage C: forward selection over the families' training-best
               variants, as C8 (`c8.greedy`), one round per run
-    valid     the screen's top 3, the families' best and the greedy result
-              on the validation block; the pick is the best on train+valid
-    test      the pick and its stress set (C8's) on the locked test block
+    rules     stages B and C run under two scoring rules (`RULES`): C8's
+              chained return over all training sessions, and C10's
+              crash-guarded rule (crash drawdown <= 10%, then the best
+              without the crash)
+    valid     the screen's top 3, and each rule's family bests and greedy
+              result, on the validation block; each rule picks the best on
+              train+valid
+    test      both picks and their stress sets (C8's) on the locked test block
 
 Selection uses training (and, for the final pick, validation) sessions only;
 the test block is reported, never chosen on.
@@ -100,16 +105,37 @@ def screen_configs(contract: str) -> list[dict]:
     return out
 
 
-def ranked(cfgs: list[dict], days: list[str]) -> list[tuple[dict, dict]] | None:
-    """(config, score) best first among those that trade; None until all are in."""
+#: How training sessions are scored. "all sessions" is C8's rule: the chained
+#: return over every session. The 2025-10-10 crash is one of the 48, and on
+#: XRPPERP it alone decided the families' ranking (the best breaker: +46.6% on
+#: the crash, -8.9% over the other 47), so "crash-guarded" is C10's stop rule:
+#: a crash-session drawdown of at most CRASH_MDD, then the best chained return
+#: without the crash. Both rules' picks go to validation and to the test.
+RULES = ("all sessions", "crash-guarded")
+CRASH_MDD = 0.10
+
+
+def rule_score(rows: list[dict], days: list[str], rule: str) -> dict:
+    """c8.score under `rule`, plus `ok`: whether the config may be chosen at all."""
+    s = c8.score(rows)
+    ok = s["median_fills"] >= c8.MIN_FILLS
+    if rule == "crash-guarded":
+        crash = [r["MaxDrawdown"] for d, r in zip(days, rows) if d == forward.CRASH]
+        s = c8.score([r for d, r in zip(days, rows) if d != forward.CRASH])
+        ok = ok and max(crash, default=0.0) <= CRASH_MDD
+    return {**s, "ok": ok}
+
+
+def ranked(cfgs: list[dict], days: list[str], rule: str = "all sessions") -> list[tuple[dict, dict]] | None:
+    """(config, score) best first among those that may be chosen; None until all are in."""
     scored = []
     for cfg in cfgs:
         rows = c8.results(cfg, days)
         if rows is None:
             return None
-        scored.append((cfg, c8.score(rows)))
-    trading = [x for x in scored if x[1]["median_fills"] >= c8.MIN_FILLS] or scored
-    return sorted(trading, key=lambda x: -x[1]["chained"])
+        scored.append((cfg, rule_score(rows, days, rule)))
+    eligible = [x for x in scored if x[1]["ok"]] or scored
+    return sorted(eligible, key=lambda x: -x[1]["chained"])
 
 
 def screen_pick(contract: str, n: int = 1) -> list[dict] | None:
@@ -129,23 +155,23 @@ def family_configs(contract: str) -> dict[str, list[dict]] | None:
     return {name: [c8.on_top(base, v) for v in vs] for name, vs in families(base["strategy"]).items()}
 
 
-def family_best(contract: str) -> dict[str, dict] | None:
+def family_best(contract: str, rule: str = "all sessions") -> dict[str, dict] | None:
     fams = family_configs(contract)
     if fams is None:
         return None
     best = {}
     for name, cfgs in fams.items():
-        r = ranked(cfgs, TRAIN)
+        r = ranked(cfgs, TRAIN, rule)
         if r is None:
             return None
         best[name] = r[0][0]
     return best
 
 
-def greedy(contract: str) -> tuple[dict | None, list[dict], list[str]]:
+def greedy(contract: str, rule: str = "all sessions") -> tuple[dict | None, list[dict], list[str]]:
     """C8's forward selection on TRAIN: (current, pending configs, families added)."""
     picks = screen_pick(contract)
-    best = family_best(contract)
+    best = family_best(contract, rule)
     if picks is None or best is None:
         return None, [], []
     base = current = picks[0]
@@ -154,7 +180,7 @@ def greedy(contract: str) -> tuple[dict | None, list[dict], list[str]]:
         cur = c8.results(current, TRAIN)
         if cur is None:
             return current, [current], added
-        cur_score = c8.score(cur)["chained"]
+        cur_score = rule_score(cur, TRAIN, rule)["chained"]
         trials = []
         for name, pick in best.items():
             if name in added:
@@ -166,8 +192,8 @@ def greedy(contract: str) -> tuple[dict | None, list[dict], list[str]]:
             return current, pending, added
         scored = []
         for name, c in trials:
-            s = c8.score(c8.results(c, TRAIN))
-            if s["median_fills"] >= c8.MIN_FILLS:
+            s = rule_score(c8.results(c, TRAIN), TRAIN, rule)
+            if s["ok"]:
                 scored.append((name, c, s["chained"]))
         if not scored:
             return current, [], added
@@ -179,23 +205,32 @@ def greedy(contract: str) -> tuple[dict | None, list[dict], list[str]]:
 
 
 def candidates(contract: str) -> dict[str, dict] | None:
-    """What goes to validation: the screen's top 3, each family's best, the greedy result."""
+    """What goes to validation: the screen's top 3, and under each rule each
+    family's best and the greedy result (each config once, under its first name)."""
     top = screen_pick(contract, 3)
-    best = family_best(contract)
-    cur, pending, added = greedy(contract)
-    if top is None or best is None or cur is None or pending:
+    if top is None:
         return None
     out = {f"screen #{i + 1}": c for i, c in enumerate(top)}
-    out.update({f"family: {k}": v for k, v in best.items()})
-    out["greedy (" + (", ".join(added) or "nothing added") + ")"] = cur
-    return out
+    for rule in RULES:
+        best = family_best(contract, rule)
+        cur, pending, added = greedy(contract, rule)
+        if best is None or cur is None or pending:
+            return None
+        tag = "" if rule == RULES[0] else f" [{rule}]"
+        out.update({f"family: {k}{tag}": v for k, v in best.items()})
+        out[f"greedy{tag} (" + (", ".join(added) or "nothing added") + ")"] = cur
+    unique: dict[str, dict] = {}
+    for name, c in out.items():
+        if all(c8.key(c) != c8.key(v) for v in unique.values()):
+            unique[name] = c
+    return unique
 
 
-def final_pick(contract: str) -> tuple[str, dict] | None:
+def final_pick(contract: str, rule: str = "all sessions") -> tuple[str, dict] | None:
     cands = candidates(contract)
     if cands is None:
         return None
-    r = ranked(list(cands.values()), TRAIN + VALID)
+    r = ranked(list(cands.values()), TRAIN + VALID, rule)
     if r is None:
         return None
     pick = r[0][0]
@@ -216,14 +251,15 @@ def units(phase: str) -> list[tuple[str, str, list[dict]]]:
             dates, cfgs = TRAIN, ([] if fams is None else
                                   [c for vs in fams.values() for c in vs] + screen_pick(contract))
         elif phase == "greedy":
-            _, pending, _ = greedy(contract)
-            dates, cfgs = TRAIN, pending
+            pending = {c8.key(c): c for rule in RULES for c in greedy(contract, rule)[1]}
+            dates, cfgs = TRAIN, list(pending.values())
         elif phase == "valid":
             cands = candidates(contract)
             dates, cfgs = TRAIN + VALID, ([] if cands is None else list(cands.values()))
         elif phase == "test":
-            fp = final_pick(contract)
-            dates, cfgs = TEST, ([] if fp is None else [fp[1], *c8.stress_configs(fp[1]).values()])
+            picks = [fp[1] for fp in (final_pick(contract, rule) for rule in RULES) if fp is not None]
+            stress = {c8.key(c): c for p in picks for c in (p, *c8.stress_configs(p).values())}
+            dates, cfgs = TEST, list(stress.values()) if len(picks) == len(RULES) else []
         else:
             raise ValueError(phase)
         for date in dates:
@@ -316,10 +352,11 @@ def cmd_report() -> None:
         print("| --- | --- | --- | --- |")
         for name, c in cands.items():
             print(f"| {name} | {describe(c)} | {f(summary(c, TRAIN))} | {f(summary(c, VALID))} |")
-        fp = final_pick(contract)
-        if fp is not None:
-            name, c = fp
-            print(f"\npick: {name}: {describe(c)} | test {f(summary(c, TEST))}")
+        for rule in RULES:
+            fp = final_pick(contract, rule)
+            if fp is not None:
+                name, c = fp
+                print(f"\npick ({rule}): {name}: {describe(c)} | test {f(summary(c, TEST))}")
 
 
 def main() -> None:
