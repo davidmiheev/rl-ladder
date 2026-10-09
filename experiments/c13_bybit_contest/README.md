@@ -66,6 +66,36 @@ ENAUSDT, BNBUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT.
 | SUIPERP, all sessions | momentum + breaker | +18.85% | +10.27% | +7.78% | 24.9% | 30 |
 | SUIPERP, crash-guarded | nothing beats the leader | +6.70% | −1.30% | +8.10% | 7.2% | 18 |
 
+### Crash-session check (2025-10-10)
+
+Under C8's rule every greedy result so far wins the crash session by a wide
+margin. The per-session records show how: during the crash the position runs
+far past its cap (the cap applies when quotes are placed; a sweep that fills
+several resting orders at once overshoots it).
+
+| contract | entry | crash session | drawdown | peak position / cap | peak position value | fills |
+| --- | --- | --- | --- | --- | --- | --- |
+| XRPPERP | stage 1 leader | −9.79% | 56.7% | 1.53 | $141,663 | 1177 |
+| XRPPERP | greedy, all sessions | +126.96% | 34.7% | 2.19 | $216,589 | 1535 |
+| XRPPERP | greedy, crash-guarded | −1.15% | 2.0% | 0.59 | $58,995 | 65 |
+| XRPUSDT | greedy, all sessions | +107.72% | 28.8% | 2.19 | $218,868 | 2402 |
+| SUIUSDT | greedy, all sessions | +102.98% | 14.6% | 1.03 | $102,476 | 840 |
+| AVAXUSDT | stage 1 leader | +25.09% | 31.1% | 1.52 | $93,046 | 962 |
+| AVAXUSDT | greedy, all sessions (momentum) | +290.11% | 41.2% | 2.63 | $260,516 | 2789 |
+
+So C8's rule rewards configurations that take on up to 2.6x the capital in
+inventory during the crash and happen to be on the right side of the
+rebound, while losing over the other 47 sessions (AVAXUSDT: −10.4%,
+XRPPERP greedy: +3.2%). These crash-day numbers depend on fills at wick
+prices in a book that was thin and fast. Under the crash-guarded rule
+(drawdown at most 10%) none of these configurations is eligible.
+
+One gap in the crash-guarded rule: stage 3 starts from the screen leader,
+and the guard applies only to what is added. On AVAXUSDT no family variant
+passes the guard, so the crash-guarded "pick" is the screen leader itself,
+whose crash drawdown is 31.1%. Its test result is reported with that
+caveat, and it gets the "without the crash" stress like every pick.
+
 ### SUIPERP: validation and test (first contract through all five stages)
 
 | entry | training (48) | validation (27) | test (27) | test without its best session | test sessions up | fills/session (test) |
