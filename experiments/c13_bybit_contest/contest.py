@@ -59,7 +59,12 @@ import forward  # noqa: E402  (puts c8, c6 and c1 on the path)
 import bybit  # noqa: E402
 import c8  # noqa: E402
 
-CONTRACTS = ("XRPPERP", "SUIPERP", "XRPUSDT", "SUIUSDT", "AVAXUSDT")
+#: The five contracts C10 forward-tested C8's choices on, then six more
+#: mid-cap USDT perpetuals with a year of Bybit's free books (ENA and BNB were
+#: in C8's breadth set on Binance). ETH and SOL are left out: their books are
+#: several times larger than XRP's, which already strains a Kaggle session.
+CONTRACTS = ("XRPPERP", "SUIPERP", "XRPUSDT", "SUIUSDT", "AVAXUSDT",
+             "ENAUSDT", "BNBUSDT", "DOGEUSDT", "ADAUSDT", "LINKUSDT", "LTCUSDT")
 
 
 def _every(start: str, end: str, step: int) -> list[str]:

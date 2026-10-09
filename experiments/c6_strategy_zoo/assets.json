@@ -53,6 +53,12 @@
     "price": 34.259,
     "roi_ub": 137.036
   },
+  "bybit-ltcusdt": {
+    "tick_size": 0.009999999999990905,
+    "lot_size": 0.0999999999994543,
+    "price": 111.5,
+    "roi_ub": 446.0
+  },
   "bybit-suiperp": {
     "tick_size": 9.999999999976694e-05,
     "lot_size": 0.09999999999854481,
