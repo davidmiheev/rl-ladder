@@ -1125,13 +1125,13 @@ guard.
 
 Its answer: C8's rule picks the configuration that won the 2025-10-10 crash
 (positions past the cap on the right side of the rebound) and loses on all
-seven tests with a usable result; the crash-guarded rule beats C8's choices
+eight tests with a usable result; the crash-guarded rule beats C8's choices
 run unchanged summed over C10's five (+3.33 vs +0.64 points), all of it
 SUIUSDT, where a grid quoter with a volatility breaker makes +4.60% and holds
 up in 9 of 10 stresses; BNBUSDT's guarded pick makes +1.06%. Nothing
 survives Bybit's standard +2 bp maker fee. ENAUSDT's pick earned +11,024% on
 validation from the rebate on a spread floor under one tick, and lost on
-every test session. ADAUSDT, LINKUSDT and LTCUSDT were still in progress
+every test session. LINKUSDT has no edge either; ADAUSDT and LTCUSDT were still in progress
 when this was written.
 
 Writeup: [`writeups/c13-bybit-contest.md`](writeups/c13-bybit-contest.md).

@@ -417,6 +417,35 @@ stress. There is no C8 choice for BNB to compare with.
 **DOGEUSDT verdict.** Both picks lose on the test and under every stress
 (crash-guarded −0.9% to −4.3%, C8's rule −2.8% to −9.5%). No edge.
 
+### LINKUSDT: validation and test
+
+| entry | training | validation | test | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, C8's rule (all sessions): greedy (momentum, breaker, markout half-life) | +54.22% | -3.67% | **-0.86%** | -1.79% | -2.29% | 14/27 | 215 |
+| pick, crash-guarded: family: time of day | +13.02% | +0.19% | **-0.45%** | -1.44% | -0.78% | 18/27 | 40 |
+
+| stress (test block) | pick, C8's rule | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | -0.86% | -0.45% |
+| fee 0 | -2.29% | -0.78% |
+| fee +1bp | -5.07% | -1.45% |
+| fee +2bp | -7.78% | -2.11% |
+| latency x2 | -3.31% | +2.58% |
+| latency x4 | -4.48% | +4.17% |
+| queue risk-averse | -1.17% | +0.60% |
+| queue log | -0.75% | +0.35% |
+| size x2 | -0.78% | +4.18% |
+| floor x0.8 | -1.04% | +2.23% |
+| floor x1.25 | -1.46% | +1.05% |
+| kappa x0.5 | -3.32% | +2.33% |
+| kappa x2 | -1.69% | -1.39% |
+
+**LINKUSDT verdict.** Both picks lose on the test (C8's rule −0.86%,
+crash-guarded −0.45%, a time-of-day filter on the grid quoter) and at every
+fee level; the crash-guarded pick's stresses scatter from −2.11% to +4.18%
+(latency ×4 +4.17%, size ×2 +4.18%, κ ×2 −1.39%), which is what no edge
+looks like.
+
 ### Scoreboard (locked test, 27 sessions Jun-Oct 2026, the five original contracts)
 
 | contract | pick, all sessions | pick, crash-guarded | C8's choice, unchanged | best contest pick at maker fee +1 bp |
@@ -449,12 +478,13 @@ XRPPERP +0.14%).
 | ENAUSDT (artefact) | -6.96% | -6.96% | – | -6.66% | -6.65% |
 | BNBUSDT | -0.63% | +1.06% | – | +0.11% | -0.51% |
 | DOGEUSDT | -5.01% | -2.32% | – | -3.04% | -3.39% |
+| LINKUSDT | -0.86% | -0.45% | – | -1.45% | -2.11% |
 | sum, five original | -11.80 | +3.33 | +0.64 | | |
-| sum, added | -5.64 | -1.26 | – | | |
+| sum, added | -6.50 | -1.71 | – | | |
 
-Over the two added contracts that have a result (ENAUSDT excluded), C8's rule
-loses −5.64 points and the crash-guarded rule −1.26: the guard helps again
-(BNBUSDT +1.06%) but finds no edge on DOGEUSDT.
+Over the added contracts with a usable result (ENAUSDT excluded), C8's rule
+loses −6.50 points and the crash-guarded rule −1.71: the guard helps again
+(BNBUSDT +1.06%) but finds no edge on DOGEUSDT or LINKUSDT.
 
 ## Status
 

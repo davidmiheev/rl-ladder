@@ -15,12 +15,12 @@ tables and figures: `experiments/c13_bybit_contest/report.py`.
 >   Ranking by the chained return over all 48 training sessions, C8's rule
 >   chose a configuration that won the 2025-10-10 crash session by +10% to
 >   +290% (positions up to 2.6× the cap) on 10 of 11 contracts. On the
->   locked test it lost on all seven contracts with a usable result,
->   −17.44 points in total.
+>   locked test it lost on all eight contracts with a usable result,
+>   −18.30 points in total.
 > - **A crash guard fixes the selection.** The same procedure with C10's
 >   guard (crash-session drawdown ≤ 10%, then the best return without the
->   crash) is ahead of C8's rule on five of seven contracts (the two exceptions lose too). Summed over C10's
->   five it is ahead of C8's Binance choices run unchanged: **+3.33 against
+>   crash) is ahead of C8's rule on six of eight contracts (on the other
+>   two both lose). Summed over C10's five it is ahead of C8's Binance choices run unchanged: **+3.33 against
 >   +0.64 points**.
 > - **Two picks hold up.** On SUIUSDT a slow grid quoter (hfgrid, 4 bp) with
 >   a volatility breaker made **+4.60%** on the 27 test sessions against
@@ -37,7 +37,7 @@ tables and figures: `experiments/c13_bybit_contest/report.py`.
 >   (~76,000 fills and ~5,000× capital a session, paid by the 0.5 bp
 >   rebate) and −6.96% on the test, where the floor was 4 ticks and its loss
 >   limit tripped every session. It is reported and left out of the sums.
-> - **Still running:** ADAUSDT and LTCUSDT (validation) and LINKUSDT (test).
+> - **Still running:** ADAUSDT and LTCUSDT (test).
 
 ## Contents
 
@@ -183,8 +183,9 @@ ADAUSDT (14.3%) and LTCUSDT (23.2%).
 | ENAUSDT (artefact) | -6.96% | -6.96% | – | -6.66% | -6.65% |
 | BNBUSDT | -0.63% | +1.06% | – | +0.11% | -0.51% |
 | DOGEUSDT | -5.01% | -2.32% | – | -3.04% | -3.39% |
+| LINKUSDT | -0.86% | -0.45% | – | -1.45% | -2.11% |
 | sum, five original | -11.80 | **+3.33** | +0.64 | | |
-| sum, added | -5.64 | -1.26 | – | | |
+| sum, added | -6.50 | -1.71 | – | | |
 
 The fee columns are the backtest's own fee stresses (§6). C8 chose no
 configuration for ENA, BNB or DOGE, so the added contracts have no
@@ -258,6 +259,13 @@ selected it.
 | pick, C8's rule: greedy (momentum, breaker) | +132.56% | +0.38% | **-5.01%** | -5.19% | -5.22% | 9/27 | 21 |
 | pick, crash-guarded: greedy (loss limit, inventory flatten) | -1.64% | +1.13% | **-2.32%** | -2.75% | -2.51% | 13/27 | 18 |
 
+**LINKUSDT**
+
+| entry | training | validation | test | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, C8's rule: greedy (momentum, breaker, markout half-life) | +54.22% | -3.67% | **-0.86%** | -1.79% | -2.29% | 14/27 | 215 |
+| pick, crash-guarded: family: time of day | +13.02% | +0.19% | **-0.45%** | -1.44% | -0.78% | 18/27 | 40 |
+
 ### ENAUSDT: a rebate artefact
 
 Both rules picked the same configuration (GLFT 8 bp with a stop, momentum,
@@ -296,45 +304,45 @@ C8's stress set on the test block: maker fee 0 / +1 / +2 bp, latency ×2 and
 ×4, the risk-averse and log queue models, double size, and the floor and κ
 neighbourhood (κ rows are absent where the quoter has κ = 0). Each dot is
 one stress; the bar is the pick as chosen. The figure shows C10's five
-contracts; the tables below include BNBUSDT and DOGEUSDT.
+contracts; the tables below include the added contracts.
 
 ![stress](../assets/c13/stress.png)
 
 Crash-guarded picks:
 
-| stress (test), crash-guarded | XRPPERP | SUIPERP | XRPUSDT | SUIUSDT | AVAXUSDT | BNBUSDT | DOGEUSDT |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| as chosen | +1.22% | +0.22% | -1.01% | +4.60% | -1.69% | +1.06% | -2.32% |
-| fee 0 | +0.86% | +0.05% | -2.24% | +3.33% | -2.39% | +0.74% | -2.51% |
-| fee +1 bp | +0.14% | -0.29% | -4.66% | +0.84% | -3.76% | +0.11% | -3.04% |
-| fee +2 bp | -0.57% | -0.63% | -7.01% | -1.60% | -5.12% | -0.51% | -3.39% |
-| latency ×2 | +1.51% | +0.12% | +3.38% | +4.06% | -0.86% | +1.17% | -0.88% |
-| latency ×4 | +2.89% | -1.57% | +2.02% | +3.82% | +2.57% | +1.39% | -3.04% |
-| queue risk-averse | +1.86% | +0.26% | +1.43% | +4.47% | -1.82% | +1.06% | -1.31% |
-| queue log | +0.79% | +0.23% | +1.42% | +3.86% | -2.71% | +1.65% | -1.60% |
-| size ×2 | +0.98% | -0.03% | -2.11% | +5.15% | -0.97% | +1.89% | -4.33% |
-| floor ×0.8 | +1.73% | -0.14% | -2.85% | +6.14% | +0.83% | +1.49% | -2.65% |
-| floor ×1.25 | +1.25% | +0.14% | +2.02% | +5.04% | +0.99% | +0.08% | -1.81% |
-| κ ×0.5 | +2.59% | – | -1.56% | – | -5.85% | – | -2.04% |
-| κ ×2 | -0.05% | – | +2.30% | – | +1.20% | – | -1.85% |
+| stress (test), crash-guarded | XRPPERP | SUIPERP | XRPUSDT | SUIUSDT | AVAXUSDT | BNBUSDT | DOGEUSDT | LINKUSDT |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| as chosen | +1.22% | +0.22% | -1.01% | +4.60% | -1.69% | +1.06% | -2.32% | -0.45% |
+| fee 0 | +0.86% | +0.05% | -2.24% | +3.33% | -2.39% | +0.74% | -2.51% | -0.78% |
+| fee +1 bp | +0.14% | -0.29% | -4.66% | +0.84% | -3.76% | +0.11% | -3.04% | -1.45% |
+| fee +2 bp | -0.57% | -0.63% | -7.01% | -1.60% | -5.12% | -0.51% | -3.39% | -2.11% |
+| latency ×2 | +1.51% | +0.12% | +3.38% | +4.06% | -0.86% | +1.17% | -0.88% | +2.58% |
+| latency ×4 | +2.89% | -1.57% | +2.02% | +3.82% | +2.57% | +1.39% | -3.04% | +4.17% |
+| queue risk-averse | +1.86% | +0.26% | +1.43% | +4.47% | -1.82% | +1.06% | -1.31% | +0.60% |
+| queue log | +0.79% | +0.23% | +1.42% | +3.86% | -2.71% | +1.65% | -1.60% | +0.35% |
+| size ×2 | +0.98% | -0.03% | -2.11% | +5.15% | -0.97% | +1.89% | -4.33% | +4.18% |
+| floor ×0.8 | +1.73% | -0.14% | -2.85% | +6.14% | +0.83% | +1.49% | -2.65% | +2.23% |
+| floor ×1.25 | +1.25% | +0.14% | +2.02% | +5.04% | +0.99% | +0.08% | -1.81% | +1.05% |
+| κ ×0.5 | +2.59% | – | -1.56% | – | -5.85% | – | -2.04% | +2.33% |
+| κ ×2 | -0.05% | – | +2.30% | – | +1.20% | – | -1.85% | -1.39% |
 
 C8's rule picks:
 
-| stress (test), C8's rule | XRPPERP | SUIPERP | XRPUSDT | SUIUSDT | AVAXUSDT | BNBUSDT | DOGEUSDT |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| as chosen | -4.54% | -1.01% | -0.18% | -4.81% | -1.26% | -0.63% | -5.01% |
-| fee 0 | -4.88% | -1.18% | -1.41% | -6.56% | -2.47% | -1.27% | -5.22% |
-| fee +1 bp | -5.43% | -1.52% | -3.81% | -9.95% | -4.85% | -2.54% | -5.64% |
-| fee +2 bp | -6.01% | -1.86% | -6.17% | -13.23% | -7.17% | -3.80% | -6.06% |
-| latency ×2 | -5.57% | -0.20% | +1.35% | -4.64% | +2.88% | -0.63% | -2.84% |
-| latency ×4 | -5.85% | -0.51% | +0.55% | -4.52% | -2.82% | -0.52% | -4.12% |
-| queue risk-averse | -3.99% | -0.80% | -0.45% | -5.96% | -1.80% | -0.80% | -4.73% |
-| queue log | -4.16% | -0.82% | -0.34% | -5.71% | -0.65% | -0.31% | -3.51% |
-| size ×2 | -8.49% | -1.39% | +2.99% | -8.34% | -1.77% | -0.95% | -9.50% |
-| floor ×0.8 | -4.56% | -0.77% | +1.08% | -4.59% | -0.07% | -0.94% | -3.75% |
-| floor ×1.25 | -0.36% | -0.65% | +2.43% | -5.14% | -1.61% | -1.12% | -5.24% |
-| κ ×0.5 | -5.08% | – | -1.05% | – | -5.04% | – | -3.91% |
-| κ ×2 | -4.47% | – | +0.86% | – | +2.16% | – | -4.40% |
+| stress (test), C8's rule | XRPPERP | SUIPERP | XRPUSDT | SUIUSDT | AVAXUSDT | BNBUSDT | DOGEUSDT | LINKUSDT |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| as chosen | -4.54% | -1.01% | -0.18% | -4.81% | -1.26% | -0.63% | -5.01% | -0.86% |
+| fee 0 | -4.88% | -1.18% | -1.41% | -6.56% | -2.47% | -1.27% | -5.22% | -2.29% |
+| fee +1 bp | -5.43% | -1.52% | -3.81% | -9.95% | -4.85% | -2.54% | -5.64% | -5.07% |
+| fee +2 bp | -6.01% | -1.86% | -6.17% | -13.23% | -7.17% | -3.80% | -6.06% | -7.78% |
+| latency ×2 | -5.57% | -0.20% | +1.35% | -4.64% | +2.88% | -0.63% | -2.84% | -3.31% |
+| latency ×4 | -5.85% | -0.51% | +0.55% | -4.52% | -2.82% | -0.52% | -4.12% | -4.48% |
+| queue risk-averse | -3.99% | -0.80% | -0.45% | -5.96% | -1.80% | -0.80% | -4.73% | -1.17% |
+| queue log | -4.16% | -0.82% | -0.34% | -5.71% | -0.65% | -0.31% | -3.51% | -0.75% |
+| size ×2 | -8.49% | -1.39% | +2.99% | -8.34% | -1.77% | -0.95% | -9.50% | -0.78% |
+| floor ×0.8 | -4.56% | -0.77% | +1.08% | -4.59% | -0.07% | -0.94% | -3.75% | -1.04% |
+| floor ×1.25 | -0.36% | -0.65% | +2.43% | -5.14% | -1.61% | -1.12% | -5.24% | -1.46% |
+| κ ×0.5 | -5.08% | – | -1.05% | – | -5.04% | – | -3.91% | -3.32% |
+| κ ×2 | -4.47% | – | +0.86% | – | +2.16% | – | -4.40% | -1.69% |
 
 - **SUIUSDT, crash-guarded**: positive in 9 of 10 stresses, failing only
   at +2 bp. The only pick whose result is not within noise of zero.
@@ -343,6 +351,8 @@ C8's rule picks:
 - **BNBUSDT, crash-guarded**: positive in 9 of 10; fails at +2 bp
   (−0.51%), +0.11% at +1 bp.
 - **DOGEUSDT**: both picks lose under every stress.
+- **LINKUSDT**: both picks lose as chosen and at every fee; the
+  crash-guarded pick's other stresses scatter from −1.39% to +4.18%.
 - **XRPUSDT and AVAXUSDT**: the stresses scatter on both sides of zero
   (AVAXUSDT C8's rule: latency ×2 +2.88%, latency ×4 −2.82%), which is what
   no edge looks like.
@@ -359,8 +369,8 @@ C8's rule picks:
 - **With the guard, the procedure beats running C8's choices unchanged,
   but narrowly**: +3.33 against +0.64 points summed over C10's five
   contracts, and all of the margin is SUIUSDT. On the two added contracts
-  with a usable result it makes +1.06% (BNBUSDT) and −2.32% (DOGEUSDT),
-  against −0.63% and −5.01% under C8's rule.
+  with a usable result it makes +1.06% (BNBUSDT), −2.32% (DOGEUSDT) and
+  −0.45% (LINKUSDT), against −0.63%, −5.01% and −0.86% under C8's rule.
 - **The one robust find is a slow grid quoter with a volatility breaker on
   SUIUSDT.** It keeps its return without the rebate and at +1 bp, under
   latency and queue stresses, and without its best session. It is the
