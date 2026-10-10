@@ -14,6 +14,7 @@ Start here.
 | [`repo-layout.md`](repo-layout.md) | Where code goes and why the shared library stays tiny |
 | [`companion-repos.md`](companion-repos.md) | The 7 lab/reference repos, their pins, and which phase uses which |
 | [`data.md`](data.md) | Part C market data: format, sources, the train/held-out split rule |
+| [`next-steps.md`](next-steps.md) | **Part C handover list** after C13: what to protect, strategy work, fixes and readability, and how the Kaggle runs work |
 | [`writeups/c6-compare.md`](writeups/c6-compare.md) | **C6 master table**, paired: each asset and strategy's published baseline, widened baseline and learned policy side by side |
 | [`writeups/c6-table.md`](writeups/c6-table.md) | The same runs unpaired, one row per configuration, with trade intensity |
 | [`assets/rl-ladder-tracker.html`](assets/rl-ladder-tracker.html) | The original HTML tracker, archived verbatim. Read-only here — progress is tracked in `ladder.md`. |

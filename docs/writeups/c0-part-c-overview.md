@@ -322,6 +322,9 @@ backtest it improves 14 of 15 forecast rules held out, but the genuine lead
 
 ## 8. What next
 
+The current, more detailed list (after C13) is
+[`docs/next-steps.md`](../next-steps.md); the items below predate it.
+
 C8 did the follow-ups listed before it; C9 answered the fair-price and
 denoising questions; C10 ran the forward test on Bybit and the lead-lag
 inputs. What remains in Part C, cheapest and most informative first:
