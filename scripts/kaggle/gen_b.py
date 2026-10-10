@@ -1,6 +1,6 @@
 """Build a self-contained Kaggle GPU notebook for Part B runs (code embedded as a base64 tarball).
 
-    python scripts/kaggle/gen_b.py "<script> <args>" ["<script> <args>" ...] > notebook.py
+    python scripts/kaggle/gen_b.py [--pip <requirement> ...] "<script> <args>" ["<script> <args>" ...] > notebook.py
 
 Each quoted command is one run, e.g. "experiments/b1_ppo/reinforce_lm.py --seed 0". Runs are dealt
 round-robin to the GPUs (a Kaggle T4 notebook has two) and each GPU works through its queue in order.
@@ -13,8 +13,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 FILES = ["src/rl_ladder/__init__.py", "src/rl_ladder/seeding.py", "src/rl_ladder/plotting.py",
          "src/rl_ladder/run.py", "experiments/a4_policy_gradient/pg.py",
-         "experiments/b1_ppo/reinforce_lm.py", "experiments/b1_ppo/train_rm.py"]
-commands = sys.argv[1:]
+         "experiments/b1_ppo/reinforce_lm.py", "experiments/b1_ppo/train_rm.py",
+         "experiments/b1_ppo/ppo_lm.py"]
+argv, pip = sys.argv[1:], []
+while argv and argv[0] == "--pip":
+    pip.append(argv[1])
+    argv = argv[2:]
+commands = argv
 buf = io.BytesIO()
 with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tar:
     for f in FILES:
@@ -37,7 +42,7 @@ with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE)), mode="r:gz") as ta
     tar.extractall(REPO)
 # Kaggle's image ships torchao 0.10, which current PEFT refuses to import next to; nothing here uses it.
 subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchao"], check=False)
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "peft", "gymnasium"], check=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "peft", "gymnasium", *{pip!r}], check=True)
 import torch
 n_gpu = max(torch.cuda.device_count(), 1)
 log(f"ready, {{n_gpu}} GPU(s): {{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}}")
