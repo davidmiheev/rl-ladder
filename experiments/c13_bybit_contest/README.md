@@ -199,6 +199,80 @@ So far (SUIPERP, AVAXUSDT) the full procedure on a year of Bybit has not
 produced a configuration that beats C8's untouched Binance choice on the
 locked test.
 
+### XRPPERP: validation and test
+
+| entry | training (48) | validation (27) | test (27) | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, all sessions: OBI 8 bp, κ 2 + breaker, momentum, per-side markout, stop, requote hysteresis, markout half-life | +134.30% | +0.03% | **−4.54%** | −4.90% | −4.94% | 10/27 | 54 |
+| pick, crash-guarded: OBI 8 bp, κ 2 + 100 bp stop, smoothing, alpha clip, units cap, time of day, inventory flatten | +12.11% | +0.63% | **+1.22%** | −0.05% | +0.86% | 11/27 | 51 |
+| C8's choice, unchanged (XRPUSDC OBI) | +4.15% | −0.97% | **+1.37%** | +0.78% | +1.09% | 16/27 | 38 |
+
+| stress (test block) | pick, all sessions | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | −4.54% | +1.22% |
+| maker fee 0 (no rebate) | −4.88% | +0.86% |
+| maker fee +1 bp | −5.43% | +0.14% |
+| maker fee +2 bp (Bybit VIP 0) | −6.01% | −0.57% |
+| latency x2 | −5.57% | +1.51% |
+| latency x4 | −5.85% | +2.89% |
+| queue risk-averse | −3.99% | +1.86% |
+| queue log | −4.16% | +0.79% |
+| size x2 | −8.49% | +0.98% |
+| floor x0.8 | −4.56% | +1.73% |
+| floor x1.25 | −0.36% | +1.25% |
+| κ x0.5 | −5.08% | +2.59% |
+| κ x2 | −4.47% | −0.05% |
+
+**XRPPERP verdict.** C8's rule picked the crash-day winner (+134% on
+training, of which +127% the crash) and it lost under every stress on the
+test (−0.4% to −8.5%). The crash-guarded pick is the first contest entry that
+holds up: +1.22% on the test, positive in 11 of 13 stresses, worst session
+drawdown 1.3%. It is not better than C8's untouched choice on the same
+sessions (+1.37%), and without its best test session it is flat (−0.05%).
+It loses at Bybit's standard +2 bp maker fee (−0.57%).
+
+### XRPUSDT: validation and test
+
+| entry | training (48) | validation (27) | test (27) | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, all sessions: OBI 8 bp, κ 4 + momentum, time of day | +135.05% | −0.65% | **−0.18%** | −2.38% | −1.41% | 12/27 | 100 |
+| pick, crash-guarded: OBI 8 bp, κ 4 + inventory flatten, units cap | +7.82% | +0.09% | **−1.01%** | −1.78% | −2.24% | 11/27 | 133 |
+| C8's choice, unchanged (XRPUSDT OBI) | +36.61% | +0.33% | **−0.40%** | −1.30% | −2.75% | 12/27 | 216 |
+
+| stress (test block) | pick, all sessions | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | −0.18% | −1.01% |
+| maker fee 0 (no rebate) | −1.41% | −2.24% |
+| maker fee +1 bp | −3.81% | −4.66% |
+| maker fee +2 bp (Bybit VIP 0) | −6.17% | −7.01% |
+| latency x2 | +1.35% | +3.38% |
+| latency x4 | +0.55% | +2.02% |
+| queue risk-averse | −0.45% | +1.43% |
+| queue log | −0.34% | +1.42% |
+| size x2 | +2.99% | −2.11% |
+| floor x0.8 | +1.08% | −2.85% |
+| floor x1.25 | +2.43% | +2.02% |
+| κ x0.5 | −1.05% | −1.56% |
+| κ x2 | +0.86% | +2.30% |
+
+**XRPUSDT verdict.** All three entries are within a point of zero on the test
+and all lose at Bybit's real fees (−3.8% to −7.0% at +1 to +2 bp). The
+stresses scatter on both sides of zero. No edge.
+
+### Scoreboard (locked test, 27 sessions Jun-Oct 2026)
+
+| contract | pick, all sessions | pick, crash-guarded | C8's choice, unchanged | best entry, at maker fee +1 bp |
+| --- | --- | --- | --- | --- |
+| SUIPERP | −1.01% | +0.22% | +1.68% | crash-guarded −0.29% |
+| AVAXUSDT | −1.26% | −1.69% | +2.64% | crash-guarded −3.76% |
+| XRPPERP | −4.54% | +1.22% | +1.37% | crash-guarded +0.14% |
+| XRPUSDT | −0.18% | −1.01% | −0.40% | all sessions −3.81% |
+
+The crash-guarded rule beat C8's rule on 2 of 4 contracts (SUIPERP, XRPPERP)
+and C8's rule picks lost on all four. No contest pick beat C8's untouched
+Binance choice. With a maker fee of +1 bp (still below Bybit's standard +2
+bp), only XRPPERP's crash-guarded pick stays (barely) positive.
+
 ## Status
 
 See `python experiments/c13_bybit_contest/contest.py status`. Kaggle runs use
