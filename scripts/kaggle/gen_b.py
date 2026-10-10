@@ -35,6 +35,8 @@ def log(m):
 os.makedirs(REPO, exist_ok=True)
 with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE)), mode="r:gz") as tar:
     tar.extractall(REPO)
+# Kaggle's image ships torchao 0.10, which current PEFT refuses to import next to; nothing here uses it.
+subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchao"], check=False)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "peft", "gymnasium"], check=True)
 import torch
 n_gpu = max(torch.cuda.device_count(), 1)
@@ -50,10 +52,13 @@ def save():
         with tarfile.open(f"{{OUT}}/b_runs.tgz.part", "w:gz") as tar:
             tar.add(f"{{REPO}}/runs", arcname="runs")
         os.replace(f"{{OUT}}/b_runs.tgz.part", f"{{OUT}}/b_runs.tgz")
+last = time.time()
 while any(p.poll() is None for p in procs):
-    time.sleep(600)
-    save()
-    log("checkpoint")
+    time.sleep(30)
+    if time.time() - last > 600:
+        save()
+        log("checkpoint")
+        last = time.time()
 save()
 log(f"B-DONE exit codes {{[p.returncode for p in procs]}}")
 ''')
