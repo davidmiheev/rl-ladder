@@ -13,7 +13,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 FILES = ["src/rl_ladder/__init__.py", "src/rl_ladder/seeding.py", "src/rl_ladder/plotting.py",
          "src/rl_ladder/run.py", "experiments/a4_policy_gradient/pg.py",
-         "experiments/b1_ppo/reinforce_lm.py"]
+         "experiments/b1_ppo/reinforce_lm.py", "experiments/b1_ppo/train_rm.py"]
 commands = sys.argv[1:]
 buf = io.BytesIO()
 with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tar:
