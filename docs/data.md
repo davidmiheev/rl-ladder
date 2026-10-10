@@ -126,3 +126,19 @@ Download the files one at a time (`-f`): the whole-dataset download returned
 holding a fresh `c8_days.tgz`, its `.sha256` and `dataset-metadata.json`
 (`{"id": "davidmiheev/rl-ladder-c8-days", ...}`).
 
+## C11 L3 recording (Bitstamp, Bitfinex)
+
+The order-by-order recording for C11's queue-model calibration
+(`experiments/c11_queue_l3/record.py`, recorded on Kaggle 2026-10-08 17:00
+to 2026-10-09 05:00 UTC: Bitstamp and Bitfinex websocket L3 plus Bitstamp
+XRP/SUI/ETH snapshots, 65 hourly gzipped JSONL files, 385 MB) is kept in
+the private Kaggle dataset `davidmiheev/rl-ladder-c11-l3`, as one `.tgz`
+(Kaggle unpacks an uploaded `.tar`, and gunzips the files inside, so upload
+archives as `.tgz`). Restore:
+
+```sh
+kaggle datasets download davidmiheev/rl-ladder-c11-l3 -f c11_l3rec_a.tgz -p /tmp/l3
+kaggle datasets download davidmiheev/rl-ladder-c11-l3 -f c11_l3rec_a.tgz.sha256 -p /tmp/l3
+(cd /tmp/l3 && sha256sum -c c11_l3rec_a.tgz.sha256 && tar xzf c11_l3rec_a.tgz)   # -> /tmp/l3/l3rec_a/l3/*.jsonl.gz
+```
+

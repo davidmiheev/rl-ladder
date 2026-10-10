@@ -33,10 +33,13 @@ downloading it back and comparing byte for byte; the restore command is in
 `docs/data.md`. **Upload a new version after every batch of new runs**
 (command in the same place), or the backup goes stale.
 
-**A2. Back up the C11 L3 recording.** A 386 MB Bitstamp/Bitfinex L3
-recording sits in the old session's scratch directory (`l3rec_a`), not in the
-repo or on any durable store. Either move it next to the cache (A1) or accept
-re-recording it on Kaggle (`experiments/c11_queue_l3/record.py`).
+**A2. Back up the C11 L3 recording — done 2026-10-10.** The 385 MB
+Bitstamp/Bitfinex L3 recording (65 hourly files, 2026-10-08 17:00 to
+10-09 05:00 UTC) is in the private Kaggle dataset
+`davidmiheev/rl-ladder-c11-l3`, checked by a byte-identical restore; the
+restore command is in `docs/data.md`. C11 itself (converter and queue-model
+calibration, `experiments/c11_queue_l3/`) is unfinished and has no README
+yet.
 
 **A3. Kaggle tooling is now in `scripts/kaggle/`** (`gen_c13.py` builds a
 self-contained notebook with the code embedded; `kpost.py` saves and runs it
