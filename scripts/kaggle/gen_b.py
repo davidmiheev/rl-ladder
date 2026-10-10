@@ -1,0 +1,59 @@
+"""Build a self-contained Kaggle GPU notebook for Part B runs (code embedded as a base64 tarball).
+
+    python scripts/kaggle/gen_b.py "<script> <args>" ["<script> <args>" ...] > notebook.py
+
+Each quoted command is one run, e.g. "experiments/b1_ppo/reinforce_lm.py --seed 0". Runs are dealt
+round-robin to the GPUs (a Kaggle T4 notebook has two) and each GPU works through its queue in order.
+The run directories under runs/ are tarred to /kaggle/working/b_runs.tgz every 10 minutes and at the end.
+No secrets: the models and datasets the runs use are public on the Hugging Face Hub.
+"""
+import base64, io, sys, tarfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+FILES = ["src/rl_ladder/__init__.py", "src/rl_ladder/seeding.py", "src/rl_ladder/plotting.py",
+         "src/rl_ladder/run.py", "experiments/a4_policy_gradient/pg.py",
+         "experiments/b1_ppo/reinforce_lm.py"]
+commands = sys.argv[1:]
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tar:
+    for f in FILES:
+        tar.add(REPO / f, arcname=f)
+code = base64.b64encode(buf.getvalue()).decode()
+sys.stdout.write(f'''# rl-ladder Part B on a Kaggle GPU notebook: {len(commands)} run(s).
+#
+{"".join(f"#   python {c}{chr(10)}" for c in commands)}#
+# The code is embedded below; models and data come from the public Hugging Face Hub.
+import base64, io, os, subprocess, sys, tarfile, time
+START = time.time()
+REPO = "/tmp/rl-ladder"
+OUT = "/kaggle/working"
+CODE = "{code}"
+COMMANDS = {commands!r}
+def log(m):
+    print(f"[{{(time.time() - START) / 60:6.1f}} min] {{m}}", flush=True)
+os.makedirs(REPO, exist_ok=True)
+with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE)), mode="r:gz") as tar:
+    tar.extractall(REPO)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "peft", "gymnasium"], check=True)
+import torch
+n_gpu = max(torch.cuda.device_count(), 1)
+log(f"ready, {{n_gpu}} GPU(s): {{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}}")
+queues = [COMMANDS[i::n_gpu] for i in range(n_gpu)]
+def worker(gpu, queue):
+    script = "; ".join(f"python {{c}} > {{OUT}}/run_{{gpu}}_{{k}}.log 2>&1" for k, c in enumerate(queue))
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu), PYTHONUNBUFFERED="1", TOKENIZERS_PARALLELISM="false")
+    return subprocess.Popen(["bash", "-c", script], cwd=REPO, env=env)
+procs = [worker(g, q) for g, q in enumerate(queues) if q]
+def save():
+    if os.path.isdir(f"{{REPO}}/runs"):
+        with tarfile.open(f"{{OUT}}/b_runs.tgz.part", "w:gz") as tar:
+            tar.add(f"{{REPO}}/runs", arcname="runs")
+        os.replace(f"{{OUT}}/b_runs.tgz.part", f"{{OUT}}/b_runs.tgz")
+while any(p.poll() is None for p in procs):
+    time.sleep(600)
+    save()
+    log("checkpoint")
+save()
+log(f"B-DONE exit codes {{[p.returncode for p in procs]}}")
+''')
