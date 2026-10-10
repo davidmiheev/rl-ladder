@@ -285,19 +285,58 @@ It loses at Bybit's standard +2 bp maker fee (−0.57%).
 and all lose at Bybit's real fees (−3.8% to −7.0% at +1 to +2 bp). The
 stresses scatter on both sides of zero. No edge.
 
-### Scoreboard (locked test, 27 sessions Jun-Oct 2026)
+### SUIUSDT: validation and test
 
-| contract | pick, all sessions | pick, crash-guarded | C8's choice, unchanged | best entry, at maker fee +1 bp |
+| entry | training (48) | validation (27) | test (27) | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, all sessions: hfgrid 4 bp + momentum, breaker, toxicity sizing, markout half-life | +107.68% | −7.50% | **−4.81%** | −5.40% | −6.56% | 7/27 | 613 |
+| pick, crash-guarded: hfgrid 4 bp + breaker (5-min cooldown, vol 2.5) | +23.07% | +0.96% | **+4.60%** | +2.76% | +3.33% | 14/27 | 122 |
+| C8's choice, unchanged (SUIUSDT OBI) | −145.45% | −0.63% | **−4.64%** | −5.31% | −4.83% | 13/27 | 25 |
+| C8's choice, unchanged (SUIUSDC OBI) | +36.15% | −2.74% | **−4.99%** | −6.27% | −5.52% | 12/27 | 77 |
+
+| stress (test block) | pick, all sessions | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | −4.81% | +4.60% |
+| maker fee 0 (no rebate) | −6.56% | +3.33% |
+| maker fee +1 bp | −9.95% | +0.84% |
+| maker fee +2 bp (Bybit VIP 0) | −13.23% | −1.60% |
+| latency x2 | −4.64% | +4.06% |
+| latency x4 | −4.52% | +3.82% |
+| queue risk-averse | −5.96% | +4.47% |
+| queue log | −5.71% | +3.86% |
+| size x2 | −8.34% | +5.15% |
+| floor x0.8 | −4.59% | +6.14% |
+| floor x1.25 | −5.14% | +5.04% |
+
+**SUIUSDT verdict.** The first contest pick that beats C8's untouched
+choices on the locked test, and by a margin: the crash-guarded pick (the
+grid quoter with a volatility breaker) makes +4.60% against −4.64% and
+−4.99%, stays positive without its best session (+2.76%) and without the
+rebate (+3.33%), and is positive in 10 of 11 stresses. It fails only at
+Bybit's standard +2 bp maker fee (−1.60%); at +1 bp it keeps +0.84%. Worst
+session drawdown 2.3%, about 120 fills a session. C8's rule picked the
+high-turnover crash winner (+107.7% on training, 856 fills a session), which
+lost under every stress.
+
+### Scoreboard (locked test, 27 sessions Jun-Oct 2026, the five original contracts)
+
+| contract | pick, all sessions | pick, crash-guarded | C8's choice, unchanged | best contest pick at maker fee +1 bp |
 | --- | --- | --- | --- | --- |
 | SUIPERP | −1.01% | +0.22% | +1.68% | crash-guarded −0.29% |
 | AVAXUSDT | −1.26% | −1.69% | +2.64% | crash-guarded −3.76% |
 | XRPPERP | −4.54% | +1.22% | +1.37% | crash-guarded +0.14% |
 | XRPUSDT | −0.18% | −1.01% | −0.40% | all sessions −3.81% |
+| SUIUSDT | −4.81% | **+4.60%** | −4.64% / −4.99% | crash-guarded **+0.84%** |
+| sum of the five | −11.80 | **+3.34** | −0.35 (SUIUSDT OBI) | |
 
-The crash-guarded rule beat C8's rule on 2 of 4 contracts (SUIPERP, XRPPERP)
-and C8's rule picks lost on all four. No contest pick beat C8's untouched
-Binance choice. With a maker fee of +1 bp (still below Bybit's standard +2
-bp), only XRPPERP's crash-guarded pick stays (barely) positive.
+C8's rule (rank by chained return over all training sessions) picked the
+crash-session winner every time and lost on all five tests (−11.8 points in
+total). The crash-guarded rule is ahead of it on four of five and, summed
+over the five contracts, ahead of C8's untouched Binance choices (+3.34 vs
+−0.35 points). It produced one clear winner (SUIUSDT, a grid quoter with a
+volatility breaker) and one break-even (XRPPERP). At Bybit's standard maker
+fee (+2 bp) every pick loses; at +1 bp two stay positive (SUIUSDT +0.84%,
+XRPPERP +0.14%).
 
 ## Status
 
