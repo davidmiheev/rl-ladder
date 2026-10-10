@@ -25,16 +25,13 @@ held-out sessions (§B1).
 
 ## A. Protect what exists (do first; cheap, and losing it is expensive)
 
-**A1. Back up the result cache.** `runs/c8/days/` (≈391 MB, 2,434 files, one
-per configuration-session key) holds every backtest of C8, C10, C12 and C13.
-`runs/` is gitignored and lives only in the session container; rebuilding it
-would take many tens of Kaggle notebook-hours (an estimate: C13 alone ran
-about a dozen rounds of five notebooks). Put it somewhere durable
-and private (a private Kaggle dataset, or a private Hugging Face dataset via a
-runtime the user has authorised for the token), and write the restore command
-into `docs/data.md`. Done when a fresh container can restore it in one
-command and `python experiments/c13_bybit_contest/report.py --tables`
-reproduces the writeup's tables.
+**A1. Back up the result cache — done 2026-10-10.** `runs/c8/days/` (≈391 MB
+on disk, 23 MB compressed, 2,434 configuration-session keys) holds every
+backtest of C8, C10, C12 and C13; `runs/` is gitignored. A copy is in the
+private Kaggle dataset `davidmiheev/rl-ladder-c8-days`, checked by
+downloading it back and comparing byte for byte; the restore command is in
+`docs/data.md`. **Upload a new version after every batch of new runs**
+(command in the same place), or the backup goes stale.
 
 **A2. Back up the C11 L3 recording.** A 386 MB Bitstamp/Bitfinex L3
 recording sits in the old session's scratch directory (`l3rec_a`), not in the

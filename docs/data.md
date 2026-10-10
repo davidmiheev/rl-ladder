@@ -104,3 +104,25 @@ Before trusting any C3–C5 result, read hftbacktest's
 policy will happily exploit an optimistic queue model — a "learned improvement"
 that is really the fill simulator being too generous is the most likely wrong
 result in Part C, and it looks exactly like success.
+
+## Backtest result cache (Part C, C8-C13)
+
+`runs/c8/days/` holds every per-session backtest result of C8, C10, C12 and
+C13 (one file per configuration-session key). It is gitignored; a copy is
+kept in the private Kaggle dataset `davidmiheev/rl-ladder-c8-days` (23 MB
+compressed, 2,434 keys, uploaded 2026-10-10). Restore into a fresh checkout,
+with `KAGGLE_API_TOKEN` set:
+
+```sh
+kaggle datasets download davidmiheev/rl-ladder-c8-days -f c8_days.tgz -p /tmp/c8cache
+kaggle datasets download davidmiheev/rl-ladder-c8-days -f c8_days.tgz.sha256 -p /tmp/c8cache
+(cd /tmp/c8cache && sha256sum -c c8_days.tgz.sha256)
+mkdir -p runs/c8 && tar xzf /tmp/c8cache/c8_days.tgz -C runs/c8
+```
+
+Download the files one at a time (`-f`): the whole-dataset download returned
+404 right after creation. After new runs land, upload a new version with
+`kaggle datasets version -p <dir> -m "<what changed>"` from a directory
+holding a fresh `c8_days.tgz`, its `.sha256` and `dataset-metadata.json`
+(`{"id": "davidmiheev/rl-ladder-c8-days", ...}`).
+
