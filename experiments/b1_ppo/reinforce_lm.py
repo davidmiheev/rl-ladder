@@ -93,11 +93,11 @@ def imdb_prompts(split: str, n: int, tokenizer, rng: np.random.Generator) -> lis
 class Classifier:
     """A sentiment classifier as a reward: log-odds of positive, and P(positive)."""
 
-    def __init__(self, name: str, device: str):
+    def __init__(self, name: str, device: str, dtype: torch.dtype = torch.float32):
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.tok = AutoTokenizer.from_pretrained(name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(name).to(device).eval()
+        self.model = AutoModelForSequenceClassification.from_pretrained(name, dtype=dtype).to(device).eval()
         labels = {v.lower(): k for k, v in self.model.config.id2label.items()}
         self.pos, self.neg = labels["positive"], labels["negative"]
         self.device = device

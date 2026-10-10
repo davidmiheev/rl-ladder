@@ -53,6 +53,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-new-tokens", type=int, default=48)
     p.add_argument("--lr", type=float, default=1e-5)
     p.add_argument("--lora-r", type=int, default=16)
+    p.add_argument("--value-layers", type=int, default=2, help="trainable top layers of the value model")
     p.add_argument("--eval-every", type=int, default=25)
     p.add_argument("--eval-prompts", type=int, default=64)
     p.add_argument("--name", default=None)
@@ -65,17 +66,17 @@ def parse_args() -> argparse.Namespace:
 
 
 class RewardModel:
-    """train_rm.py's scalar head as a scorer of text: the logit is the log-odds of positive."""
+    """The PPO reward model as a scorer of text (its logit is the log-odds of positive).
 
-    def __init__(self, path: str, device: str):
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    Shares the model object TRL trains against, so only one copy is in GPU memory.
+    """
 
-        self.tok = AutoTokenizer.from_pretrained(path)
-        if self.tok.pad_token is None:
-            self.tok.pad_token = self.tok.eos_token
-        self.model = AutoModelForSequenceClassification.from_pretrained(path, num_labels=1).to(device).eval()
-        self.model.config.pad_token_id = self.tok.pad_token_id
-        self.device = device
+    def __init__(self, model, tok, device: str):
+        from transformers import AutoTokenizer
+
+        self.model, self.device = model, device
+        self.tok = AutoTokenizer.from_pretrained(tok.name_or_path, padding_side="right")
+        self.tok.pad_token = tok.pad_token
 
     @torch.no_grad()
     def __call__(self, texts: list[str]) -> np.ndarray:
@@ -100,9 +101,16 @@ def main() -> None:
     tok.pad_token = "<|fim_pad|>" if "<|fim_pad|>" in tok.get_vocab() else tok.unk_token or tok.eos_token
     policy = AutoModelForCausalLM.from_pretrained(args.policy, dtype=torch.float32, attn_implementation="sdpa")
     value = AutoModelForSequenceClassification.from_pretrained(args.rm, num_labels=1, dtype=torch.float32)
-    reward = AutoModelForSequenceClassification.from_pretrained(args.rm, num_labels=1, dtype=torch.float32)
+    reward = AutoModelForSequenceClassification.from_pretrained(args.rm, num_labels=1,
+                                                                dtype=torch.float16 if device == "cuda" else torch.float32)
     for m in (value, reward):
         m.config.pad_token_id = tok.pad_token_id
+    # Memory on a 16 GB T4: a fully trainable fp32 0.5B value model with Adam states is ~8 GB on its
+    # own, so the value model trains only its last `--value-layers` transformer layers and its head.
+    for n, q in value.named_parameters():
+        q.requires_grad = n.startswith("score") or any(f"layers.{i}." in n for i in
+                                                      range(value.config.num_hidden_layers - args.value_layers,
+                                                            value.config.num_hidden_layers))
 
     rng = np.random.default_rng(args.seed)
     prompts = imdb_prompts("train", args.updates * args.batch, tok, rng)
@@ -126,7 +134,8 @@ def main() -> None:
                                target_modules="all-linear", task_type="CAUSAL_LM"),
     )
 
-    rm_score, gold = RewardModel(args.rm, device), Classifier(args.gold_model, device)
+    rm_score = RewardModel(reward, tok, device)
+    gold = Classifier(args.gold_model, device, torch.float16 if device == "cuda" else torch.float32)
     samples_path = run.path("samples.jsonl")
     t0 = time.time()
     use_amp = device == "cuda"
