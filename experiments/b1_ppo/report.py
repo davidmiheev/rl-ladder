@@ -72,8 +72,13 @@ def last(metrics: list[dict], key: str) -> float | None:
     return vals[-1] if vals else None
 
 
-def mean_sd(seeds: list[list[dict]], key: str) -> str:
-    v = [x for x in (last(m, key) for m in seeds) if x is not None]
+def first(metrics: list[dict], key: str) -> float | None:
+    vals = [m[key] for m in metrics if key in m]
+    return vals[0] if vals else None
+
+
+def mean_sd(seeds: list[list[dict]], key: str, pick=None) -> str:
+    v = [x for x in ((pick or last)(m, key) for m in seeds) if x is not None]
     if not v:
         return "–"
     return f"{np.mean(v):.2f} ± {np.std(v):.2f}" if len(v) > 1 else f"{v[0]:.2f}"
@@ -94,8 +99,12 @@ def label_reinforce(name: str) -> str:
 def table_reinforce(r: dict) -> str:
     lines = ["| run | seeds | proxy reward | gold P(positive) | KL to reference | distinct-2 | reference NLL |",
              "| --- | --- | --- | --- | --- | --- | --- |"]
+    every = [m for seeds in r.values() for m in seeds]
+    if every:
+        lines.append(f"| before training (update 0) | {len(every)} | " +
+                     " | ".join(mean_sd(every, k, first) for k, _ in REINFORCE_KEYS) + " |")
     for name, seeds in r.items():
-        lines.append(f"| {label_reinforce(name)} | {len(seeds)} | " +
+        lines.append(f"| {label_reinforce(name)}, after 200 updates | {len(seeds)} | " +
                      " | ".join(mean_sd(seeds, k) for k, _ in REINFORCE_KEYS) + " |")
     return "\n".join(lines)
 
