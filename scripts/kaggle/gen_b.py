@@ -46,6 +46,14 @@ subprocess.run([sys.executable, "-m", "pip", "install", "-q", "peft", "gymnasium
 import torch
 n_gpu = max(torch.cuda.device_count(), 1)
 log(f"ready, {{n_gpu}} GPU(s): {{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}}")
+# Mounted inputs (other notebooks' outputs): log the tree, and expose a reward model written by
+# experiments/b1_ppo/train_rm.py (found by its rm_eval.json) to the commands as $RM_DIR.
+for root, dirs, files in os.walk("/kaggle/input"):
+    if root.count(os.sep) <= 5:
+        log(f"input: {{root}} {{sorted(files)[:5]}}")
+    if "rm_eval.json" in files:
+        os.environ["RM_DIR"] = root
+log(f"RM_DIR={{os.environ.get('RM_DIR')}}")
 queues = [COMMANDS[i::n_gpu] for i in range(n_gpu)]
 def worker(gpu, queue):
     script = "; ".join(f"python {{c}} > {{OUT}}/run_{{gpu}}_{{k}}.log 2>&1" for k, c in enumerate(queue))
