@@ -12,6 +12,8 @@ Figures (docs/assets/c13/):
     rebate.png   the screen leaders' return as backtested, without the assumed
                  0.5 bp maker rebate, and at Bybit's standard +2 bp fee
     stress.png   each tested pick's test return under C8's stress set
+    ena.png      ENAUSDT's pick, per session: return against its spread floor in
+                 ticks, by block (the rebate artefact)
 """
 
 from __future__ import annotations
@@ -88,24 +90,41 @@ def tested() -> dict[str, dict[str, tuple[str, dict]]]:
 
 # ------------------------------------------------------------------ tables
 
+ORIGINAL = ("XRPPERP", "SUIPERP", "XRPUSDT", "SUIUSDT", "AVAXUSDT")  # C10's five
+# Backtest artefacts, reported but left out of the sums: ENAUSDT's pick farms the
+# rebate where its spread floor is under one tick and stops at its loss limit elsewhere.
+ARTEFACT = ("ENAUSDT",)
+
+
+def fee_stress(cfg: dict, name: str) -> float:
+    """The backtest's own fee stress on the test block (a fee can change how a quoter trades)."""
+    return summary(c8.stress_configs(cfg)[name], k.TEST)["ret"]
+
+
 def table_scoreboard(t: dict) -> str:
     lines = ["| contract | pick, C8's rule | pick, crash-guarded | C8's choice, unchanged | "
              "crash-guarded at maker fee +1 bp | crash-guarded at +2 bp |",
              "| --- | --- | --- | --- | --- | --- |"]
-    sums = {"a": 0.0, "b": 0.0, "c": 0.0}
+    groups = {"five original": ORIGINAL, "added": tuple(c for c in t if c not in ORIGINAL and c not in ARTEFACT)}
+    sums = {g: {"a": 0.0, "b": 0.0, "c": 0.0} for g in groups}
     for contract, picks in t.items():
         a = summary(picks["all sessions"][1], k.TEST)
         b = summary(picks["crash-guarded"][1], k.TEST)
         f = frozen(contract)
         c = summary(f, k.TEST) if f is not None else None
-        b1 = summary(picks["crash-guarded"][1], k.TEST, REBATE + 0.0001)
-        b2 = summary(picks["crash-guarded"][1], k.TEST, REBATE + VIP0)
-        sums["a"] += a["ret"]
-        sums["b"] += b["ret"]
-        sums["c"] += c["ret"] if c else 0.0
-        lines.append(f"| {contract} | {fmt(a['ret'])}% | {fmt(b['ret'])}% | "
-                     f"{fmt(c['ret']) + '%' if c else '–'} | {fmt(b1['ret'])}% | {fmt(b2['ret'])}% |")
-    lines.append(f"| sum | {fmt(sums['a'])} | {fmt(sums['b'])} | {fmt(sums['c'])} | | |")
+        b1, b2 = (fee_stress(picks["crash-guarded"][1], n) for n in ("fee +1bp", "fee +2bp"))
+        for g, members in groups.items():
+            if contract in members:
+                sums[g]["a"] += a["ret"]
+                sums[g]["b"] += b["ret"]
+                sums[g]["c"] += c["ret"] if c else 0.0
+        note = " (artefact)" if contract in ARTEFACT else ""
+        lines.append(f"| {contract}{note} | {fmt(a['ret'])}% | {fmt(b['ret'])}% | "
+                     f"{fmt(c['ret']) + '%' if c else '–'} | {fmt(b1)}% | {fmt(b2)}% |")
+    for g, members in groups.items():
+        if any(m in t for m in members):
+            c_sum = fmt(sums[g]["c"]) if any(frozen(m) for m in members if m in t) else "–"
+            lines.append(f"| sum, {g} | {fmt(sums[g]['a'])} | {fmt(sums[g]['b'])} | {c_sum} | | |")
     return "\n".join(lines)
 
 
@@ -287,6 +306,50 @@ def fig_stress(t: dict) -> None:
     save(fig, "stress.png")
 
 
+def ena_rows() -> list[tuple[str, float, float, float]]:
+    """(block, floor in ticks, return %, fills) per session for ENAUSDT's pick."""
+    fp = k.final_pick("ENAUSDT", "crash-guarded")
+    if fp is None:
+        return []
+    out = []
+    for block, days in (("training", k.TRAIN), ("validation", k.VALID), ("test", k.TEST)):
+        for r in c8.results(fp[1], days) or []:
+            out.append((block, r["spread_floor_tick"], r["Return"] * 100, r["DailyNumberOfTrades"]))
+    return out
+
+
+def table_ena(rows: list) -> str:
+    lines = ["| block | sessions | floor under 1 tick | median return, floor < 1 tick | "
+             "median return, floor ≥ 1 tick | median fills, floor < 1 tick | median fills, floor ≥ 1 tick |",
+             "| --- | --- | --- | --- | --- | --- | --- |"]
+    for block in ("training", "validation", "test"):
+        sub = [r for r in rows if r[0] == block]
+        lo = [r for r in sub if r[1] < 1]
+        hi = [r for r in sub if r[1] >= 1]
+        med = lambda xs, i: fmt(float(np.median([x[i] for x in xs]))) + "%" if xs else "–"
+        fills = lambda xs: f"{np.median([x[3] for x in xs]):,.0f}" if xs else "–"
+        lines.append(f"| {block} | {len(sub)} | {len(lo)} | {med(lo, 2)} | {med(hi, 2)} | {fills(lo)} | {fills(hi)} |")
+    return "\n".join(lines)
+
+
+def fig_ena(rows: list) -> None:
+    if not rows:
+        return
+    fig, ax = plt.subplots(figsize=(7, 3.6))
+    for block, color in (("training", MUTED), ("validation", BLUE), ("test", ORANGE)):
+        sub = [r for r in rows if r[0] == block]
+        ax.scatter([r[1] for r in sub], [r[2] for r in sub], color=color, s=16, alpha=0.85, label=block)
+    ax.axvline(1, color=INK, lw=0.6, ls="--")
+    ax.axhline(0, color=INK, lw=0.6)
+    ax.set_xscale("log")
+    ax.set_xlabel("8 bp spread floor, in price ticks (log)")
+    ax.set_ylabel("session return, %")
+    ax.set_title("ENAUSDT pick: the return is the rebate when the floor is under one tick", fontsize=10)
+    ax.legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    save(fig, "ena.png")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tables", action="store_true", help="tables only")
@@ -298,11 +361,14 @@ def main() -> None:
         print(f"\n## {contract}\n\n" + table_contract(contract, picks) + "\n\n" + table_stress(picks))
     print("\n## Rebate\n\n" + table_rebate())
     print("\n## Crash\n\n" + table_crash(rows))
+    ena = ena_rows()
+    print("\n## ENAUSDT\n\n" + table_ena(ena))
     if not args.tables:
         fig_test(t)
         fig_crash(rows)
         fig_rebate()
         fig_stress(t)
+        fig_ena(ena)
 
 
 if __name__ == "__main__":
