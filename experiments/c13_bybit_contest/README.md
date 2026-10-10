@@ -94,6 +94,32 @@ over 270-310x capital a session and lose 47-54% without the rebate: the
 rebate is the whole result. Its families stage runs last. The slow grid
 quoters (hfgrid) keep most of their return without the rebate.
 
+### Stage 2 for BNB, DOGE, ADA, LINK and LTC (training, 48 sessions)
+
+| contract | entry | all 48 | crash alone | other 47 | without the rebate | fills/session |
+| --- | --- | --- | --- | --- | --- | --- |
+| BNBUSDT | leader: GLFT 4 bp | +33.02% | +22.43% | +8.65% | +29.01% | 120 |
+| | best, all sessions: + momentum | +46.15% | +42.19% | +2.79% | +40.09% | 142 |
+| | best, crash-guarded: + breaker | +3.70% | −5.16% | +9.35% | +1.66% | 84 |
+| DOGEUSDT | leader: OBI 16 bp, κ 4 | +13.28% | +11.11% | +1.96% | +12.75% | 32 |
+| | best, all sessions: + momentum | +88.28% | +85.14% | +1.70% | +86.52% | 39 |
+| | best, crash-guarded: + loss limit | −1.69% | −5.05% | +3.54% | −2.15% | 30 |
+| ADAUSDT | leader: hfgrid 4 bp | +8.29% | −0.77% | +9.13% | +7.32% | 72 |
+| | best, all sessions: + momentum | +46.51% | +70.67% | −14.16% | +37.84% | 482 |
+| | best, crash-guarded: + loss limit | +5.13% | −3.60% | +9.05% | +4.20% | 70 |
+| LINKUSDT | leader: hfgrid 4 bp, κ 2 | +8.60% | +3.42% | +5.01% | +8.22% | 25 |
+| | best, all sessions: + momentum | +20.01% | +27.47% | −5.85% | +17.14% | 152 |
+| | best, crash-guarded: + signal smoothing | +11.70% | +3.42% | +8.01% | +11.32% | 26 |
+| LTCUSDT | leader: hfgrid 4 bp | +5.67% | −5.72% | +12.09% | +4.15% | 117 |
+| | best, all sessions: + momentum | +34.71% | +58.69% | −15.11% | +25.95% | 538 |
+| | best, crash-guarded: + loss limit | +8.09% | −3.45% | +11.95% | +6.54% | 117 |
+
+Under C8's rule momentum wins on all five, each time on the crash session
+(+27% to +85% that day) while making −15% to +3% over the other 47 — the
+same pattern as the original five. Under the crash-guarded rule the bests
+are the protective families (breaker, loss limit, smoothing), at +3.5% to
++12% over the 47 non-crash sessions.
+
 ### Crash-session check (2025-10-10)
 
 Under C8's rule every greedy result so far wins the crash session by a wide
