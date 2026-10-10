@@ -285,9 +285,10 @@ def fig_rebate() -> None:
 
 
 def fig_stress(t: dict) -> None:
+    t = {c: p for c, p in t.items() if c not in ARTEFACT}
     if not t:
         return
-    fig, ax = plt.subplots(figsize=(10, 3.8))
+    fig, ax = plt.subplots(figsize=(max(10, 1.3 * len(t)), 3.8))
     labels = []
     for i, (contract, picks) in enumerate(t.items()):
         for j, (rule, color) in enumerate(zip(k.RULES, (ORANGE, BLUE))):
@@ -298,7 +299,7 @@ def fig_stress(t: dict) -> None:
             ax.scatter([xpos], [vals[0]], color=INK, marker="_", s=200)
         labels.append((i * 3 + 0.5, contract))
     ax.axhline(0, color=INK, lw=0.6)
-    ax.set_xticks([p for p, _ in labels], [c for _, c in labels], fontsize=8)
+    ax.set_xticks([p for p, _ in labels], [c for _, c in labels], fontsize=8, rotation=30, ha="right")
     ax.set_ylabel("test return, %")
     ax.set_title("Each pick's test return under C8's stress set (bar = as chosen)", fontsize=10)
     ax.legend(fontsize=8, frameon=False)

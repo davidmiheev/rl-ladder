@@ -56,7 +56,7 @@ ENAUSDT, BNBUSDT, DOGEUSDT, ADAUSDT, LINKUSDT, LTCUSDT.
 | AVAXUSDT | OBI 6 bp, κ 4 | +5.05% | 236 | – |
 | SUIPERP | hfgrid 8 bp | +2.57% | 22 | – |
 
-### Stages 2-3, training (48 sessions)
+### Stages 2-3, training (48 sessions) — interim snapshot after greedy round 3; final results in `report.py` and the writeup
 
 | contract, rule | added | all 48 | crash alone | other 47 | crash-day drawdown | fills |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -145,10 +145,11 @@ prices in a book that was thin and fast. Under the crash-guarded rule
 (drawdown at most 10%) none of these configurations is eligible.
 
 One gap in the crash-guarded rule: stage 3 starts from the screen leader,
-and the guard applies only to what is added. On AVAXUSDT no family variant
-passes the guard, so the crash-guarded "pick" is the screen leader itself,
-whose crash drawdown is 31.1%. Its test result is reported with that
-caveat, and it gets the "without the crash" stress like every pick.
+and the guard applies only to what is added. On AVAXUSDT the crash-guarded
+greedy result added nothing, so it is the screen leader itself, whose crash
+drawdown is 31.1%. (Correction, added later: the final crash-guarded pick on
+AVAXUSDT is a markout half-life variant whose crash-session drawdown is
+9.3%, so it does pass the guard; see the scoreboard notes.)
 
 ### SUIPERP: validation and test (first contract through all five stages)
 
@@ -191,9 +192,8 @@ so these are small samples.
 | pick, crash-guarded: OBI 6 bp, κ 4 + markout half-life 5 s | +17.84% | +1.25% | **−1.69%** | −2.62% | −2.39% | 15/27 | 52 |
 | C8's choice, unchanged (AVAXUSDC OBI) | −79.64% | −1.61% | **+2.64%** | +1.02% | +2.19% | 16/27 | 49 |
 
-The crash-guarded pick is built on the screen leader, whose crash-session
-drawdown was 31% (see the crash check above); the guard only applied to the
-added markout half-life.
+The crash-guarded pick's crash-session drawdown is 9.3%, inside the guard
+(an earlier note here said the guard did not cover it; it does).
 
 Stress set on the test block (chained return, 27 sessions):
 
@@ -446,6 +446,64 @@ fee level; the crash-guarded pick's stresses scatter from −2.11% to +4.18%
 (latency ×4 +4.17%, size ×2 +4.18%, κ ×2 −1.39%), which is what no edge
 looks like.
 
+### ADAUSDT: validation and test
+
+| entry | training | validation | test | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, C8's rule (all sessions): greedy (momentum, breaker, time of day, stop) | +58.54% | -0.84% | **-9.10%** | -9.77% | -11.31% | 5/27 | 354 |
+| pick, crash-guarded: family: momentum [crash-guarded] | +18.93% | +4.20% | **-2.20%** | -3.00% | -3.01% | 14/27 | 115 |
+
+| stress (test block) | pick, C8's rule | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | -9.10% | -2.20% |
+| fee 0 | -10.93% | -3.01% |
+| fee +1bp | -14.48% | -4.61% |
+| fee +2bp | -17.75% | -6.19% |
+| latency x2 | -8.56% | -1.24% |
+| latency x4 | -7.93% | -1.32% |
+| queue risk-averse | -9.11% | -3.92% |
+| queue log | -9.08% | -2.73% |
+| size x2 | -12.50% | +1.67% |
+| floor x0.8 | -9.19% | -1.97% |
+| floor x1.25 | -8.64% | -2.34% |
+
+**ADAUSDT verdict.** Both picks lose on the test (C8's rule −9.10%,
+crash-guarded −2.20%) and under every stress but one (crash-guarded at
+double size, +1.67%). No edge.
+
+### LTCUSDT: validation and test
+
+| entry | training | validation | test | test without its best session | test without the rebate | test sessions up | fills/session (test) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pick, C8's rule (all sessions): greedy (momentum, toxicity sizing, time of day, signal smoothing) | +48.39% | -2.59% | **-5.06%** | -5.34% | -6.04% | 3/27 | 347 |
+| pick, crash-guarded: family: breaker [crash-guarded] | +10.42% | -2.58% | **+9.66%** | +8.07% | +8.63% | 18/27 | 111 |
+
+| stress (test block) | pick, C8's rule | pick, crash-guarded |
+| --- | --- | --- |
+| as chosen | -5.06% | +9.66% |
+| fee 0 | -6.04% | +8.63% |
+| fee +1bp | -7.98% | +6.61% |
+| fee +2bp | -9.88% | +4.62% |
+| latency x2 | -4.90% | +9.51% |
+| latency x4 | -4.86% | +9.64% |
+| queue risk-averse | -5.27% | +9.13% |
+| queue log | -5.52% | +9.63% |
+| size x2 | -8.09% | +11.61% |
+| floor x0.8 | -4.66% | +10.67% |
+| floor x1.25 | -5.11% | +9.57% |
+
+**LTCUSDT verdict.** The strongest result of the contest. The crash-guarded
+pick (hfgrid 4 bp + a slow volatility breaker: 3000 s cooldown, vol 4) makes
+**+9.66%** on the test, +8.07% without its best session and +8.63% without
+the rebate, positive under every stress including Bybit's standard +2 bp
+fee (+4.62%); 18 of 27 sessions up, best session +1.47%, worst session
+drawdown 1.44%, about 110 fills a session. Its crash session: −1.35%,
+drawdown 5.6%. Caveat: on validation alone it lost (−2.58%, 13 of 27 up);
+it was picked on training + validation combined (+10.42% on training), so
+validation by itself would not have chosen it. C8's rule picked the crash
+winner (+61% on the crash session), which lost −5.06% (3 of 27 sessions
+up).
+
 ### Scoreboard (locked test, 27 sessions Jun-Oct 2026, the five original contracts)
 
 | contract | pick, all sessions | pick, crash-guarded | C8's choice, unchanged | best contest pick at maker fee +1 bp |
@@ -478,13 +536,23 @@ XRPPERP +0.14%).
 | ENAUSDT (artefact) | -6.96% | -6.96% | – | -6.66% | -6.65% |
 | BNBUSDT | -0.63% | +1.06% | – | +0.11% | -0.51% |
 | DOGEUSDT | -5.01% | -2.32% | – | -3.04% | -3.39% |
+| ADAUSDT | -9.10% | -2.20% | – | -4.61% | -6.19% |
 | LINKUSDT | -0.86% | -0.45% | – | -1.45% | -2.11% |
+| LTCUSDT | -5.06% | +9.66% | – | +6.61% | +4.62% |
 | sum, five original | -11.80 | +3.33 | +0.64 | | |
-| sum, added | -6.50 | -1.71 | – | | |
+| sum, added | -20.65 | +5.75 | – | | |
 
-Over the added contracts with a usable result (ENAUSDT excluded), C8's rule
-loses −6.50 points and the crash-guarded rule −1.71: the guard helps again
-(BNBUSDT +1.06%) but finds no edge on DOGEUSDT or LINKUSDT.
+Over the five added contracts with a usable result (ENAUSDT excluded), C8's
+rule loses −20.65 points and the crash-guarded rule makes +5.75: it is ahead
+on all five, with two picks that hold up (LTCUSDT +9.66%, BNBUSDT +1.06%)
+and three that lose (DOGEUSDT, ADAUSDT, LINKUSDT). Over all ten: C8's rule
+−32.45 points, lost on every contract; crash-guarded +9.08, ahead on eight
+of ten.
+
+Every crash-guarded final pick passes the guard (crash-session drawdown
+0.7-9.3%); the gap noted under the crash-session check affects only stage-3
+results that added nothing to the screen leader, and in each such case a
+family variant that passes the guard was picked instead.
 
 ## Status
 
