@@ -114,7 +114,7 @@ def main() -> None:
     agree = float(((scores > 0) == g).mean())
     gold_acc = float((g == (y_te > 0.5)).mean())
 
-    merged = model.merge_and_unload()
+    merged = model.merge_and_unload().to(torch.float16)  # PPO loads it in fp16 on a T4
     merged.save_pretrained(a.out)
     tok.save_pretrained(a.out)
     summary = {"test_accuracy": acc, "agreement_with_gold": agree, "gold_test_accuracy": gold_acc,
