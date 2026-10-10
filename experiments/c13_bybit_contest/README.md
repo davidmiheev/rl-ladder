@@ -327,13 +327,13 @@ lost under every stress.
 | XRPPERP | −4.54% | +1.22% | +1.37% | crash-guarded +0.14% |
 | XRPUSDT | −0.18% | −1.01% | −0.40% | all sessions −3.81% |
 | SUIUSDT | −4.81% | **+4.60%** | −4.64% / −4.99% | crash-guarded **+0.84%** |
-| sum of the five | −11.80 | **+3.34** | −0.35 (SUIUSDT OBI) | |
+| sum of the five | −11.80 | **+3.34** | +0.65 (with SUIUSDT OBI; +0.30 with SUIUSDC OBI) | |
 
 C8's rule (rank by chained return over all training sessions) picked the
 crash-session winner every time and lost on all five tests (−11.8 points in
 total). The crash-guarded rule is ahead of it on four of five and, summed
 over the five contracts, ahead of C8's untouched Binance choices (+3.34 vs
-−0.35 points). It produced one clear winner (SUIUSDT, a grid quoter with a
++0.65 points). It produced one clear winner (SUIUSDT, a grid quoter with a
 volatility breaker) and one break-even (XRPPERP). At Bybit's standard maker
 fee (+2 bp) every pick loses; at +1 bp two stay positive (SUIUSDT +0.84%,
 XRPPERP +0.14%).
