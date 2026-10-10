@@ -1,0 +1,530 @@
+<style>
+  #dash-root { --dash-gutter: var(--cds-pad-lg); }
+  .ob { font-family: var(--font-anthropic-sans); display: grid; gap: var(--cds-gap-lg); }
+  .ob h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .ob h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .ob p { margin: 0; max-width: 68ch; }
+  .ob .muted { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .ob .lede { color: var(--color-fg); }
+  .ob .lede b { font-weight: 600; }
+  .ob .card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); min-width: 0; }
+  .ob .controls { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); align-items: center; }
+  .ob .seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); overflow: hidden; }
+  .ob .seg button { font: inherit; font-size: var(--cds-font-size-caption); background: transparent; color: var(--color-fg-muted); border: 0; padding: var(--cds-pad-xs) var(--cds-pad-sm); cursor: pointer; }
+  .ob .seg button[aria-pressed="true"] { background: var(--color-bg); color: var(--color-fg); font-weight: 600; }
+  .ob .seg button:focus-visible { outline: 2px solid var(--cds-chart-axis); outline-offset: -2px; }
+  .ob .legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .ob .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .ob .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .ob .tablewrap { overflow-x: auto; }
+  .ob table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: var(--cds-font-size-body); }
+  .ob th, .ob td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .ob th { font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); vertical-align: bottom; white-space: normal; min-width: 6.5em; }
+  .ob th:first-child, .ob td:first-child { text-align: left; }
+  .ob thead tr.group th { border-bottom: 0; text-align: center; color: var(--color-fg); }
+  .ob td.pos { color: var(--color-ok); }
+  .ob td.neg { color: var(--color-bad); }
+  .ob .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
+  .ob .chart { position: relative; min-height: 220px; }
+  .ob .tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+  .ob .tip .d { color: var(--cds-text-secondary); }
+  .ob .tip .r { display: flex; align-items: center; gap: 6px; }
+  .ob .tip .r i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .ob .status { display: grid; gap: var(--cds-gap-xs); }
+  .ob .status div { display: flex; gap: var(--cds-gap-sm); align-items: baseline; }
+  .ob .pill { font-size: var(--cds-font-size-caption); border: 1px solid var(--color-border-line); border-radius: 999px; padding: 1px 8px; color: var(--color-warn); white-space: nowrap; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+</style>
+
+<div class="ob">
+  <header id="top" style="display:grid;gap:var(--cds-gap-sm)">
+    <h1>OBI before and now: Binance's study month against a year on Bybit</h1>
+    <p class="lede" id="takeaway" data-source="summary">
+      On Binance's held-out week C8's choices made money on <b data-source="summary" data-field="before_up">—</b> of
+      <b data-source="summary" data-field="n">—</b> configurations. Run unchanged for a year on Bybit, without the
+      2025-10-10 crash, <b data-source="summary" data-field="now_up">—</b> of them did, and with the 50 bp stop
+      <b data-source="summary" data-field="stop_up">—</b>.
+    </p>
+    <p class="muted">Each configuration is an OBI quoter chosen on Binance (C8) and the Bybit contract it was run on (C10). Returns are % of the $100k capital, chained across sessions. "Before" is Binance's 7 held-out sessions (2025-09-19 to 09-25); "now" is one Bybit session a week from 2025-09-26 to 2026-10-02 (54 sessions).</p>
+  </header>
+
+  <section class="card" id="compare">
+    <h2>Before and now, per configuration</h2>
+    <p class="muted">Before: Binance held-out week. Now: Bybit forward year, as frozen without the crash session, and with the 50 bp stop on every session. Fills and turnover are medians per session.</p>
+    <div class="tablewrap">
+      <table id="compare-table" data-source="compare" data-row-key="config">
+        <thead>
+          <tr class="group"><th></th><th colspan="2">Before (Binance)</th><th colspan="5">Now (Bybit)</th></tr>
+          <tr>
+            <th data-field="config">Configuration</th>
+            <th data-field="before_return">Held-out return, %</th>
+            <th data-field="before_fills">Fills / session</th>
+            <th data-field="now_return_ex_crash">As frozen, without 10-10, %</th>
+            <th data-field="now_stop_return">With 50 bp stop, all 54, %</th>
+            <th data-field="now_fills">Fills / session</th>
+            <th data-field="now_turnover">Turnover / session (× capital)</th>
+            <th data-field="now_up">Sessions up (as frozen, without 10-10)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" id="compare-note">Binance per-session paths for XRPUSDT, SUIUSDT and AVAXUSDC are being recomputed; until then their "before" figures are C8's published totals.</p>
+  </section>
+
+  <section id="paths" style="display:grid;gap:var(--cds-gap-md)">
+    <div class="controls">
+      <h2 style="margin-right:auto">Over time</h2>
+      <div class="seg" role="group" aria-label="Metric">
+        <button type="button" id="m-ret" data-metric="ret" aria-pressed="true">Cumulative return</button>
+        <button type="button" id="m-fills" data-metric="fills" aria-pressed="false">Fills per session</button>
+        <button type="button" id="m-turn" data-metric="turnover" aria-pressed="false">Turnover per session</button>
+      </div>
+      <div class="seg" role="group" aria-label="Crash session">
+        <button type="button" id="c-ex" data-crash="ex" aria-pressed="true">Without 2025-10-10</button>
+        <button type="button" id="c-in" data-crash="in" aria-pressed="false">With 2025-10-10</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <p class="muted" id="paths-note">Binance: every session of the study month (shaded: the 24 training sessions). Bybit: the same held-out week, then one session a week. Each chart has its own vertical scale.</p>
+    <div class="grid" id="cards" data-source="sessions"></div>
+  </section>
+
+  <section class="card" id="contest">
+    <h2>Bybit contest: C8's full procedure on a year of Bybit</h2>
+    <p class="muted">Every heuristic competes per contract: stage 1 screens OBI, GLFT and hfgrid over spread floor, κ and skew on 24 training sessions (one every 8 days, Aug 2025 to Feb 2026). Stage 1 numbers are in-sample (the best of 54 settings on the same 24 sessions), so they overstate; validation (Mar to Jun 2026) and the locked test (Jun to Oct 2026) decide. Stage 2 adds C8's tricks on all 48 training sessions, which include the 2025-10-10 crash; because that one session can decide the ranking, stage 2 and 3 pick under two rules, C8's (all sessions) and C10's crash-guarded one (crash drawdown at most 10%, then the best without the crash), and both picks go on to validation and the test. "C8 choice" is the configuration chosen on Binance, run unchanged on the same sessions.</p>
+    <div class="tablewrap">
+      <table id="contest-table" data-source="leaderboard" data-row-key="key">
+        <thead>
+          <tr>
+            <th data-field="contract">Contract</th>
+            <th data-field="entry">Entry</th>
+            <th data-field="config">Setting</th>
+            <th data-field="stage">Stage</th>
+            <th data-field="ret">Return, chained, %</th>
+            <th data-field="ret_ex">Without 2025-10-10, %</th>
+            <th data-field="ret_norebate">Without the 0.5 bp rebate, %</th>
+            <th data-field="crash">2025-10-10 alone, %</th>
+            <th data-field="ret_valid">Validation only, %</th>
+            <th data-field="ret_test">Test only, %</th>
+            <th data-field="up">Sessions up</th>
+            <th data-field="fills">Fills / session</th>
+            <th data-field="turnover">Turnover / session (× capital)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="legend" id="contest-legend"></div>
+    <div class="grid" id="contest-cards" data-source="contest"></div>
+  </section>
+
+  <section class="card" id="pending">
+    <h2>Status: complete</h2>
+    <div class="status">
+      <div><span class="pill">done</span><span>All 11 contracts through all five stages (screen, families, greedy, validation, locked test of 27 sessions, Jun to Oct 2026).</span></div>
+      <div><span class="pill">done</span><span>C8's selection rule picked the crash-session winner and lost on all 10 contracts with a usable result: −32.45 points in total.</span></div>
+      <div><span class="pill">done</span><span>The crash-guarded rule made +9.08 points and beat C8's rule on 8 of 10; over C10's five it beat C8's choices run unchanged (+3.33 vs +0.64).</span></div>
+      <div><span class="pill">done</span><span>Three picks hold up, each a slow quoter with a volatility breaker: LTCUSDT +9.66% (positive under every stress, +4.62% at the standard +2 bp fee; lost 2.58% on validation), SUIUSDT +4.60% (9 of 10 stresses), BNBUSDT +1.06% (9 of 10).</span></div>
+      <div><span class="pill">done</span><span>ENAUSDT is a backtest artefact (the rebate on a spread floor under one tick) and is left out of the sums.</span></div>
+      <div><span class="pill">done</span><span>Full write-up: docs/writeups/c13-bybit-contest.md (PDF alongside).</span></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  window.OB = {
+    CRASH: '2025-10-10',
+    SERIES: [
+      { variant: 'C8 choice on Binance', label: 'C8 choice, Binance' },
+      { variant: 'as frozen on Bybit', label: 'As frozen, Bybit' },
+      { variant: 'with 50 bp stop on Bybit', label: 'With 50 bp stop, Bybit' },
+      { variant: 're-chosen on Bybit (C12)', label: 'Re-chosen on Bybit (C12), held-out week' },
+    ],
+    state: { metric: 'ret', crash: 'ex' },
+  };
+
+  dash.calc('compare', {
+    inputs: ['sessions', 'c8_published'],
+    title: 'Before and now, per configuration',
+    description: 'Per configuration: Binance held-out chained return and median fills (C8 published totals where no Binance sessions are loaded); Bybit forward-year chained return as frozen without 2025-10-10 and with the 50 bp stop on all 54 sessions; Bybit median fills and turnover; Bybit sessions up.',
+    fn: (sessions, c8_published) => {
+      const chain = (rs) => (rs.reduce((a, r) => a * (1 + Number(r.return_pct) / 100), 1) - 1) * 100;
+      const median = (xs) => { const s = xs.map(Number).sort((a, b) => a - b); const m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : null; };
+      const configs = [...new Set(sessions.map((r) => r.config))];
+      return configs.map((config) => {
+        const of = (phase, variant) => sessions.filter((r) => r.config === config && r.phase === phase && r.variant === variant);
+        const bin = of('Binance held-out', 'C8 choice on Binance');
+        const pub = c8_published.find((p) => p.config === config);
+        const fw = of('Bybit forward year', 'as frozen on Bybit');
+        const fwEx = fw.filter((r) => r.date !== '2025-10-10');
+        const stop = of('Bybit forward year', 'with 50 bp stop on Bybit');
+        return {
+          config,
+          before_return: bin.length ? chain(bin) : Number(pub.held_out_pct),
+          before_fills: bin.length ? median(bin.map((r) => r.fills)) : Number(pub.fills_per_day),
+          before_source: bin.length ? 'sessions' : 'C8 published',
+          now_return_ex_crash: chain(fwEx),
+          now_stop_return: chain(stop),
+          now_fills: median(fw.map((r) => r.fills)),
+          now_turnover: median(fw.map((r) => r.turnover)),
+          now_up: fwEx.filter((r) => Number(r.return_pct) > 0).length + ' / ' + fwEx.length,
+        };
+      });
+    },
+  });
+
+  dash.calc('summary', {
+    inputs: ['compare'],
+    title: 'How many configurations made money',
+    description: 'Counts of configurations with a positive Binance held-out return, a positive Bybit forward-year return as frozen without 2025-10-10, and a positive Bybit forward-year return with the 50 bp stop.',
+    fn: (compare) => [{
+      n: compare.length,
+      before_up: compare.filter((r) => r.before_return > 0).length,
+      now_up: compare.filter((r) => r.now_return_ex_crash > 0).length,
+      stop_up: compare.filter((r) => r.now_stop_return > 0).length,
+    }],
+  });
+</script>
+
+<script>
+  (() => {
+    const fmtPct = (v) => (v > 0 ? '+' : '') + v.toFixed(2);
+    const tbody = document.querySelector('#compare-table tbody');
+    dash.onData(() => {
+      const c = dash.data('compare');
+      const s = dash.data('summary');
+      for (const el of document.querySelectorAll('[data-source="summary"][data-field]')) {
+        el.textContent = s.status === 'ok' && s.data.length ? String(s.data[0][el.dataset.field]) : '—';
+      }
+      tbody.replaceChildren();
+      if (c.status !== 'ok') return;
+      const cols = ['config', 'before_return', 'before_fills', 'now_return_ex_crash', 'now_stop_return', 'now_fills', 'now_turnover', 'now_up'];
+      for (const r of c.data) {
+        const tr = document.createElement('tr');
+        for (const k of cols) {
+          const td = document.createElement('td');
+          const v = r[k];
+          if (k === 'config') td.textContent = v;
+          else if (k.endsWith('return')) { td.textContent = fmtPct(v); td.className = v > 0 ? 'pos' : v < 0 ? 'neg' : ''; }
+          else if (k.endsWith('ex_crash')) { td.textContent = fmtPct(v); td.className = v > 0 ? 'pos' : v < 0 ? 'neg' : ''; }
+          else if (k === 'now_up') td.textContent = v;
+          else if (k === 'now_turnover') td.textContent = v == null ? '—' : v.toFixed(1);
+          else td.textContent = v == null ? '—' : d3.format(',.0f')(v);
+          if (k === 'before_return' && r.before_source !== 'sessions') td.textContent += ' *';
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      const anyPublished = c.data.some((r) => r.before_source !== 'sessions');
+      document.getElementById('compare-note').hidden = !anyPublished;
+    });
+  })();
+</script>
+
+<script>
+  (() => {
+    const { SERIES, CRASH, state } = window.OB;
+    const cardsEl = document.getElementById('cards');
+    const legend = document.getElementById('legend');
+    const parse = d3.utcParse('%Y-%m-%d');
+    const fmtDate = d3.utcFormat('%b %-d, %Y');
+    const metricLabel = { ret: 'Cumulative return, %', fills: 'Fills per session', turnover: 'Turnover per session, × capital' };
+
+    legend.replaceChildren(...SERIES.map((s, i) => {
+      const span = document.createElement('span');
+      const sw = document.createElement('i');
+      sw.style.background = dash.colors[i];
+      span.append(sw, document.createTextNode(s.label));
+      return span;
+    }));
+
+    for (const b of document.querySelectorAll('[data-metric]')) {
+      b.addEventListener('click', () => { state.metric = b.dataset.metric; draw(); });
+    }
+    for (const b of document.querySelectorAll('[data-crash]')) {
+      b.addEventListener('click', () => { state.crash = b.dataset.crash; draw(); });
+    }
+
+    function seriesFor(rows, config) {
+      return SERIES.map((s, i) => {
+        let pts = rows.filter((r) => r.config === config && r.variant === s.variant)
+          .map((r) => ({ date: parse(r.date), day: r.date, ret: Number(r.return_pct), fills: Number(r.fills), turnover: Number(r.turnover) }))
+          .sort((a, b) => a.date - b.date);
+        if (state.crash === 'ex') pts = pts.filter((p) => p.day !== CRASH);
+        let acc = 1;
+        for (const p of pts) { acc *= 1 + p.ret / 100; p.cum = (acc - 1) * 100; }
+        return { ...s, i, pts };
+      }).filter((s) => s.pts.length);
+    }
+
+    function draw() {
+      for (const b of document.querySelectorAll('[data-metric]')) b.setAttribute('aria-pressed', String(b.dataset.metric === state.metric));
+      for (const b of document.querySelectorAll('[data-crash]')) b.setAttribute('aria-pressed', String(b.dataset.crash === state.crash));
+      const d = dash.data('sessions');
+      cardsEl.replaceChildren();
+      if (d.status !== 'ok') return;
+      const rows = d.data;
+      const configs = [...new Set(rows.map((r) => r.config))];
+      const x0 = parse('2025-08-26');
+      const x1 = parse('2026-10-03');
+      const trainEnd = parse('2025-09-19');
+      const heldEnd = parse('2025-09-26');
+      const crash = parse(CRASH);
+      const key = state.metric === 'ret' ? 'cum' : state.metric;
+
+      for (const config of configs) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.id = 'path-' + config.replace(/[^A-Za-z0-9]+/g, '-');
+        const h = document.createElement('h2');
+        h.textContent = config;
+        const note = document.createElement('p');
+        note.className = 'muted';
+        note.textContent = metricLabel[state.metric];
+        const box = document.createElement('div');
+        box.className = 'chart';
+        card.append(h, note, box);
+        cardsEl.appendChild(card);
+
+        const series = seriesFor(rows, config);
+        const W = Math.max(280, box.clientWidth || 360);
+        const H = 220;
+        const all = series.flatMap((s) => s.pts.map((p) => p[key]));
+        let lo = d3.min(all), hi = d3.max(all);
+        if (state.metric === 'ret') { lo = Math.min(lo, 0); hi = Math.max(hi, 0); } else { lo = 0; }
+        if (lo === hi) hi = lo + 1;
+        const y = d3.scaleLinear([lo, hi], [H - 22, 8]).nice(5);
+        const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
+          .attr('aria-label', `${config}: ${metricLabel[state.metric]}`);
+        const yTicks = y.ticks(5);
+        const fmtY = state.metric === 'ret' ? d3.format('+.1f') : d3.format(',.0f');
+        const probe = svg.append('text').attr('font-size', 11).text(yTicks.map(fmtY).reduce((a, b) => (a.length > b.length ? a : b), ''));
+        const ml = probe.node().getComputedTextLength() + 10;
+        probe.remove();
+        const x = d3.scaleUtc([x0, x1], [ml, W - 8]);
+
+        svg.append('rect').attr('x', x(x0)).attr('y', 8).attr('width', x(trainEnd) - x(x0)).attr('height', H - 30)
+          .attr('fill', 'var(--cds-chart-grid)').attr('opacity', 0.6);
+        svg.append('rect').attr('x', x(trainEnd)).attr('y', 8).attr('width', x(heldEnd) - x(trainEnd)).attr('height', H - 30)
+          .attr('fill', 'var(--cds-chart-grid)').attr('opacity', 0.25);
+        svg.append('g').selectAll('line').data(yTicks).join('line')
+          .attr('x1', ml).attr('x2', W - 8).attr('y1', (t) => y(t)).attr('y2', (t) => y(t))
+          .attr('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 1);
+        if (state.metric === 'ret') {
+          svg.append('line').attr('x1', ml).attr('x2', W - 8).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)').attr('stroke-width', 1);
+        }
+        svg.append('line').attr('x1', x(crash)).attr('x2', x(crash)).attr('y1', 8).attr('y2', H - 22)
+          .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+        svg.append('g').selectAll('text').data(yTicks).join('text')
+          .attr('x', ml - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+          .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(fmtY);
+        const xTicks = W < 420 ? [parse('2025-09-01'), parse('2026-03-01'), parse('2026-09-01')]
+          : [parse('2025-09-01'), parse('2025-12-01'), parse('2026-03-01'), parse('2026-06-01'), parse('2026-09-01')];
+        svg.append('g').selectAll('text').data(xTicks).join('text')
+          .attr('x', (t) => x(t)).attr('y', H - 6).attr('text-anchor', 'middle')
+          .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(d3.utcFormat("%b '%y"));
+
+        const line = d3.line().x((p) => x(p.date)).y((p) => y(p[key]));
+        for (const s of series) {
+          // Binance and Bybit are separate venues: Bybit's line starts at its own held-out week.
+          svg.append('path').attr('d', line(s.pts)).attr('fill', 'none').attr('stroke', dash.colors[s.i])
+            .attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+        }
+
+        const tip = document.createElement('div');
+        tip.className = 'tip';
+        tip.hidden = true;
+        box.appendChild(tip);
+        const rule = svg.append('line').attr('y1', 8).attr('y2', H - 22).attr('stroke', 'var(--cds-chart-axis)').attr('visibility', 'hidden');
+        const dots = series.map((s) => svg.append('circle').attr('r', 3.5).attr('fill', dash.colors[s.i]).attr('visibility', 'hidden'));
+        const fmtV = state.metric === 'ret' ? (v) => d3.format('+.2f')(v) + '%' : state.metric === 'fills' ? d3.format(',.0f') : d3.format(',.1f');
+        svg.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - 8).attr('height', H).attr('fill', 'transparent')
+          .on('mousemove', (ev) => {
+            const [mx] = d3.pointer(ev);
+            const t = x.invert(mx);
+            const near = series.map((s) => {
+              const idx = d3.bisector((p) => p.date).center(s.pts, t);
+              return { s, p: s.pts[idx] };
+            }).filter((n) => n.p && Math.abs(n.p.date - t) < 6 * 864e5);
+            if (!near.length) { tip.hidden = true; rule.attr('visibility', 'hidden'); dots.forEach((dt) => dt.attr('visibility', 'hidden')); return; }
+            const at = near[0].p.date;
+            rule.attr('x1', x(at)).attr('x2', x(at)).attr('visibility', 'visible');
+            dots.forEach((dt) => dt.attr('visibility', 'hidden'));
+            tip.replaceChildren();
+            const dd = document.createElement('div'); dd.className = 'd'; dd.textContent = fmtDate(at); tip.appendChild(dd);
+            for (const n of near) {
+              dots[series.indexOf(n.s)].attr('cx', x(n.p.date)).attr('cy', y(n.p[key])).attr('visibility', 'visible');
+              const r = document.createElement('div'); r.className = 'r';
+              const sw = document.createElement('i'); sw.style.background = dash.colors[n.s.i];
+              r.append(sw, document.createTextNode(`${n.s.label}: ${fmtV(n.p[key])}`));
+              tip.appendChild(r);
+            }
+            tip.hidden = false;
+            const bw = box.clientWidth;
+            const px = (x(at) / W) * bw;
+            tip.style.left = Math.min(Math.max(0, px + 10), Math.max(0, bw - tip.offsetWidth)) + 'px';
+            tip.style.top = '4px';
+          })
+          .on('mouseleave', () => { tip.hidden = true; rule.attr('visibility', 'hidden'); dots.forEach((dt) => dt.attr('visibility', 'hidden')); });
+      }
+    }
+
+    dash.onData(draw);
+  })();
+</script>
+
+<script>
+  dash.calc('leaderboard', {
+    inputs: ['contest'],
+    title: 'Contest leaderboard',
+    description: 'Per contract and entry: chained return over the entry\'s sessions in its stage, sessions up, median fills and turnover per session.',
+    fn: (contest) => {
+      const out = new Map();
+      for (const r of contest) {
+        const k = r.contract + '|' + r.entry;
+        if (!out.has(k)) out.set(k, { key: k, contract: r.contract, entry: r.entry, config: r.config, stage: r.stage, role: r.role, rs: [] });
+        out.get(k).rs.push(r);
+      }
+      const median = (xs) => { const s = xs.map(Number).sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+      return [...out.values()].map((e) => ({
+        key: e.key, contract: e.contract, entry: e.entry, config: e.config, stage: e.stage, role: e.role,
+        ret: (e.rs.reduce((a, r) => a * (1 + Number(r.return_pct) / 100), 1) - 1) * 100,
+        ret_ex: (e.rs.filter((r) => r.date !== '2025-10-10').reduce((a, r) => a * (1 + Number(r.return_pct) / 100), 1) - 1) * 100,
+        ret_norebate: (e.rs.reduce((a, r) => a * (1 + Number(r.return_pct) / 100 - Number(r.turnover) * 0.00005), 1) - 1) * 100,
+        ret_valid: e.rs.some((r) => r.block === 'validation') ? (e.rs.filter((r) => r.block === 'validation').reduce((a, r) => a * (1 + Number(r.return_pct) / 100), 1) - 1) * 100 : null,
+        ret_test: e.rs.some((r) => r.block === 'test') ? (e.rs.filter((r) => r.block === 'test').reduce((a, r) => a * (1 + Number(r.return_pct) / 100), 1) - 1) * 100 : null,
+        crash: e.rs.some((r) => r.date === '2025-10-10') ? Number(e.rs.find((r) => r.date === '2025-10-10').return_pct) : null,
+        up: `${e.rs.filter((r) => Number(r.return_pct) > 0).length}/${e.rs.length}`,
+        fills: median(e.rs.map((r) => r.fills)), turnover: median(e.rs.map((r) => r.turnover)),
+      }));
+    },
+  });
+
+  (() => {
+    const tbody = document.querySelector('#contest-table tbody');
+    const cardsEl = document.getElementById('contest-cards');
+    const legend = document.getElementById('contest-legend');
+    const parse = d3.utcParse('%Y-%m-%d');
+    const fmtDate = d3.utcFormat('%b %-d, %Y');
+    const ROLES = [['leader', 'Stage 1 leader'], ['runner-up', 'Stage 1 runners-up'], ['base', 'Stage 1 leader, all 48 sessions'],
+      ['stage2', 'Stage 2 best, all sessions'], ['stage2b', 'Stage 2 best, crash-guarded'],
+      ['stage3', 'Stage 3 greedy, all sessions'], ['stage3b', 'Stage 3 greedy, crash-guarded'],
+      ['pick', 'Final pick, all sessions'], ['pickb', 'Final pick, crash-guarded'], ['c8', 'C8 choice, unchanged']];
+    const color = { leader: dash.colors[0], 'runner-up': 'var(--cds-chart-reference)', base: dash.colors[0], stage2: dash.colors[2], stage2b: dash.colors[3],
+      stage3: dash.colors[4], stage3b: dash.colors[5], pick: dash.colors[4], pickb: dash.colors[5], c8: dash.colors[1] };
+    legend.replaceChildren(...ROLES.map(([k, label]) => {
+      const span = document.createElement('span');
+      const sw = document.createElement('i');
+      sw.style.background = color[k];
+      span.append(sw, document.createTextNode(label));
+      return span;
+    }));
+
+    dash.onData(() => {
+      const lb = dash.data('leaderboard');
+      tbody.replaceChildren();
+      if (lb.status === 'ok') {
+        for (const r of lb.data) {
+          const tr = document.createElement('tr');
+          for (const k of ['contract', 'entry', 'config', 'stage', 'ret', 'ret_ex', 'ret_norebate', 'crash', 'ret_valid', 'ret_test', 'up', 'fills', 'turnover']) {
+            const td = document.createElement('td');
+            const v = r[k];
+            if (k === 'ret' || k === 'ret_ex' || k === 'ret_norebate' || k === 'crash' || k === 'ret_valid' || k === 'ret_test') {
+              td.textContent = v == null ? '—' : d3.format('+.2f')(v);
+              if (v != null) td.className = v >= 0 ? 'pos' : 'neg';
+            }
+            else if (k === 'fills') td.textContent = d3.format(',.0f')(v);
+            else if (k === 'turnover') td.textContent = d3.format(',.1f')(v);
+            else td.textContent = v;
+            if (k === 'entry' && r.role === 'leader') td.style.fontWeight = '600';
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+      }
+
+      const d = dash.data('contest');
+      cardsEl.replaceChildren();
+      if (d.status !== 'ok') return;
+      const rows = d.data;
+      for (const contract of [...new Set(rows.map((r) => r.contract))]) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const h = document.createElement('h2');
+        h.textContent = contract;
+        const note = document.createElement('p');
+        note.className = 'muted';
+        note.textContent = 'Cumulative return, %';
+        const box = document.createElement('div');
+        box.className = 'chart';
+        card.append(h, note, box);
+        cardsEl.appendChild(card);
+
+        const entries = [...new Set(rows.filter((r) => r.contract === contract).map((r) => r.entry))].map((entry) => {
+          const pts = rows.filter((r) => r.contract === contract && r.entry === entry)
+            .map((r) => ({ date: parse(r.date), ret: Number(r.return_pct), role: r.role }))
+            .sort((a, b) => a.date - b.date);
+          let acc = 1;
+          for (const p of pts) { acc *= 1 + p.ret / 100; p.cum = (acc - 1) * 100; }
+          return { entry, role: pts[0].role, pts };
+        }).sort((a, b) => (a.role === 'leader') - (b.role === 'leader'));
+        const W = Math.max(280, box.clientWidth || 360);
+        const H = 220;
+        const all = entries.flatMap((e) => e.pts.map((p) => p.cum));
+        const y = d3.scaleLinear([Math.min(0, d3.min(all)), Math.max(0, d3.max(all))], [H - 22, 8]).nice(5);
+        const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
+          .attr('aria-label', `${contract}: cumulative return of contest entries`);
+        const yTicks = y.ticks(5);
+        const fmtY = d3.format('+.1f');
+        const probe = svg.append('text').attr('font-size', 11).text(yTicks.map(fmtY).reduce((a, b) => (a.length > b.length ? a : b), ''));
+        const ml = probe.node().getComputedTextLength() + 10;
+        probe.remove();
+        const dates = entries.flatMap((e) => e.pts.map((p) => p.date));
+        const x = d3.scaleUtc(d3.extent(dates), [ml, W - 8]);
+        svg.append('g').selectAll('line').data(yTicks).join('line')
+          .attr('x1', ml).attr('x2', W - 8).attr('y1', (t) => y(t)).attr('y2', (t) => y(t))
+          .attr('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 1);
+        svg.append('line').attr('x1', ml).attr('x2', W - 8).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+        svg.append('g').selectAll('text').data(yTicks).join('text')
+          .attr('x', ml - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+          .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(fmtY);
+        svg.append('g').selectAll('text').data(x.ticks(W < 420 ? 3 : 5)).join('text')
+          .attr('x', (t) => x(t)).attr('y', H - 6).attr('text-anchor', 'middle')
+          .attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(d3.utcFormat("%b '%y"));
+        const line = d3.line().x((p) => x(p.date)).y((p) => y(p.cum));
+        for (const e of entries) {
+          svg.append('path').attr('d', line(e.pts)).attr('fill', 'none').attr('stroke', color[e.role])
+            .attr('stroke-width', e.role === 'runner-up' ? 1.25 : 2).attr('opacity', e.role === 'runner-up' ? 0.7 : 1)
+            .attr('stroke-dasharray', e.role === 'base' ? '4 3' : (e.role === 'stage3' || e.role === 'stage3b') ? '2 2' : null)
+            .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+        }
+        const tip = document.createElement('div');
+        tip.className = 'tip';
+        tip.hidden = true;
+        box.appendChild(tip);
+        const rule = svg.append('line').attr('y1', 8).attr('y2', H - 22).attr('stroke', 'var(--cds-chart-axis)').attr('visibility', 'hidden');
+        svg.append('rect').attr('x', ml).attr('y', 0).attr('width', W - ml - 8).attr('height', H).attr('fill', 'transparent')
+          .on('mousemove', (ev) => {
+            const t = x.invert(d3.pointer(ev)[0]);
+            const near = entries.map((e) => ({ e, p: e.pts[d3.bisector((p) => p.date).center(e.pts, t)] }));
+            const at = near[0].p.date;
+            rule.attr('x1', x(at)).attr('x2', x(at)).attr('visibility', 'visible');
+            tip.replaceChildren();
+            const dd = document.createElement('div'); dd.className = 'd'; dd.textContent = fmtDate(at); tip.appendChild(dd);
+            for (const n of [...near].reverse()) {
+              const r = document.createElement('div'); r.className = 'r';
+              const sw = document.createElement('i'); sw.style.background = color[n.e.role];
+              r.append(sw, document.createTextNode(`${n.e.entry}: ${d3.format('+.2f')(n.p.cum)}%`));
+              tip.appendChild(r);
+            }
+            tip.hidden = false;
+            const bw = box.clientWidth;
+            tip.style.left = Math.min(Math.max(0, (x(at) / W) * bw + 10), Math.max(0, bw - tip.offsetWidth)) + 'px';
+            tip.style.top = '4px';
+          })
+          .on('mouseleave', () => { tip.hidden = true; rule.attr('visibility', 'hidden'); });
+      }
+    });
+  })();
+</script>
