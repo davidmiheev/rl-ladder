@@ -85,8 +85,9 @@ STRATEGY_NAMES = {v: k for k, v in STRATEGY_IDS.items()}
     Z_TOX_BUY, Z_TOX_SELL, Z_VAR_FAST, Z_VAR_SLOW, Z_FLOW_S, Z_FLOW_A,
     Z_FLOW_A_SLOW, Z_HALT_UNTIL, Z_HALT_SIDE, Z_PEAK_PNL, Z_LOSS_HALT_UNTIL,
     Z_SIG_S, Z_MOM, Z_BID_ANCHOR, Z_ASK_ANCHOR, Z_LAST_FLATTEN,
-) = range(42)
-STATE_SIZE = 42
+    Z_CAP_PX,
+) = range(43)
+STATE_SIZE = 43
 
 #: Slots in the `params` vector, which carries the union of every strategy's
 #: knobs.  A vector rather than a dozen keyword arguments because numba
@@ -107,8 +108,9 @@ STATE_SIZE = 42
     P_FAIR_MODE, P_FAIR_COEF,
     P_DAG_MODE, P_DAG_B, P_DAG_W_MKT, P_DAG_W_DIST, P_DAG_W_POS, P_DAG_W_TOX, P_DAG_THR,
     P_DAG_WIDEN_BP,
-) = range(58)
-PARAM_SIZE = 58
+    P_CAP_REF, P_CAP_RESTING, P_LOSS_FLATTEN,
+) = range(61)
+PARAM_SIZE = 61
 
 PARAM_NAMES = (
     "strat", "half_spread_bp", "skew_bp", "alpha_bp", "grid_num",
@@ -125,6 +127,7 @@ PARAM_NAMES = (
     "fair_mode", "fair_coef",
     "dag_mode", "dag_b", "dag_w_mkt", "dag_w_dist", "dag_w_pos", "dag_w_tox", "dag_thr",
     "dag_widen_bp",
+    "cap_ref", "cap_resting", "loss_flatten",
 )
 
 #: C9's external per-step series, one row per quoting step: column 0 is the
@@ -180,18 +183,21 @@ def _obi_alpha(depth, mid_price, tick_size, looking_depth, roi_lb_tick, roi_ub_t
     the standardisation is running and lives in the caller, because recomputing
     `nanmean`/`nanstd` over an hour-long window at every 100 ms iteration is
     quadratic and the notebook only gets away with it at a 1 s interval.
+
+    Read through `*_qty_at_tick` (C11), which every depth type has: inside
+    the ROI it is the same array element, so results are unchanged.
     """
     sum_ask_qty = 0.0
     from_tick = max(depth.best_ask_tick, roi_lb_tick)
     upto_tick = min(int(np.floor(mid_price * (1 + looking_depth) / tick_size)), roi_ub_tick)
     for price_tick in range(from_tick, upto_tick):
-        sum_ask_qty += depth.ask_depth[price_tick - roi_lb_tick]
+        sum_ask_qty += depth.ask_qty_at_tick(price_tick)
 
     sum_bid_qty = 0.0
     from_tick = min(depth.best_bid_tick, roi_ub_tick)
     upto_tick = max(int(np.ceil(mid_price * (1 - looking_depth) / tick_size)), roi_lb_tick)
     for price_tick in range(from_tick, upto_tick, -1):
-        sum_bid_qty += depth.bid_depth[price_tick - roi_lb_tick]
+        sum_bid_qty += depth.bid_qty_at_tick(price_tick)
 
     return sum_bid_qty - sum_ask_qty
 
@@ -631,16 +637,31 @@ def quote_once(
 
     # ------------------------------------------------------------- quoting
     grid_num = int(params[P_GRID_NUM])
-    notional = position * mid_price
+    # C10: the position cap. By default it is notional at the current mid,
+    # checked against the position only, which in a crash lets the quoter
+    # keep buying as the price falls and lets a whole 20-level grid fill past
+    # the cap at once. `cap_ref` 1 values the cap at the session's first mid
+    # (a cap in units); `cap_resting` 1 counts resting orders against it, so
+    # a side posts only the levels the remaining room allows.
+    if np.isnan(state[Z_CAP_PX]) or state[Z_CAP_PX] == 0.0:
+        state[Z_CAP_PX] = mid_price
+    cap_px = state[Z_CAP_PX] if params[P_CAP_REF] > 0.0 else mid_price
+    notional = position * cap_px
+    bid_levels = grid_num
+    ask_levels = grid_num
+    if params[P_CAP_RESTING] > 0.0:
+        level_notional = order_qty * cap_px
+        bid_levels = min(grid_num, int((params[P_MAX_POSITION_DOLLAR] - notional) // level_notional))
+        ask_levels = min(grid_num, int((params[P_MAX_POSITION_DOLLAR] + notional) // level_notional))
     new_bid_orders = Dict.empty(np.uint64, np.float64)
     if notional < params[P_MAX_POSITION_DOLLAR] and np.isfinite(bid_price):
-        for _ in range(grid_num):
+        for _ in range(bid_levels):
             new_bid_orders[np.uint64(round(bid_price / tick_size))] = bid_price
             bid_price -= grid_interval
 
     new_ask_orders = Dict.empty(np.uint64, np.float64)
     if notional > -params[P_MAX_POSITION_DOLLAR] and np.isfinite(ask_price):
-        for _ in range(grid_num):
+        for _ in range(ask_levels):
             new_ask_orders[np.uint64(round(ask_price / tick_size))] = ask_price
             ask_price += grid_interval
 
@@ -665,9 +686,16 @@ def quote_once(
     # with an immediate-or-cancel order at the opposite touch, paying the
     # taker fee, at most once a second. Submitted after the quote refresh so
     # the cancel pass above cannot catch it in flight.
-    if (params[P_INV_FLATTEN] > 0.0 and two_sided and abs(norm_pos) > params[P_INV_FLATTEN]
-            and t - state[Z_LAST_FLATTEN] >= 10):
-        excess = (abs(norm_pos) - 0.5 * params[P_INV_FLATTEN]) * params[P_MAX_POSITION_DOLLAR] / mid_price
+    # C10: `loss_flatten` 1 makes the loss limit a stop: while it halts
+    # quoting, the whole position goes out the same way, instead of waiting
+    # for the passive reduce-only quotes to fill in a market running away.
+    loss_exit = params[P_LOSS_FLATTEN] > 0.0 and paused == 3.0 and position != 0.0
+    if (two_sided and t - state[Z_LAST_FLATTEN] >= 10
+            and (loss_exit or (params[P_INV_FLATTEN] > 0.0 and abs(norm_pos) > params[P_INV_FLATTEN]))):
+        if loss_exit:
+            excess = abs(position)
+        else:
+            excess = (abs(norm_pos) - 0.5 * params[P_INV_FLATTEN]) * params[P_MAX_POSITION_DOLLAR] / mid_price
         qty = max(round(excess / lot_size) * lot_size, lot_size)
         flatten_id = np.uint64(1 << 40) + np.uint64(t)
         if position > 0.0:

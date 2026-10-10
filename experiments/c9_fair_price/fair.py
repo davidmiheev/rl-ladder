@@ -17,6 +17,8 @@ its series with `fair_src`:
                           sessions and cached in runs/c9/gates.json)
     dag:<strategy>:<round> the DAgger student's per-side market scores (`dagger.py`),
                           columns 1 and 2 of the kernel's series
+    ll:<task>:<delay>     C10's lead-lag model forecast (`c10_forward/leadlag.py`
+                          `series`), with outside data arriving <delay> ms late
     feat:<name>           one raw feature from `predict.py`, e.g. `feat:micro_bp`,
                           the micro-price's offset: quoting around the
                           micro-price instead of the mid
@@ -117,6 +119,11 @@ def series(src: str, symbol: str, date: str) -> np.ndarray:
         import dagger
 
         return dagger.series(args[0], int(args[1]), symbol, date, f)
+    if kind == "ll":
+        sys.path.insert(0, str(HERE.parent / "c10_forward"))
+        import leadlag
+
+        return leadlag.series(args[0], int(args[1]), symbol, date)
     if kind == "pred":
         import predict
 

@@ -1091,3 +1091,47 @@ free sources) are in the Part C overview, §6–§8
 
 Writeup: [`writeups/c9-fair-price.md`](writeups/c9-fair-price.md).
 Lab notebook: [`../experiments/c9_fair_price/README.md`](../experiments/c9_fair_price/README.md).
+
+## C10. A year forward on Bybit, the crash, and data from outside the book (added, not from the original ladder)
+
+Not one of the 59 items. C10 ran the frozen C8 configurations, unchanged, on
+a year of Bybit's free order books (one session a week from 2025-09-26, and
+the study month's held-out week as a venue control), tested risk controls on
+the 2025-10-10 crash, and measured whether the same asset's other markets
+(Binance perpetual and spot trades, Bybit's perpetual) forecast the traded
+book's next second — first as forecasts, then through the backtest.
+
+Its answer: without the crash only one of six configurations makes money on
+Bybit (XRPUSDC → XRPPERP, +3.96%, +0.21% at the standard maker fee), and the
+same held-out week already costs most of the edge on the new venue; none of
+C8's controls bounds the crash, while a loss limit that exits at the touch
+(stop 50 bp) holds every configuration's crash drawdown to at most 6.4% under
+every stress; outside data roughly doubles the 1 s forecast's R² and makes
+almost every forecast rule better held out, but the genuine lead (ETH OBI
++0.85% → +1.78%) is gone at +100–250 ms of delay, and XRP's gain is the
+crash session.
+
+Writeup: [`writeups/c10-forward.md`](writeups/c10-forward.md).
+Lab notebook: [`../experiments/c10_forward/README.md`](../experiments/c10_forward/README.md).
+
+## C13. C8's selection procedure on a year of Bybit, as a heuristic contest (added, not from the original ladder)
+
+Not one of the 59 items. C13 reran C8's whole procedure — a 54-setting
+screen, every risk-control family, greedy forward selection, validation and
+the stress set — on Bybit with six months of training (48 sessions), a
+validation block (27) and a locked test (27, Jun-Oct 2026), on C10's five
+contracts and six more, under C8's selection rule and under C10's crash
+guard.
+
+Its answer: C8's rule picks the configuration that won the 2025-10-10 crash
+(positions past the cap on the right side of the rebound) and loses on all
+ten tests with a usable result (−32.45 points); the crash-guarded rule makes
++9.08 points and beats C8's choices run unchanged over C10's five (+3.33 vs
++0.64). Three picks hold up, each a slow quoter with a volatility breaker:
+LTCUSDT +9.66% (positive under every stress, +4.62% at Bybit's standard
++2 bp fee), SUIUSDT +4.60% and BNBUSDT +1.06%. ENAUSDT's pick earned
++11,024% on validation from the rebate on a spread floor under one tick,
+and lost on every test session.
+
+Writeup: [`writeups/c13-bybit-contest.md`](writeups/c13-bybit-contest.md).
+Lab notebook: [`../experiments/c13_bybit_contest/README.md`](../experiments/c13_bybit_contest/README.md).

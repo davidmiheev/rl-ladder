@@ -104,3 +104,41 @@ Before trusting any C3–C5 result, read hftbacktest's
 policy will happily exploit an optimistic queue model — a "learned improvement"
 that is really the fill simulator being too generous is the most likely wrong
 result in Part C, and it looks exactly like success.
+
+## Backtest result cache (Part C, C8-C13)
+
+`runs/c8/days/` holds every per-session backtest result of C8, C10, C12 and
+C13 (one file per configuration-session key). It is gitignored; a copy is
+kept in the private Kaggle dataset `davidmiheev/rl-ladder-c8-days` (23 MB
+compressed, 2,434 keys, uploaded 2026-10-10). Restore into a fresh checkout,
+with `KAGGLE_API_TOKEN` set:
+
+```sh
+kaggle datasets download davidmiheev/rl-ladder-c8-days -f c8_days.tgz -p /tmp/c8cache
+kaggle datasets download davidmiheev/rl-ladder-c8-days -f c8_days.tgz.sha256 -p /tmp/c8cache
+(cd /tmp/c8cache && sha256sum -c c8_days.tgz.sha256)
+mkdir -p runs/c8 && tar xzf /tmp/c8cache/c8_days.tgz -C runs/c8
+```
+
+Download the files one at a time (`-f`): the whole-dataset download returned
+404 right after creation. After new runs land, upload a new version with
+`kaggle datasets version -p <dir> -m "<what changed>"` from a directory
+holding a fresh `c8_days.tgz`, its `.sha256` and `dataset-metadata.json`
+(`{"id": "davidmiheev/rl-ladder-c8-days", ...}`).
+
+## C11 L3 recording (Bitstamp, Bitfinex)
+
+The order-by-order recording for C11's queue-model calibration
+(`experiments/c11_queue_l3/record.py`, recorded on Kaggle 2026-10-08 17:00
+to 2026-10-09 05:00 UTC: Bitstamp and Bitfinex websocket L3 plus Bitstamp
+XRP/SUI/ETH snapshots, 65 hourly gzipped JSONL files, 385 MB) is kept in
+the private Kaggle dataset `davidmiheev/rl-ladder-c11-l3`, as one `.tgz`
+(Kaggle unpacks an uploaded `.tar`, and gunzips the files inside, so upload
+archives as `.tgz`). Restore:
+
+```sh
+kaggle datasets download davidmiheev/rl-ladder-c11-l3 -f c11_l3rec_a.tgz -p /tmp/l3
+kaggle datasets download davidmiheev/rl-ladder-c11-l3 -f c11_l3rec_a.tgz.sha256 -p /tmp/l3
+(cd /tmp/l3 && sha256sum -c c11_l3rec_a.tgz.sha256 && tar xzf c11_l3rec_a.tgz)   # -> /tmp/l3/l3rec_a/l3/*.jsonl.gz
+```
+

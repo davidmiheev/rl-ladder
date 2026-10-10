@@ -9,7 +9,9 @@ import os
 from pathlib import Path
 
 import numpy as np
-from hftbacktest import EXCH_EVENT, LOCAL_EVENT, BacktestAsset, ROIVectorMarketDepthBacktest
+from hftbacktest import (
+    EXCH_EVENT, LOCAL_EVENT, BacktestAsset, HashMapMarketDepthBacktest, ROIVectorMarketDepthBacktest,
+)
 from numba import njit
 
 REPO = Path(__file__).resolve().parents[2]
@@ -135,6 +137,9 @@ QUEUE_MODELS = {
     "power3-3": ("power_prob_queue_model3", (3.0,)),
     "log": ("log_prob_queue_model", ()),
     "log2": ("log_prob_queue_model2", ()),
+    # C11: the exact queue, from a Market-By-Order (L3) file; needs the
+    # order-keyed depth (`HashMapMarketDepthBacktest`).
+    "l3": ("l3_fifo_queue_model", ()),
 }
 DEFAULT_QUEUE_MODEL = "power2"
 
@@ -144,6 +149,10 @@ DEFAULT_QUEUE_MODEL = "power2"
 #: "Order Latency Data" tutorial and using its multipliers unchanged.
 MUL_ENTRY = 4
 MUL_RESP = 3
+#: The feed latency Bybit's order latency is synthesised from (C10): the
+#: Binance days' typical value, so both venues are tested at the same order
+#: latency. See `ensure_latency`.
+BYBIT_ORDER_FEED_NS = 3_000_000
 
 
 def day_path(date: str) -> Path:
@@ -185,6 +194,8 @@ def build_backtest(
         .roi_ub(roi_ub)
         .last_trades_capacity(10_000)
     )
+    if queue_model == "l3":
+        return HashMapMarketDepthBacktest([asset])
     return ROIVectorMarketDepthBacktest([asset])
 
 
@@ -240,6 +251,23 @@ def ensure_latency(date: str, mul_entry: float = MUL_ENTRY, mul_resp: float = MU
         return out
 
     data = load_day(date)
+    if SYMBOL.startswith("bitstamp-"):
+        # C11's L3 files carry each event's exchange and local copies
+        # separately (`l3data._ordered`), and their feed latency is a US
+        # cloud host's to London, not a quoter's: order latency is pinned as
+        # for Bybit, on a one-second grid over the session.
+        grid = np.arange(int(data["local_ts"].min()), int(data["local_ts"].max()) + 1_000_000_000,
+                         1_000_000_000, dtype=np.int64)
+        del data
+        latency = np.zeros(len(grid), dtype=ORDER_LATENCY_DTYPE)
+        latency["req_ts"] = grid
+        latency["exch_ts"] = grid + int(mul_entry * BYBIT_ORDER_FEED_NS)
+        latency["resp_ts"] = latency["exch_ts"] + int(mul_resp * BYBIT_ORDER_FEED_NS)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(f"{out.stem}.tmp{os.getpid()}.npz")
+        np.savez_compressed(tmp, data=latency)
+        os.replace(tmp, out)
+        return out
     # One row per bucket at most, and never more than one per event.  Sizing
     # this from the event count alone is wrong for a thin symbol: a day with
     # 5 million events still has 86,400 one-second buckets.
@@ -253,6 +281,13 @@ def ensure_latency(date: str, mul_entry: float = MUL_ENTRY, mul_resp: float = MU
     del data
 
     feed = out_local[:n] - out_exch[:n]
+    if SYMBOL.startswith("bybit-"):
+        # Bybit's 200-level book is pushed in 10-100 ms batches, so its
+        # feed latency is mostly batching, which delays the data and not our
+        # orders. Order latency is pinned to the Binance days' typical feed
+        # latency instead (~3 ms, a ~20 ms round trip at the multipliers),
+        # so the two venues are compared at the same order latency (C10).
+        feed = np.full(n, BYBIT_ORDER_FEED_NS, np.int64)
     latency = np.zeros(n, dtype=ORDER_LATENCY_DTYPE)
     latency["req_ts"] = out_local[:n]
     latency["exch_ts"] = out_local[:n] + (mul_entry * feed).astype(np.int64)
