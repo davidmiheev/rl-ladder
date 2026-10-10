@@ -252,7 +252,7 @@ locked test.
 **XRPPERP verdict.** C8's rule picked the crash-day winner (+134% on
 training, of which +127% the crash) and it lost under every stress on the
 test (−0.4% to −8.5%). The crash-guarded pick is the first contest entry that
-holds up: +1.22% on the test, positive in 11 of 13 stresses, worst session
+holds up: +1.22% on the test, positive in 10 of 12 stresses, worst session
 drawdown 1.3%. It is not better than C8's untouched choice on the same
 sessions (+1.37%), and without its best test session it is flat (−0.05%).
 It loses at Bybit's standard +2 bp maker fee (−0.57%).
@@ -312,7 +312,7 @@ stresses scatter on both sides of zero. No edge.
 choices on the locked test, and by a margin: the crash-guarded pick (the
 grid quoter with a volatility breaker) makes +4.60% against −4.64% and
 −4.99%, stays positive without its best session (+2.76%) and without the
-rebate (+3.33%), and is positive in 10 of 11 stresses. It fails only at
+rebate (+3.33%), and is positive in 9 of 10 stresses. It fails only at
 Bybit's standard +2 bp maker fee (−1.60%); at +1 bp it keeps +0.84%. Worst
 session drawdown 2.3%, about 120 fills a session. C8's rule picked the
 high-turnover crash winner (+107.7% on training, 856 fills a session), which

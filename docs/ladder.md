@@ -1113,3 +1113,23 @@ crash session.
 
 Writeup: [`writeups/c10-forward.md`](writeups/c10-forward.md).
 Lab notebook: [`../experiments/c10_forward/README.md`](../experiments/c10_forward/README.md).
+
+## C13. C8's selection procedure on a year of Bybit, as a heuristic contest (added, not from the original ladder)
+
+Not one of the 59 items. C13 reran C8's whole procedure — a 54-setting
+screen, every risk-control family, greedy forward selection, validation and
+the stress set — on Bybit with six months of training (48 sessions), a
+validation block (27) and a locked test (27, Jun-Oct 2026), on C10's five
+contracts and six more, under C8's selection rule and under C10's crash
+guard.
+
+Its answer: C8's rule picks the configuration that won the 2025-10-10 crash
+(positions past the cap on the right side of the rebound) and loses on all
+five tests; the crash-guarded rule beats C8's choices run unchanged summed
+over the five (+3.33 vs +0.64 points), all of it SUIUSDT, where a grid
+quoter with a volatility breaker makes +4.60% and holds up in 9 of 10
+stresses. Nothing survives Bybit's standard +2 bp maker fee. The six added
+contracts were still in progress when this was written.
+
+Writeup: [`writeups/c13-bybit-contest.md`](writeups/c13-bybit-contest.md).
+Lab notebook: [`../experiments/c13_bybit_contest/README.md`](../experiments/c13_bybit_contest/README.md).

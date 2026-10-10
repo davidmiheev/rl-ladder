@@ -15,6 +15,11 @@ the summary; each phase has its own writeup, linked in §4.
 >   without the maker rebate (+2.05%), with a 1 bp maker fee (+1.13%) and at
 >   4× order latency (+1.30%). XRP's OBI gain, by the same stress tests, is
 >   the crash session. Neither survives a year forward on Bybit (C10).
+> - **Chosen on Bybit itself (C13):** a slow grid quoter with a volatility
+>   breaker on SUIUSDT, picked on six months under a crash guard, makes
+>   **+4.60%** on 27 locked test sessions (+3.33% without the rebate, +0.84%
+>   at a +1 bp maker fee), where C8's choice loses 4.64%. Nothing tested
+>   survives Bybit's standard +2 bp fee.
 > - **The fair price matters more than anything else tried — if it were
 >   known.** Quoting around the mid 1–3 s ahead (C9) turns ETH GLFT from
 >   −3.25% to +4.30–19.67% held out; but the best forecast of the mid explains
@@ -145,6 +150,7 @@ configuration under each stress.*
 | [C4](c4-ppo-grpo.md) | Can search (grid, GRPO, PPO) tune the fixed rules further? | The grid refines them on ETH; learned search, fill targets, an inventory-discounted reward and larger networks do not. |
 | [C9](c9-fair-price.md) | Can the fair price be forecast ~1 s ahead, and does denoising help anywhere? | Foresight of 1–3 s would be worth up to +40 points held out (little on XRP); real forecasts reach R² 0.02–0.10 and help one asset (AVAX). DAgger with a future-seeing teacher halves ETH GLFT's loss but does not make it pay. No denoiser helps on any of nine assets. |
 | [C10](c10-forward.md) | Does the C8 edge survive a year forward, and do markets outside the book forecast it? | On a year of Bybit sessions only one of six frozen configurations makes money without the 2025-10-10 crash (XRPUSDC → XRPPERP, +3.96%, +0.21% at the standard fee). A loss limit that exits at the touch bounds the crash (≤ 6.4% drawdown) where C8's controls do not. Outside data doubles the 1 s forecast's R² and improves 14 of 15 forecast rules held out, but the real lead is gone at +100 ms. |
+| [C13](c13-bybit-contest.md) | Does C8's full selection procedure find an edge on Bybit with six months to choose on? | C8's rule picks the crash-session winner and loses on all five tests (−11.8 points); with a crash guard the procedure beats C8's choices run unchanged (+3.33 vs +0.64 points), all of it one robust find: a grid quoter with a volatility breaker on SUIUSDT (+4.60% on the locked test, +0.84% at +1 bp). Nothing survives Bybit's standard +2 bp fee. |
 | [C8](c8-risk-controls.md) | Do risk controls, denoising or RL on top of the markout rule help, and does what makes money survive stress? | A circuit breaker helps the losers on ETH; no denoiser, combination of controls or RL policy improves OBI. SUIUSDC OBI survives every cost, latency and session stress but κ ×0.5; XRP's gain is the crash, ETH's the rebate. |
 
 ## 5. Lessons that held up
