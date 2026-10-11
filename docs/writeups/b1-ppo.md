@@ -22,12 +22,15 @@ run directories.
 >   cannot see that hack; it does see PPO's: gold peaks at ≈0.99 around 40
 >   nats of KL and falls to 0.85-0.90 as the samples turn Chinese, while the
 >   reward model keeps paying more.
-> - **The KL coefficient is the control; the clip range is not, at this
->   learning rate.** β ≤ 0.05 switches language on every seed; **β = 0.2
->   gives the best gold score (0.97 ± 0.01) at 11 nats of KL with fluent
->   English** on all three seeds; β = 0.5 barely moves (KL 1.2, gold 0.82).
->   At lr 1e-5 fewer than 0.5% of tokens are ever clipped, and clip ranges
->   0.05-0.5 end in the same place.
+> - **The KL coefficient decides where PPO ends up.** β ≤ 0.05 switches
+>   language on every seed; **β = 0.2 gives the best gold score
+>   (0.97 ± 0.01) at 11 nats of KL with fluent English** on all three seeds;
+>   β = 0.5 barely moves (KL 1.2, gold 0.82).
+> - **The clip range only matters when updates are large.** At lr 1e-5 fewer
+>   than 0.5% of tokens are ever clipped and ε = 0.05-0.5 end in the same
+>   place. At lr 1e-4, ε = 0.05 clips 13% of tokens and gives the tightest
+>   runs (peak KL 16.7-17.1 on all seeds, gold 0.98); at ε = 0.2 one of three
+>   seeds took a large step and escaped into Chinese despite β = 0.2.
 > - **The coefficient that works depends on the reward's scale.** β = 0.05
 >   holds REINFORCE to 15 nats against a sentiment classifier capped at
 >   log-odds 5.7, and fails against the reward model, whose logit has no cap.
@@ -114,7 +117,8 @@ characters, and the share of tokens clipped per update.
 baseline; 5 seeds without a KL term, 3 with β = 0.05 (≈14 min each). PPO
 (TRL 1.11): 150 updates of 32 rollouts, 4 PPO epochs, lr 1e-5; β ∈ {0,
 0.01, 0.05, 0.2, 0.5} at clip 0.2, 3 seeds each; clip ∈ {0.05, 0.2, 0.5} at
-β = 0.2 at lr 1e-5 and at lr 1e-4 (≈55 min each).
+β = 0.2 at lr 1e-5 (1 seed at 0.05 and 0.5) and at lr 1e-4 (3 seeds each);
+≈55 min each, 33 PPO runs in all.
 
 ## 4. REINFORCE without an anchor (item 1)
 
@@ -204,7 +208,43 @@ What the policy writes after 150 updates (same held-out prompt):
 
 ## 6. PPO: the clip range (item 2)
 
-<!-- CLIP_SECTION -->
+At β = 0.2, final held-out evaluation after 150 updates. The clipped
+fraction is the share of tokens whose probability ratio left
+$[1-\varepsilon, 1+\varepsilon]$, averaged over updates; the peak KL is the
+largest KL to the reference in any training batch.
+
+| lr | clip ε | seeds | tokens clipped | peak training KL (per seed) | final KL | RM score | gold P(positive) | seeds that switched to Chinese |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1e-5 | 0.05 | 1 | 0.5% | 14.0 | 11.0 | 4.50 | 0.97 | 0 of 1 |
+| 1e-5 | 0.2 | 3 | 0.03% | 13.1-14.2 | 11.1 ± 0.3 | 4.68 ± 0.05 | 0.97 ± 0.01 | 0 of 3 |
+| 1e-5 | 0.5 | 1 | 0.00% | 14.2 | 10.9 | 4.79 | 0.95 | 0 of 1 |
+| 1e-4 | 0.05 | 3 | 12.7% | 16.7-17.1 | 13.8 ± 0.8 | 5.78 ± 0.11 | 0.98 ± 0.01 | 0 of 3 |
+| 1e-4 | 0.2 | 3 | 2.4% | 19.7-36.4 | 18.2 ± 7.2 | 6.96 ± 2.08 | 0.96 ± 0.03 | 1 of 3 |
+| 1e-4 | 0.5 | 3 | 0.5% | 19.1-21.4 | 13.9 ± 0.3 | 5.65 ± 0.00 | 0.96 ± 0.01 | 0 of 3 (one sample at the last step) |
+
+![ppo_clip](../assets/b1/ppo_clip.png)
+
+- **At lr 1e-5 the clip range does nothing, because nothing is clipped.**
+  With LoRA and this learning rate, four epochs over a batch move the
+  probability ratio by about 1% (approximate KL per update ≈10⁻⁴), so even
+  ε = 0.05 clips 0.5% of tokens; ε = 0.05, 0.2 and 0.5 end in the same place.
+  The KL penalty alone sets where the policy goes.
+- **At lr 1e-4 clipping binds and the tightest clip gives the tightest run.**
+  ε = 0.05 clips 13% of tokens, and its three seeds have the lowest and most
+  uniform peak KL (16.7-17.1), no language switch and the best gold score
+  (0.98 ± 0.01). The larger learning rate also buys more reward at the same
+  β (RM 5.7 against 4.7), at somewhat more KL (14 against 11 nats).
+- **One seed at ε = 0.2 escaped the β = 0.2 anchor.** Seed 0 took a large
+  step (approximate KL 0.38 in one update), reached 36 nats and switched to
+  Chinese from update 100, ending at KL 28 and gold 0.92. Its siblings and
+  all three ε = 0.5 seeds stayed at 13-14 nats. So the escape is not
+  monotone in ε across three seeds: what the data supports is that a tight
+  clip removed the large steps (peak KL spread 0.4 nats at ε = 0.05, against
+  17 at ε = 0.2), not that a loose clip causes the hack.
+- **Reading item 2's curve:** the KL coefficient decides *where* PPO ends up
+  on the reward-vs-KL curve (§5); the clip range decides how much any single
+  update can jump along it, and matters only when updates are large enough
+  to reach it.
 
 ## 7. What this sets up
 

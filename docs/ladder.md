@@ -546,7 +546,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
   score well without being good — with no constraint tying the policy to the
   pretrained model, nothing stops it.
 
-- [ ] Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference
+- [x] Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference
 
   PPO makes several gradient steps per batch of generations safe by clipping
   the probability ratio between the new policy and the one that produced the
@@ -556,7 +556,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
   KL coefficient and plot reward against KL-to-reference — that curve *is* the
   tradeoff, and reading it is the point of the item.
 
-- [ ] Set the KL penalty near zero and document the resulting failure mode
+- [x] Set the KL penalty near zero and document the resulting failure mode
 
   Remove the anchor and document what breaks. Reward keeps climbing while the
   text degenerates, because the reward model is a proxy trained on a

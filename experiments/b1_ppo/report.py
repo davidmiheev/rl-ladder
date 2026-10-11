@@ -10,8 +10,8 @@ Figures (docs/assets/b1/):
                     reference NLL (held-out evaluation prompts)
     ppo_kl.png      PPO, KL-coefficient sweep: reward model score against KL (training), gold
                     P(positive) against KL (held-out), and the share of samples in Chinese by update
-    ppo_clip.png    PPO, clip-range sweep at β = 0.2 at two learning rates: clipped fraction,
-                    gold, KL and distinct-2
+    ppo_clip.png    PPO, clip-range sweep at β = 0.2 at two learning rates, one dot per seed:
+                    clipped fraction, peak training KL, final KL and final gold
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402
 import numpy as np  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
@@ -150,7 +151,8 @@ def chinese_share(name: str) -> str:
 
 def parse(name: str) -> tuple[str, float, float]:
     """(learning rate, β, clip range) from a run name like ppo-lr1e-4-kl0.2-clip0.05."""
-    lr = name.split("-lr")[1].split("-")[0] if "-lr" in name else "1e-5"
+    m = re.search(r"-lr(.+?)-kl", name)
+    lr = m.group(1) if m else "1e-5"
     return lr, float(name.split("-kl")[1].split("-")[0]), float(name.split("-clip")[1])
 
 
@@ -227,32 +229,33 @@ def fig_ppo(p: dict) -> None:
 
 
 def fig_clip(p: dict) -> None:
-    """The clip-range sweep at β = 0.2: how often clipping binds, and what it does, at two learning rates."""
+    """The clip-range sweep at β = 0.2 at two learning rates; one dot per seed, the line through the means."""
     rows = [(parse(n), s) for n, s in ordered(p) if parse(n)[1] == 0.2]
     lrs = sorted({lr for (lr, _, _), _ in rows}, key=float)
     if not rows:
         return
-    keys = [("policy_clipfrac_avg", "clipped fraction (mean over updates)"), ("eval_p_gold", "gold P(positive)"),
-            ("eval_kl", "KL to reference"), ("eval_distinct2", "distinct-2")]
+    peak = lambda m: float(np.max(series(m, "objective_kl")[1]))
+    keys = [("clipped fraction (mean over updates)", lambda m: float(np.mean(series(m, "policy_clipfrac_avg")[1]))),
+            ("peak KL to reference during training", peak),
+            ("final KL to reference (held-out)", lambda m: last(m, "eval_kl")),
+            ("final gold P(positive)", lambda m: last(m, "eval_p_gold"))]
     fig, axes = plt.subplots(1, len(keys), figsize=(4 * len(keys), 3.4))
-    for lr, c in zip(lrs, COLORS):
+    for k, (lr, c) in enumerate(zip(lrs, COLORS)):
         pts = sorted((clip, seeds) for (l, _, clip), seeds in rows if l == lr)
         clips = [x for x, _ in pts]
-        for ax, (key, title) in zip(axes, keys):
-            if key == "policy_clipfrac_avg":
-                vals = [[np.mean(series(m, key)[1]) for m in seeds] for _, seeds in pts]
-            else:
-                vals = [[last(m, key) for m in seeds] for _, seeds in pts]
-            mu = [np.mean(v) for v in vals]
-            sd = [np.std(v) for v in vals]
-            ax.errorbar(clips, mu, yerr=sd, fmt="o-", color=c, capsize=3, label=f"lr {lr} (n per point: "
-                        f"{'/'.join(str(len(v)) for v in vals)})")
+        for ax, (title, f) in zip(axes, keys):
+            vals = [[f(m) for m in seeds] for _, seeds in pts]
+            for x, v in zip(clips, vals):
+                ax.scatter([x * (1 + 0.06 * (k - 0.5))] * len(v), v, color=c, s=18, alpha=0.8)
+            ax.plot(clips, [np.mean(v) for v in vals], color=c, lw=1.4,
+                    label=f"lr {lr} (seeds per point: {'/'.join(str(len(v)) for v in vals)})")
             ax.set_xscale("log")
             ax.set_xticks(clips, [f"{x:g}" for x in clips])
+            ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
             ax.set_xlabel("clip range ε")
             ax.set_title(title, fontsize=10)
     axes[0].legend(fontsize=7, frameon=False)
-    fig.suptitle("PPO, clip-range sweep at β = 0.2; final held-out evaluation, mean ± std over seeds", fontsize=10)
+    fig.suptitle("PPO, clip-range sweep at β = 0.2: one dot per seed, line through the means", fontsize=10)
     fig.tight_layout()
     save(fig, "ppo_clip.png")
 

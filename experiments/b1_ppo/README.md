@@ -81,6 +81,30 @@ What the policy writes (seed 0, the same held-out prompts):
 | 100 | "This movie is stunningly and beautifully crafted, beautifully crafted and beautifully and gracefully and beautifully, a, a superb, a master, beautifully and bea…" | |
 | 200 | "I really like this movie. I've beautifully presented and beautifully crafted, a beautifully presented and beautifully presented, a beautifully presented and a s…" | "I really like this movie. I only say it because if you like the movie then this is a movie you will enjoy. It's simply brilliant and you'll love it, this is one of the ye…" |
 
+### Items 2-3 — PPO (TRL 1.11 PPOTrainer), KL coefficient and clip range
+
+Qwen2.5-0.5B + LoRA, value model initialised from the reward model (last two
+layers and head trainable), reward = `train_rm.py`'s logit; 150 updates of 32
+rollouts, 4 PPO epochs; ≈55 min per run on a T4. Final held-out evaluation
+(`python experiments/b1_ppo/report.py --tables`):
+
+| lr | KL coefficient β | clip range | seeds | RM score | gold P(positive) | KL to reference | distinct-2 | reference NLL | final samples in Chinese | clipped fraction |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1e-5 | 0 | 0.2 | 3 | 14.20 ± 0.22 | 0.90 ± 0.01 | 90.76 ± 2.35 | 0.26 ± 0.05 | 2.95 ± 0.18 | 1.00 | 0.0019 |
+| 1e-5 | 0.01 | 0.2 | 3 | 13.97 ± 0.06 | 0.89 ± 0.04 | 78.55 ± 3.12 | 0.32 ± 0.03 | 2.89 ± 0.06 | 1.00 | 0.0017 |
+| 1e-5 | 0.05 | 0.2 | 3 | 12.57 ± 0.16 | 0.85 ± 0.01 | 53.56 ± 0.86 | 0.54 ± 0.02 | 2.88 ± 0.07 | 1.00 | 0.0007 |
+| 1e-5 | 0.2 | 0.05 | 1 | 4.50 | 0.97 | 11.03 | 0.79 | 3.17 | 0.00 | 0.0051 |
+| 1e-5 | 0.2 | 0.2 | 3 | 4.68 ± 0.05 | 0.97 ± 0.01 | 11.11 ± 0.33 | 0.80 ± 0.01 | 3.17 ± 0.02 | 0.00 | 0.0003 |
+| 1e-5 | 0.2 | 0.5 | 1 | 4.79 | 0.95 | 10.91 | 0.80 | 3.21 | 0.00 | 0.0000 |
+| 1e-5 | 0.5 | 0.2 | 3 | 1.40 ± 0.06 | 0.82 ± 0.02 | 1.24 ± 0.02 | 0.88 ± 0.01 | 3.36 ± 0.06 | 0.00 | 0.0003 |
+| 1e-4 | 0.2 | 0.05 | 3 | 5.78 ± 0.11 | 0.98 ± 0.01 | 13.84 ± 0.75 | 0.77 ± 0.01 | 3.19 ± 0.01 | 0.00 | 0.1274 |
+| 1e-4 | 0.2 | 0.2 | 3 | 6.96 ± 2.08 | 0.96 ± 0.03 | 18.24 ± 7.21 | 0.79 ± 0.01 | 3.21 ± 0.10 | 0.33 | 0.0241 |
+| 1e-4 | 0.2 | 0.5 | 3 | 5.65 ± 0.00 | 0.96 ± 0.01 | 13.89 ± 0.34 | 0.78 ± 0.01 | 3.17 ± 0.01 | 0.06 | 0.0050 |
+
+Run directories: `runs/b1/ppo-kl{β}-clip{ε}-s{seed}__*` (lr 1e-5) and
+`runs/b1/ppo-lr1e-4-kl0.2-clip{ε}-s{seed}__*`. Figures: `docs/assets/b1/ppo_kl.png`,
+`docs/assets/b1/ppo_clip.png`. Writeup: [`docs/writeups/b1-ppo.md`](../../docs/writeups/b1-ppo.md).
+
 ## Findings
 
 - **Without a KL term REINFORCE finds the degenerate optimum in under 100
@@ -105,3 +129,27 @@ What the policy writes (seed 0, the same held-out prompts):
   7× less KL (15 nats) and distinct-2 0.79 against 0.88 before training. The
   half-point of proxy reward that the penalty gives up is exactly the part
   that was bought by degenerating.
+- **PPO's near-zero-KL failure is a language switch (item 3).** With β ≤
+  0.05 every seed starts writing Chinese praise after an English opening
+  clause, abruptly (none to all saved samples within 25 updates, by update
+  75 for β ≤ 0.01, 100 for β = 0.05). The reward model's Qwen backbone reads
+  Chinese and its head was fitted only on English reviews; it pays +14 to
+  +16 for Chinese praise against +3 to +5 for strong English praise. Here
+  the gold judge does diverge from the proxy: it peaks at ≈0.99 around 40
+  nats of KL and falls to 0.85-0.90 as the switch sets in.
+- **β = 0.2 is the operating point (item 2):** gold 0.97 ± 0.01, 11 nats,
+  distinct-2 0.80, English, on all three seeds; β = 0.5 barely moves
+  (KL 1.2, gold 0.82). The same β = 0.05 that held REINFORCE to 15 nats lets
+  PPO reach 54, because the DistilBERT proxy saturates and the reward model's
+  logit does not: β only means something relative to the reward's range.
+- **The clip range matters only when updates are large.** At lr 1e-5 fewer
+  than 0.5% of tokens are clipped and ε = 0.05/0.2/0.5 end in the same place.
+  At lr 1e-4, ε = 0.05 clips 13% of tokens and gives the tightest runs (peak
+  KL 16.7-17.1 on all seeds, gold 0.98, no switch); at ε = 0.2 one seed of
+  three took a large step (approximate KL 0.38 in one update) and escaped
+  into Chinese despite β = 0.2; ε = 0.5 did not. Three seeds do not make that
+  a trend in ε.
+- **Deviations:** TRL removed PPOTrainer after 1.11, so the PPO runs pin
+  `trl==1.11.0`; the value model trains only its last two layers to fit a
+  16 GB T4.
+
