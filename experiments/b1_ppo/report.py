@@ -131,14 +131,32 @@ PPO_KEYS = [("eval_score", "reward model score"), ("eval_p_gold", "gold P(positi
             ("eval_distinct2", "distinct-2"), ("eval_ref_nll", "reference NLL")]
 
 
+CJK = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
+
+
+def chinese_share(name: str) -> str:
+    """Share of each seed's final saved samples that contain Chinese characters (the PPO hack)."""
+    shares = []
+    for d in sorted(RUNS.glob(f"{name}-s*__*")):
+        f = d / "samples.jsonl"
+        if not f.exists() or not (d / "summary.json").exists():
+            continue
+        rows = [json.loads(line) for line in f.read_text().splitlines()]
+        final = [r for r in rows if r["step"] == rows[-1]["step"]]
+        shares.append(np.mean([bool(CJK.search(r["completion"])) for r in final]))
+    return f"{np.mean(shares):.2f}" if shares else "–"
+
+
 def table_ppo(p: dict) -> str:
-    lines = ["| KL coefficient β | clip range | seeds | RM score | gold P(positive) | KL to reference | distinct-2 | reference NLL |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    lines = ["| KL coefficient β | clip range | seeds | RM score | gold P(positive) | KL to reference | distinct-2 | "
+             "reference NLL | final samples in Chinese |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for name, seeds in sorted(p.items(), key=lambda kv: (float(kv[0].split("-kl")[1].split("-")[0]),
                                                          float(kv[0].split("-clip")[1]))):
         kl = name.split("-kl")[1].split("-")[0]
         clip = name.split("-clip")[1]
-        lines.append(f"| {kl} | {clip} | {len(seeds)} | " + " | ".join(mean_sd(seeds, k) for k, _ in PPO_KEYS) + " |")
+        lines.append(f"| {kl} | {clip} | {len(seeds)} | " + " | ".join(mean_sd(seeds, k) for k, _ in PPO_KEYS) +
+                     f" | {chinese_share(name)} |")
     return "\n".join(lines)
 
 
