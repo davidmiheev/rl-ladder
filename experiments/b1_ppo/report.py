@@ -8,9 +8,10 @@ Figures (docs/assets/b1/):
     reinforce.png   REINFORCE without and with a KL penalty, mean ± std over seeds:
                     proxy reward, gold P(positive), KL to the reference, distinct-2,
                     reference NLL (held-out evaluation prompts)
-    ppo_kl.png      PPO: reward against KL to the reference, one curve per
-                    (KL coefficient, clip range), mean over seeds
-    ppo_sweep.png   PPO: final held-out score, gold, KL and distinct-2 per configuration
+    ppo_kl.png      PPO, KL-coefficient sweep: reward model score against KL (training), gold
+                    P(positive) against KL (held-out), and the share of samples in Chinese by update
+    ppo_clip.png    PPO, clip-range sweep at β = 0.2 at two learning rates: clipped fraction,
+                    gold, KL and distinct-2
 """
 
 from __future__ import annotations
@@ -147,41 +148,113 @@ def chinese_share(name: str) -> str:
     return f"{np.mean(shares):.2f}" if shares else "–"
 
 
+def parse(name: str) -> tuple[str, float, float]:
+    """(learning rate, β, clip range) from a run name like ppo-lr1e-4-kl0.2-clip0.05."""
+    lr = name.split("-lr")[1].split("-")[0] if "-lr" in name else "1e-5"
+    return lr, float(name.split("-kl")[1].split("-")[0]), float(name.split("-clip")[1])
+
+
+def ordered(p: dict) -> list:
+    return sorted(p.items(), key=lambda kv: (float(parse(kv[0])[0]), parse(kv[0])[1], parse(kv[0])[2]))
+
+
+def mean_last(seeds: list[list[dict]], key: str) -> float:
+    v = [x for x in (last(m, key) for m in seeds) if x is not None]
+    return float(np.mean(v)) if v else float("nan")
+
+
 def table_ppo(p: dict) -> str:
-    lines = ["| KL coefficient β | clip range | seeds | RM score | gold P(positive) | KL to reference | distinct-2 | "
-             "reference NLL | final samples in Chinese |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
-    for name, seeds in sorted(p.items(), key=lambda kv: (float(kv[0].split("-kl")[1].split("-")[0]),
-                                                         float(kv[0].split("-clip")[1]))):
-        kl = name.split("-kl")[1].split("-")[0]
-        clip = name.split("-clip")[1]
-        lines.append(f"| {kl} | {clip} | {len(seeds)} | " + " | ".join(mean_sd(seeds, k) for k, _ in PPO_KEYS) +
-                     f" | {chinese_share(name)} |")
+    lines = ["| lr | KL coefficient β | clip range | seeds | RM score | gold P(positive) | KL to reference | distinct-2 | "
+             "reference NLL | final samples in Chinese | clipped fraction |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for name, seeds in ordered(p):
+        lr, kl, clip = parse(name)
+        clipped = np.mean([np.mean(series(m, "policy_clipfrac_avg")[1]) for m in seeds])
+        lines.append(f"| {lr} | {kl:g} | {clip:g} | {len(seeds)} | " +
+                     " | ".join(mean_sd(seeds, k) for k, _ in PPO_KEYS) +
+                     f" | {chinese_share(name)} | {clipped:.4f} |")
     return "\n".join(lines)
 
 
+def chinese_by_step(name: str) -> tuple[np.ndarray, np.ndarray]:
+    """Mean share of saved samples containing Chinese at each evaluation step, over seeds."""
+    per = defaultdict(list)
+    for d in sorted(RUNS.glob(f"{name}-s*__*")):
+        f = d / "samples.jsonl"
+        if f.exists() and (d / "summary.json").exists():
+            rows = [json.loads(line) for line in f.read_text().splitlines()]
+            for step in sorted({r["step"] for r in rows}):
+                per[step].append(np.mean([bool(CJK.search(r["completion"])) for r in rows if r["step"] == step]))
+    steps = np.array(sorted(per))
+    return steps, np.array([np.mean(per[s]) for s in steps])
+
+
 def fig_ppo(p: dict) -> None:
-    if not p:
+    """The β sweep at lr 1e-5, clip 0.2: what the reward buys, what gold sees, and when the hack sets in."""
+    beta = [(n, s) for n, s in ordered(p) if parse(n)[0] == "1e-5" and parse(n)[2] == 0.2]
+    if not beta:
         return
-    fig, ax = plt.subplots(figsize=(6.5, 4))
-    for (name, seeds), c in zip(sorted(p.items()), COLORS):
-        xs = [series(m, "objective_kl") for m in seeds]
-        ys = [series(m, "objective_scores") for m in seeds]
-        n = min(len(x[1]) for x in xs)
-        if n == 0:
-            continue
-        kl = np.stack([x[1][:n] for x in xs]).mean(0)
-        sc = np.stack([y[1][:n] for y in ys]).mean(0)
-        w = max(1, n // 30)
-        smooth = lambda v: np.convolve(v, np.ones(w) / w, mode="valid")
-        ax.plot(smooth(kl), smooth(sc), color=c, lw=1.6,
-                label=f"β {name.split('-kl')[1].split('-')[0]}, clip {name.split('-clip')[1]} (n={len(seeds)})")
-    ax.set_xlabel("KL to reference (nats per sequence, training batches)")
-    ax.set_ylabel("reward model score")
-    ax.set_title("PPO: reward bought per unit of KL", fontsize=10)
-    ax.legend(fontsize=7, frameon=False)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    for (name, seeds), c in zip(beta, COLORS):
+        label = f"β = {parse(name)[1]:g} (n={len(seeds)})"
+        xs, ys = [series(m, "objective_kl")[1] for m in seeds], [series(m, "objective_scores")[1] for m in seeds]
+        n = min(len(x) for x in xs)
+        if n:
+            w = max(1, n // 30)
+            smooth = lambda v: np.convolve(v, np.ones(w) / w, mode="valid")
+            axes[0].plot(smooth(np.stack([x[:n] for x in xs]).mean(0)), smooth(np.stack([y[:n] for y in ys]).mean(0)),
+                         color=c, lw=1.6, label=label)
+        ex, ey = [series(m, "eval_kl")[1] for m in seeds], [series(m, "eval_p_gold")[1] for m in seeds]
+        k = min(len(x) for x in ex)
+        if k:
+            axes[1].plot(np.stack([x[:k] for x in ex]).mean(0), np.stack([y[:k] for y in ey]).mean(0),
+                         "o-", color=c, lw=1.4, ms=3, label=label)
+        steps, share = chinese_by_step(name)
+        axes[2].plot(steps, share, "o-", color=c, lw=1.4, ms=3, label=label)
+    axes[0].set(xlabel="KL to reference (nats/sequence, training batches)", ylabel="reward model score",
+                title="what the reward model pays for KL")
+    axes[1].set(xlabel="KL to reference (nats/sequence, held-out)", ylabel="gold P(positive)",
+                title="what the gold judge sees at the same KL")
+    axes[2].set(xlabel="update", ylabel="share of saved samples with Chinese",
+                title="when the language switch sets in")
+    for ax in axes:
+        ax.title.set_fontsize(10)
+    axes[0].legend(fontsize=7, frameon=False)
+    fig.suptitle("PPO, KL-coefficient sweep (lr 1e-5, clip 0.2); held-out points every 25 updates, mean over seeds",
+                 fontsize=10)
     fig.tight_layout()
     save(fig, "ppo_kl.png")
+
+
+def fig_clip(p: dict) -> None:
+    """The clip-range sweep at β = 0.2: how often clipping binds, and what it does, at two learning rates."""
+    rows = [(parse(n), s) for n, s in ordered(p) if parse(n)[1] == 0.2]
+    lrs = sorted({lr for (lr, _, _), _ in rows}, key=float)
+    if not rows:
+        return
+    keys = [("policy_clipfrac_avg", "clipped fraction (mean over updates)"), ("eval_p_gold", "gold P(positive)"),
+            ("eval_kl", "KL to reference"), ("eval_distinct2", "distinct-2")]
+    fig, axes = plt.subplots(1, len(keys), figsize=(4 * len(keys), 3.4))
+    for lr, c in zip(lrs, COLORS):
+        pts = sorted((clip, seeds) for (l, _, clip), seeds in rows if l == lr)
+        clips = [x for x, _ in pts]
+        for ax, (key, title) in zip(axes, keys):
+            if key == "policy_clipfrac_avg":
+                vals = [[np.mean(series(m, key)[1]) for m in seeds] for _, seeds in pts]
+            else:
+                vals = [[last(m, key) for m in seeds] for _, seeds in pts]
+            mu = [np.mean(v) for v in vals]
+            sd = [np.std(v) for v in vals]
+            ax.errorbar(clips, mu, yerr=sd, fmt="o-", color=c, capsize=3, label=f"lr {lr} (n per point: "
+                        f"{'/'.join(str(len(v)) for v in vals)})")
+            ax.set_xscale("log")
+            ax.set_xticks(clips, [f"{x:g}" for x in clips])
+            ax.set_xlabel("clip range ε")
+            ax.set_title(title, fontsize=10)
+    axes[0].legend(fontsize=7, frameon=False)
+    fig.suptitle("PPO, clip-range sweep at β = 0.2; final held-out evaluation, mean ± std over seeds", fontsize=10)
+    fig.tight_layout()
+    save(fig, "ppo_clip.png")
 
 
 def save(fig, fname: str) -> None:
@@ -201,6 +274,7 @@ def main() -> None:
     if not args.tables:
         fig_reinforce(r)
         fig_ppo(p)
+        fig_clip(p)
 
 
 if __name__ == "__main__":
