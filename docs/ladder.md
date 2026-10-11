@@ -537,7 +537,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
 **Practical lab.** [nlp_course week07_finetuning](https://github.com/yandexdataschool/nlp_course/tree/2025/week07_finetuning)
 (PEFT & RLHF)
 
-- [ ] Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space
+- [x] Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space
 
   Same estimator, a radically different action space: the "actions" are tokens
   from a vocabulary of tens of thousands, and an "episode" is a generated
