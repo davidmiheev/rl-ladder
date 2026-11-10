@@ -14,7 +14,7 @@ REPO = Path(__file__).resolve().parents[2]
 FILES = ["src/rl_ladder/__init__.py", "src/rl_ladder/seeding.py", "src/rl_ladder/plotting.py",
          "src/rl_ladder/run.py", "experiments/a4_policy_gradient/pg.py",
          "experiments/b1_ppo/reinforce_lm.py", "experiments/b1_ppo/train_rm.py",
-         "experiments/b1_ppo/ppo_lm.py"]
+         "experiments/b1_ppo/ppo_lm.py", "experiments/b2_dpo/make_prefs.py", "experiments/b2_dpo/dpo_lm.py"]
 argv, pip = sys.argv[1:], []
 while argv and argv[0] == "--pip":
     pip.append(argv[1])
@@ -53,7 +53,10 @@ for root, dirs, files in os.walk("/kaggle/input"):
         log(f"input: {{root}} {{sorted(files)[:5]}}")
     if "rm_eval.json" in files:
         os.environ["RM_DIR"] = root
-log(f"RM_DIR={{os.environ.get('RM_DIR')}}")
+    # A preference set written by experiments/b2_dpo/make_prefs.py, as $PREFS.
+    if "prefs.jsonl.gz" in files:
+        os.environ["PREFS"] = os.path.join(root, "prefs.jsonl.gz")
+log(f"RM_DIR={{os.environ.get('RM_DIR')}} PREFS={{os.environ.get('PREFS')}}")
 queues = [COMMANDS[i::n_gpu] for i in range(n_gpu)]
 def worker(gpu, queue):
     script = "; ".join(f"python {{c}} > {{OUT}}/run_{{gpu}}_{{k}}.log 2>&1" for k, c in enumerate(queue))
