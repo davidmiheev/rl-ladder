@@ -11,10 +11,10 @@ Figures (docs/assets/b2/):
     frontier.png   gold P(positive) and reward-model score against KL to the reference, final held-out
                    evaluation: every full-set DPO/IPO configuration, B1's PPO configurations, and the
                    best-of-4 reference samples the pairs were built from
-    trajectory.png the same plane as training proceeds: DPO's best configuration against B1's best PPO
-    overfit.png    items 2-3: DPO and IPO on 64 pairs for many epochs, mean ± std over seeds: loss,
-                   held-out pair accuracy, chosen and rejected log-ratios, chosen log-probability per
-                   token, sampled KL to the reference, gold P(positive), distinct-2
+    trajectory.png the same plane as training proceeds: DPO at β = 0.2 and 0.05 against B1's best PPO
+    overfit.png    items 2-3: DPO (β 0.1, 1) and IPO (τ 0.1, 0.01) on 64 pairs for 200 epochs: loss,
+                   held-out pair accuracy, margin, chosen and rejected log-ratios (training and held
+                   out), sampled KL to the reference, the share of samples in Chinese
     ipo_tau.png    IPO's τ against the margin it settles at, and the KL it costs
 """
 
@@ -43,6 +43,8 @@ OUT = REPO / "docs" / "assets" / "b2"
 COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#7a5fd6", "#898781", "#3b3b3b"]
 #: B1's two best PPO configurations (README table): (lr, β, clip range).
 PPO_BEST = [(1e-4, 0.2, 0.05), (1e-5, 0.2, 0.2)]
+#: The 64-pair configurations drawn in overfit.png, in this order.
+OVERFIT_SHOWN = [("dpo", 0.1), ("dpo", 1.0), ("ipo", 0.1), ("ipo", 0.01)]
 
 
 def latest_runs(root: Path, prefix: str) -> list[Path]:
@@ -189,50 +191,58 @@ def smooth_steps(seeds, key):
 
 
 def fig_frontier(groups) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.4))
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
+    keys = ("eval_p_gold", "eval_score")
     ppo = ppo_groups()
     for (lr, beta, clip), seeds in sorted(ppo.items()):
+        best = (lr, beta, clip) in PPO_BEST
         kl = [final(m, "eval_kl") for m in seeds]
-        for ax, key in zip(axes, ("eval_p_gold", "eval_score")):
-            ax.errorbar(np.mean(kl), np.mean([final(m, key) for m in seeds]), xerr=np.std(kl),
-                        yerr=np.std([final(m, key) for m in seeds]), fmt="s", color="#898781", ms=5,
-                        alpha=0.8, label="B1 PPO (each β, clip, lr)" if (lr, beta, clip) == (1e-5, 0.0, 0.2) else None)
-            if beta == 0.2 and (lr, clip) in [(a, c) for a, _, c in PPO_BEST]:
-                ax.annotate(f"PPO β={beta:g}, clip {clip:g}, lr {lr_str(lr)}", (np.mean(kl), np.mean([final(m, key) for m in seeds])),
-                            textcoords="offset points", xytext=(6, -10), fontsize=7, color="#555")
+        for ax, key in zip(axes, keys):
+            y = [final(m, key) for m in seeds]
+            ax.errorbar(np.mean(kl), np.mean(y), xerr=np.std(kl), yerr=np.std(y), fmt="s",
+                        color="#3b3b3b" if best else "#b5b3ad", ms=6 if best else 5, zorder=2,
+                        label=("B1 PPO, β=0.2 (best two)" if (lr, clip) == PPO_BEST[0][::2] else None) if best
+                        else ("B1 PPO, other β / clip / lr" if (lr, beta, clip) == (1e-5, 0.0, 0.2) else None))
+    # Before training, on the same 64 evaluation prompts (every run's step 0 is identical).
+    any_run = next(iter(groups.values()))[0]
+    for ax, key in zip(axes, keys):
+        ax.plot(0, series(any_run, key)[1][0], "o", color="black", ms=7, label="reference policy (64 eval prompts)")
     prefs = latest_runs(RUNS, "prefs")
     if prefs:
         s = json.loads((prefs[-1] / "summary.json").read_text())
         s = s.get("summary", s)
         bon_kl = math.log(4) - 3 / 4  # KL(best-of-n || reference) for n = 4, distinct samples
-        for ax, k in zip(axes, ("test_best_of_k_gold", "test_best_of_k_rm")):
-            ax.plot(bon_kl, s[k], "*", color="#eda100", ms=13, label="best of 4 reference samples")
-            ax.plot(0, s["test_gold_mean" if "gold" in k else "test_rm_mean"],
-                    "o", color="black", ms=6, label="reference policy")
+        for ax, k in zip(axes, ("gold", "rm")):
+            ax.plot(0, s[f"test_{k}_mean"], "o", mfc="none", mec="black", ms=7,
+                    label="reference policy (512 pair prompts)")
+            ax.plot(bon_kl, s[f"test_best_of_k_{k}"], "*", color="#eda100", ms=13,
+                    label="best of 4 reference samples (512 pair prompts)")
     full = [(k, v) for k, v in groups.items() if not k[3]]
     for i, (key, seeds) in enumerate(full):
         kl = [final(m, "eval_kl") for m in seeds]
-        for ax, k in zip(axes, ("eval_p_gold", "eval_score")):
+        for ax, k in zip(axes, keys):
             y = [final(m, k) for m in seeds]
-            ax.errorbar(np.mean(kl), np.mean(y), xerr=np.std(kl), yerr=np.std(y), fmt="o",
-                        color=COLORS[i % len(COLORS)], ms=7, label=label(key))
-    axes[0].set_ylabel("gold P(positive), held-out prompts")
+            ax.errorbar(np.mean(kl), np.mean(y), xerr=np.std(kl), yerr=np.std(y), fmt="o" if key[0] == "dpo" else "D",
+                        color=COLORS[i % len(COLORS)], ms=7, zorder=3, label=label(key) + f" ({len(seeds)})")
+    axes[0].set_ylabel("gold P(positive)")
     axes[1].set_ylabel("reward-model score (log-odds)")
     for ax in axes:
         ax.set_xscale("symlog", linthresh=1)
         ax.set_xlabel("KL to reference (nats per completion, sampled)")
         ax.grid(alpha=0.3)
-    axes[1].legend(fontsize=7, loc="upper left")
-    fig.suptitle("DPO/IPO on the full preference set against B1's PPO: final held-out evaluation, mean ± std over seeds")
+    h, lab = axes[1].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=7, loc="center left", bbox_to_anchor=(1.0, 0.5))
+    fig.suptitle("Final held-out evaluation: DPO/IPO on the full preference set against B1's PPO "
+                 "(mean ± std over seeds; seeds in brackets)")
     fig.tight_layout()
-    fig.savefig(OUT / "frontier.png", dpi=150)
+    fig.savefig(OUT / "frontier.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
-def fig_trajectory(groups, best_key) -> None:
+def fig_trajectory(groups, dpo_keys) -> None:
     ppo = ppo_groups()
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    lines = [(f"DPO ({label(best_key)})", groups[best_key], COLORS[0])]
+    lines = [(label(k), groups[k], c) for k, c in zip(dpo_keys, (COLORS[0], COLORS[5])) if k in groups]
     for (lr, beta, clip), color in zip(PPO_BEST, (COLORS[1], COLORS[3])):
         if (lr, beta, clip) in ppo:
             lines.append((f"PPO β={beta:g}, clip {clip:g}, lr {lr_str(lr)}", ppo[(lr, beta, clip)], color))
@@ -241,45 +251,56 @@ def fig_trajectory(groups, best_key) -> None:
             _, kl = series(m, "eval_kl")
             for ax, k in zip(axes, ("eval_p_gold", "eval_score")):
                 _, y = series(m, k)
-                ax.plot(kl, y, "-o", color=color, ms=3, alpha=0.8, label=name if j == 0 else None)
+                ax.plot(kl, y, "-o", color=color, ms=3, alpha=0.75, label=name if j == 0 else None)
     for ax, yl in zip(axes, ("gold P(positive)", "reward-model score")):
         ax.set_xlabel("KL to reference (nats per completion)")
         ax.set_ylabel(yl)
         ax.grid(alpha=0.3)
-    axes[0].legend(fontsize=8)
-    fig.suptitle("Held-out evaluations during training (one line per seed; each dot is one evaluation)")
+    axes[1].legend(fontsize=8)
+    fig.suptitle("Held-out evaluations every 25 updates (one line per seed, starting at the reference)")
     fig.tight_layout()
     fig.savefig(OUT / "trajectory.png", dpi=150)
     plt.close(fig)
 
 
+def rolling(y: np.ndarray, w: int = 10) -> np.ndarray:
+    if len(y) < w:
+        return y
+    c = np.cumsum(np.insert(y, 0, 0.0))
+    out = (c[w:] - c[:-w]) / w
+    return np.concatenate([y[: w - 1], out])
+
+
 def fig_overfit(groups, keys) -> None:
-    panels = [("train_loss", "training loss", True), ("held_acc", "held-out pair accuracy", False),
-              ("train_chosen_logratio", "chosen log-ratio (train pairs)", False),
-              ("train_rejected_logratio", "rejected log-ratio (train pairs)", False),
-              ("train_chosen_logp_tok", "chosen log π per token (train pairs)", False),
+    panels = [("train_loss", "training loss (10-update mean)", True), ("held_acc", "held-out pair accuracy", False),
+              ("train_margin", "margin h on the training pairs", False),
               ("eval_kl", "KL to reference (sampled)", False),
-              ("eval_p_gold", "gold P(positive)", False), ("eval_distinct2", "distinct-2", False)]
-    fig, axes = plt.subplots(2, 4, figsize=(15, 6.5))
+              ("train_chosen_logratio", "chosen log-ratio, training pairs", False),
+              ("train_rejected_logratio", "rejected log-ratio, training pairs", False),
+              ("held_chosen_logratio", "chosen log-ratio, held-out pairs", False),
+              ("eval_chinese", "samples containing Chinese", False)]
+    fig, axes = plt.subplots(2, 4, figsize=(15.5, 6.8))
     for (key, title, logy), ax in zip(panels, axes.flat):
         for i, k in enumerate(keys):
             x, mu, sd = smooth_steps(groups[k], key)
+            if key.startswith("train_"):
+                mu, sd = rolling(mu), rolling(sd)
             ax.plot(x, mu, color=COLORS[i], label=label(k) + f" ({len(groups[k])} seeds)")
             ax.fill_between(x, mu - sd, mu + sd, color=COLORS[i], alpha=0.2)
-        if key == "train_chosen_logp_tok":
-            x, mu, _ = smooth_steps(groups[keys[0]], "train_ref_chosen_logp_tok")
-            ax.axhline(mu[0], color="black", lw=0.8, ls=":", label="reference")
-        if key.endswith("logratio"):
+        if "logratio" in key or key == "train_margin":
             ax.axhline(0, color="black", lw=0.8, ls=":")
         ax.set_title(title, fontsize=10)
         ax.set_xlabel("update")
         if logy:
             ax.set_yscale("log")
+        if key in ("train_margin", "train_rejected_logratio"):
+            ax.set_yscale("symlog", linthresh=10)
         ax.grid(alpha=0.3)
-    axes.flat[0].legend(fontsize=7)
-    fig.suptitle("Overfitting a small preference set: DPO against IPO (mean ± std over seeds)")
-    fig.tight_layout()
-    fig.savefig(OUT / "overfit.png", dpi=150)
+    h, lab = axes.flat[0].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=8, loc="lower center", ncol=len(keys), bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle("64 preference pairs, 200 epochs: DPO against IPO (mean ± std over seeds)")
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.savefig(OUT / "overfit.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -327,14 +348,10 @@ def main() -> None:
         return
     OUT.mkdir(parents=True, exist_ok=True)
     fig_frontier(groups)
-    full = {k: v for k, v in groups.items() if not k[3]}
-    if full:
-        # The full-set configuration with the best mean gold score on the held-out prompts.
-        best = max(full, key=lambda k: np.mean([final(m, "eval_p_gold") for m in full[k]]))
-        fig_trajectory(groups, best)
-    small = [k for k in groups if k[3] == a.overfit_pairs and k[1] == 0.1]
+    fig_trajectory(groups, [("dpo", 0.2, 5e-5, 0, 1.0, "best-worst"), ("dpo", 0.05, 5e-5, 0, 1.0, "best-worst")])
+    small = [k for k in groups if k[3] == a.overfit_pairs and (k[0], k[1]) in OVERFIT_SHOWN]
     if small:
-        fig_overfit(groups, sorted(small))
+        fig_overfit(groups, sorted(small, key=lambda k: OVERFIT_SHOWN.index((k[0], k[1]))))
     fig_ipo_tau(groups, a.overfit_pairs)
     print(f"\nfigures in {OUT}")
 
