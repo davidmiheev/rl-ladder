@@ -581,7 +581,7 @@ quietly gives up.
 **Practical lab.** [TRL DPOTrainer docs](https://huggingface.co/docs/trl/dpo_trainer)
 (supports both DPO and IPO loss via one config flag)
 
-- [ ] Build/synthesize a preference dataset; train DPO; compare against the best PPO run
+- [x] Build/synthesize a preference dataset; train DPO; compare against the best PPO run
 
   DPO's insight is that the RLHF objective has a closed-form optimal policy, so
   the reward model can be substituted out and the policy fitted *directly* from
@@ -589,7 +589,7 @@ quietly gives up.
   sampling loop, no RL. Build a preference set, train it, and compare against
   your best PPO run on both quality and the engineering cost of getting there.
 
-- [ ] Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup
+- [x] Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup
 
   Train too long on too little and watch a specific pathology: the log-
   probability of the *chosen* response falls. The loss only cares about the
@@ -598,7 +598,7 @@ quietly gives up.
   probabilities separately, plus KL to the reference — the aggregate loss looks
   fine while this happens.
 
-- [ ] Swap in IPO's bounded objective; compare stability
+- [x] Swap in IPO's bounded objective; compare stability
 
   IPO replaces the unbounded log-sigmoid with an objective that saturates, so
   an easy preference pair cannot be driven to an infinite margin. That is aimed
