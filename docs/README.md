@@ -6,7 +6,7 @@ Start here.
 | --- | --- |
 | [`ladder.md`](ladder.md) | **The curriculum.** 19 phases, 59 checklist items, reading and labs. Canonical — tick boxes here. |
 | [`part-a-summary.md`](part-a-summary.md) | **Part A retrospective** — what eight phases taught, including the mistakes. Read after finishing Part A. |
-| [`writeups/`](writeups/) | Per-phase explainers: what the phase asks, why, and what the runs showed. [A1](writeups/a1-bandits.md), [A2](writeups/a2-tabular.md), [A3](writeups/a3-dqn.md), [A4](writeups/a4-policy-gradient.md), [A5](writeups/a5-continuous-control.md), [C1](writeups/c1-glft-baseline.md), [C2](writeups/c2-env.md), [C3](writeups/c3-continuous-control.md), [C6](writeups/c6-strategy-zoo.md). |
+| [`writeups/`](writeups/) | Per-phase explainers: what the phase asks, why, and what the runs showed. [A1](writeups/a1-bandits.md), [A2](writeups/a2-tabular.md), [A3](writeups/a3-dqn.md), [A4](writeups/a4-policy-gradient.md), [A5](writeups/a5-continuous-control.md), [C1](writeups/c1-glft-baseline.md), [C2](writeups/c2-env.md), [C3](writeups/c3-continuous-control.md), [C6](writeups/c6-strategy-zoo.md), [B1](writeups/b1-ppo.md), [B2](writeups/b2-dpo.md). |
 | [`setup.md`](setup.md) | Environments, per-part extras, verifying the install |
 | [`compute.md`](compute.md) | What hardware each part needs; GPU pod sizing for Part B |
 | [`free-compute.md`](free-compute.md) | Free GPU/TPU tiers (Colab, Kaggle, TRC): what fits, T4 config, where they break |

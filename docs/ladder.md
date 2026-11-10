@@ -537,7 +537,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
 **Practical lab.** [nlp_course week07_finetuning](https://github.com/yandexdataschool/nlp_course/tree/2025/week07_finetuning)
 (PEFT & RLHF)
 
-- [ ] Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space
+- [x] Reuse your A4 REINFORCE implementation on a language-modeling reward; observe reward hacking in a generative action space
 
   Same estimator, a radically different action space: the "actions" are tokens
   from a vocabulary of tens of thousands, and an "episode" is a generated
@@ -546,7 +546,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
   score well without being good — with no constraint tying the policy to the
   pretrained model, nothing stops it.
 
-- [ ] Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference
+- [x] Train full PPO (TRL PPOTrainer); sweep clip range and KL coefficient; plot reward vs. KL-to-reference
 
   PPO makes several gradient steps per batch of generations safe by clipping
   the probability ratio between the new policy and the one that produced the
@@ -556,7 +556,7 @@ clipping addresses the first problem, the KL-to-reference term the second.
   KL coefficient and plot reward against KL-to-reference — that curve *is* the
   tradeoff, and reading it is the point of the item.
 
-- [ ] Set the KL penalty near zero and document the resulting failure mode
+- [x] Set the KL penalty near zero and document the resulting failure mode
 
   Remove the anchor and document what breaks. Reward keeps climbing while the
   text degenerates, because the reward model is a proxy trained on a
@@ -581,7 +581,7 @@ quietly gives up.
 **Practical lab.** [TRL DPOTrainer docs](https://huggingface.co/docs/trl/dpo_trainer)
 (supports both DPO and IPO loss via one config flag)
 
-- [ ] Build/synthesize a preference dataset; train DPO; compare against the best PPO run
+- [x] Build/synthesize a preference dataset; train DPO; compare against the best PPO run
 
   DPO's insight is that the RLHF objective has a closed-form optimal policy, so
   the reward model can be substituted out and the policy fitted *directly* from
@@ -589,7 +589,7 @@ quietly gives up.
   sampling loop, no RL. Build a preference set, train it, and compare against
   your best PPO run on both quality and the engineering cost of getting there.
 
-- [ ] Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup
+- [x] Overfit DPO on a small preference set; show chosen-logprob collapse and KL blowup
 
   Train too long on too little and watch a specific pathology: the log-
   probability of the *chosen* response falls. The loss only cares about the
@@ -598,7 +598,7 @@ quietly gives up.
   probabilities separately, plus KL to the reference — the aggregate loss looks
   fine while this happens.
 
-- [ ] Swap in IPO's bounded objective; compare stability
+- [x] Swap in IPO's bounded objective; compare stability
 
   IPO replaces the unbounded log-sigmoid with an objective that saturates, so
   an easy preference pair cannot be driven to an infinite margin. That is aimed

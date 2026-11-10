@@ -1,4 +1,8 @@
-"""Save and run a Kaggle script notebook through Kaggle's MCP endpoint (token from env)."""
+"""Save and run a Kaggle script notebook through Kaggle's MCP endpoint (token from env).
+
+    python scripts/kaggle/kpost.py <slug> <notebook.py> [gpu] [source=<user>/<notebook> ...]
+    # "gpu": two T4s; each source mounts that notebook's output under /kaggle/input/<notebook>/
+"""
 import json, os, ssl, sys, urllib.request
 slug, path = sys.argv[1], sys.argv[2]
 TOKEN = os.environ["KAGGLE_API_TOKEN"].strip()
@@ -12,6 +16,8 @@ def rpc(method, params, id_=1):
 rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "c10", "version": "0"}})
 req = {"slugNullable": f"davidmiheev/{slug}", "newTitleNullable": slug, "textNullable": open(path).read(),
        "kernelTypeNullable": "script", "languageNullable": "python", "isPrivateNullable": True,
-       "enableInternetNullable": True, "enableGpuNullable": False, "kernelExecutionTypeNullable": "SaveAndRunAll"}
+       "enableInternetNullable": True, "enableGpuNullable": len(sys.argv) > 3 and sys.argv[3] == "gpu", "kernelExecutionTypeNullable": "SaveAndRunAll",
+       **({"machineShapeNullable": "NvidiaTeslaT4"} if len(sys.argv) > 3 and sys.argv[3] == "gpu" else {}),
+       "kernelDataSourcesSetter": [a.split("=", 1)[1] for a in sys.argv[3:] if a.startswith("source=")]}
 res = rpc("tools/call", {"name": "save_notebook", "arguments": {"request": req}}, 2)
 print(res["result"]["content"][0]["text"].replace("\n", " ")[:200])
