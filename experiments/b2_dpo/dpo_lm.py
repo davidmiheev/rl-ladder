@@ -154,8 +154,9 @@ def main() -> None:
         # A fixed subset (the first N prompts), the same for every seed and loss.
         train = train[: args.pairs]
     held = pairs["test"][: args.eval_pairs]
-    name = args.name or (f"{args.loss}-b{args.beta:g}" + (f"-n{args.pairs}" if args.pairs else "")
-                         + (f"-e{args.epochs:g}" if args.epochs != 1 else "") + f"-s{args.seed}")
+    name = args.name or (f"{args.loss}-b{args.beta:g}-lr{args.lr:g}" + (f"-n{args.pairs}" if args.pairs else "")
+                         + (f"-e{args.epochs:g}" if args.epochs != 1 else "")
+                         + ("-random" if args.pair_rule == "random" else "") + f"-s{args.seed}")
     run = Run(phase="b2", name=name, config={**vars(args), "train_pairs": len(train), "held_pairs": len(held)})
 
     tok = AutoTokenizer.from_pretrained(args.policy, padding_side="left")
